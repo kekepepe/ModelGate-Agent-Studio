@@ -1,5 +1,6 @@
 import { Routes, Route, Link } from 'react-router-dom'
 import AgentRegistryPage from './pages/AgentRegistryPage'
+import ModelRouterPage from './pages/ModelRouterPage'
 
 function App() {
   return (
@@ -13,12 +14,16 @@ function App() {
             <Link to="/agents" className="text-stone-600 hover:text-stone-900">
               Agent Registry
             </Link>
+            <Link to="/router" className="text-stone-600 hover:text-stone-900">
+              Model Router
+            </Link>
           </div>
         </div>
       </nav>
       <main className="flex-1">
         <Routes>
           <Route path="/agents" element={<AgentRegistryPage />} />
+          <Route path="/router" element={<ModelRouterPage />} />
           <Route path="/" element={<AgentRegistryPage />} />
         </Routes>
       </main>
