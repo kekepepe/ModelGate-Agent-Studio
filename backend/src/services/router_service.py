@@ -174,6 +174,7 @@ def _score_model(
     budget_preference: str,
     speed_preference: str,
     task_complexity: str,
+    default_model_id: Optional[str] = None,
 ) -> Dict:
     weights = _get_adjusted_weights(budget_preference, speed_preference, task_complexity)
 
@@ -210,6 +211,10 @@ def _score_model(
             "weighted_score": weighted,
             "reason": _dimension_reason(dim, score, model),
         })
+
+    # Agent default_model_id bonus: +15% if model is the agent's default
+    if default_model_id and model.id == default_model_id:
+        total_score = min(round(total_score + 0.15, 4), 1.0)
 
     return {
         "total_score": round(total_score, 4),
@@ -299,6 +304,7 @@ def _build_risk_flags(
     selected_model: Model,
     all_scores: List[Dict],
     candidates: List[Model],
+    agent_default_model_id: Optional[str] = None,
 ) -> List[Dict]:
     flags = []
 
@@ -329,6 +335,42 @@ def _build_risk_flags(
                 "message": "多个模型评分接近，建议关注表现",
                 "suggestion": None,
             })
+
+    # Default model unavailable
+    if agent_default_model_id:
+        candidate_ids = {m.id for m in candidates}
+        if agent_default_model_id not in candidate_ids:
+            flags.append({
+                "type": "default_model_unavailable",
+                "severity": "medium",
+                "message": "默认模型不可用，已自动选择备用模型",
+                "suggestion": "请检查默认模型的额度或配置状态",
+            })
+
+    # Context limit warning (margin is tight but not excluded)
+    # Models passing filter have context >= estimate * 1.2, so margin_ratio >= 0.167
+    # Warn if margin_ratio is below 0.3 (context window less than 1.43x estimate)
+    if selected_model.max_context_tokens > 0:
+        # We don't have context_length_estimate here; skip precise context_limit flag
+        pass
+
+    # Cost high warning
+    if selected_model.cost_level >= 4:
+        flags.append({
+            "type": "cost_high",
+            "severity": "low",
+            "message": f"{selected_model.display_name} 成本较高（等级 {selected_model.cost_level}）",
+            "suggestion": "如预算敏感，可切换至备用模型",
+        })
+
+    # Speed slow warning
+    if selected_model.speed_level >= 4:
+        flags.append({
+            "type": "speed_slow",
+            "severity": "low",
+            "message": f"{selected_model.display_name} 响应速度较慢（等级 {selected_model.speed_level}）",
+            "suggestion": "如对速度敏感，可切换至更快的备用模型",
+        })
 
     if not candidates:
         flags.append({
@@ -361,12 +403,14 @@ def select_model(
     if has_vision_input:
         caps = list(set(caps + ["vision"]))
 
-    # 2. Resolve agent role
+    # 2. Resolve agent role and default model
     agent_role = None
+    agent_default_model_id = None
     if preferred_agent_id:
         agent = db.query(AgentStation).filter(AgentStation.id == preferred_agent_id).first()
         if agent:
             agent_role = agent.role
+            agent_default_model_id = agent.default_model_id
 
     # 3. User override: if preferred_model_id is set and valid, use it directly
     if preferred_model_id:
@@ -385,6 +429,7 @@ def select_model(
             score_info = _score_model(
                 model, caps, agent_role, context_length_estimate,
                 budget_preference, speed_preference, task_complexity,
+                default_model_id=agent_default_model_id,
             )
             return {
                 "selected_model_id": model.id,
@@ -421,6 +466,7 @@ def select_model(
         score_info = _score_model(
             model, caps, agent_role, context_length_estimate,
             budget_preference, speed_preference, task_complexity,
+            default_model_id=agent_default_model_id,
         )
         scored.append({
             "model": model,
@@ -448,7 +494,7 @@ def select_model(
         selected["model"], selected, agent_role, task_type,
         [s["model"] for s in backups],
     )
-    risk_flags = _build_risk_flags(selected["model"], scored, candidates)
+    risk_flags = _build_risk_flags(selected["model"], scored, candidates, agent_default_model_id)
 
     score_breakdown = []
     for s in scored:
