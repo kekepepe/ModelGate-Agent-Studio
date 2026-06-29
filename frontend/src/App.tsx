@@ -1,6 +1,8 @@
 import { Routes, Route, Link } from 'react-router-dom'
 import AgentRegistryPage from './pages/AgentRegistryPage'
 import ModelRouterPage from './pages/ModelRouterPage'
+import QuotaOverviewPage from './pages/QuotaOverviewPage'
+import HandoffPage from './pages/HandoffPage'
 
 function App() {
   return (
@@ -17,6 +19,12 @@ function App() {
             <Link to="/router" className="text-stone-600 hover:text-stone-900">
               Model Router
             </Link>
+            <Link to="/quota" className="text-stone-600 hover:text-stone-900">
+              Quota Manager
+            </Link>
+            <Link to="/handoffs" className="text-stone-600 hover:text-stone-900">
+              Handoff Manager
+            </Link>
           </div>
         </div>
       </nav>
@@ -24,6 +32,8 @@ function App() {
         <Routes>
           <Route path="/agents" element={<AgentRegistryPage />} />
           <Route path="/router" element={<ModelRouterPage />} />
+          <Route path="/quota" element={<QuotaOverviewPage />} />
+          <Route path="/handoffs" element={<HandoffPage />} />
           <Route path="/" element={<AgentRegistryPage />} />
         </Routes>
       </main>

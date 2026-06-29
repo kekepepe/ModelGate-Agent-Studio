@@ -3,9 +3,10 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from src.core.config import settings
 from src.core.database import engine, Base, SessionLocal
-from src.routes import agents, router as router_routes
+from src.routes import agents, router as router_routes, quota as quota_routes, handoffs as handoff_routes
 from src.data.models import MODEL_SEEDS
 from src.models.model import Model
+from src.models import handoff as handoff_models
 
 Base.metadata.create_all(bind=engine)
 
@@ -24,6 +25,8 @@ app.add_middleware(
 
 app.include_router(agents.router, prefix=settings.api_v1_prefix)
 app.include_router(router_routes.router, prefix=settings.api_v1_prefix)
+app.include_router(quota_routes.router, prefix=settings.api_v1_prefix)
+app.include_router(handoff_routes.router, prefix=settings.api_v1_prefix)
 
 
 def _seed_models():
