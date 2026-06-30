@@ -37,7 +37,7 @@ function unwrap<T>(resp: { data: ApiResponse<T> }, fallback: T): T {
 export async function getHandoffs(filters: HandoffFilters = {}): Promise<HandoffListResponse> {
   const params = paramsFrom(filters as Record<string, unknown>);
   const resp = await client.get<ApiResponse<HandoffListResponse>>(`/handoffs?${params.toString()}`);
-  return unwrap(resp, { items: [], total: 0, page: 1, page_size: 20 });
+  return unwrap(resp, { items: [], total: 0, page: 1, page_size: 20, total_pages: 0 });
 }
 
 export async function getHandoff(handoffId: string): Promise<HandoffRecord> {

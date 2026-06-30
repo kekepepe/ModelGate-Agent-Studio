@@ -62,7 +62,7 @@ export default function HandoffPage() {
     });
   };
 
-  const handleConfirmHandoff = (request: { to_agent_id: string; reason: HandoffReason; reason_description?: string }) => {
+  const handleConfirmHandoff = (request: { to_agent_id: string; to_model_id?: string; reason: HandoffReason; reason_description?: string }) => {
     if (!pendingTask) return;
     setModalError(null);
     triggerHandoff.mutate({ taskId: pendingTask.taskId, request }, {

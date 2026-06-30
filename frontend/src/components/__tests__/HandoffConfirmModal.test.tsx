@@ -41,6 +41,7 @@ describe('HandoffConfirmModal', () => {
     fireEvent.click(screen.getByRole('button', { name: '确认交接' }))
     expect(onConfirm).toHaveBeenCalledWith({
       to_agent_id: 'a-2',
+      to_model_id: 'claude-sonnet-4-6',
       reason: 'quota_exceeded',
       reason_description: 'token 接近上限',
     })

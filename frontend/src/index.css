@@ -49,3 +49,12 @@ body {
   display: flex;
   flex-direction: column;
 }
+
+@keyframes newLogHighlight {
+  0% {
+    background-color: var(--color-lavender-100);
+  }
+  100% {
+    background-color: transparent;
+  }
+}

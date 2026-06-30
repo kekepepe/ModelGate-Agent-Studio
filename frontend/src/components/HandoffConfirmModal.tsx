@@ -7,7 +7,7 @@ interface HandoffConfirmModalProps {
   taskId: string;
   agents: AgentListItem[];
   fromAgentId?: string;
-  onConfirm: (data: { to_agent_id: string; reason: HandoffReason; reason_description?: string }) => void;
+  onConfirm: (data: { to_agent_id: string; to_model_id?: string; reason: HandoffReason; reason_description?: string }) => void;
   onCancel: () => void;
   isSubmitting?: boolean;
   error?: string | null;
@@ -35,8 +35,10 @@ export default function HandoffConfirmModal({
   const submit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!toAgentId) return;
+    const selectedAgent = candidates.find((a) => a.id === toAgentId);
     onConfirm({
       to_agent_id: toAgentId,
+      to_model_id: selectedAgent?.default_model_id,
       reason,
       reason_description: description.trim() || undefined,
     });

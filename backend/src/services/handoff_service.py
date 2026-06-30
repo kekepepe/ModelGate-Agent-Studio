@@ -1,5 +1,6 @@
 from datetime import datetime, timezone
-from typing import Dict, List, Optional, Tuple
+from math import ceil
+from typing import Any, Dict, List, Optional, Tuple
 import uuid
 
 from sqlalchemy import or_
@@ -45,13 +46,13 @@ REQUIRED_SUMMARY_FIELDS = [
     "context_needed",
 ]
 
-LOG_ACTION_BY_STATUS = {
-    HANDOFF_STATUS_REQUESTED: "handoff_requested",
-    HANDOFF_STATUS_GENERATING: "handoff_summary_generating",
-    HANDOFF_STATUS_READY: "handoff_summary_ready",
-    HANDOFF_STATUS_ACCEPTED: "handoff_accepted",
-    HANDOFF_STATUS_COMPLETED: "handoff_completed",
-    HANDOFF_STATUS_FAILED: "handoff_failed",
+STATUS_EVENT_MAP = {
+    HANDOFF_STATUS_REQUESTED: ("handoff_created", "created"),
+    HANDOFF_STATUS_GENERATING: ("agent_step", "running"),
+    HANDOFF_STATUS_READY: ("agent_step", "completed"),
+    HANDOFF_STATUS_ACCEPTED: ("handoff_completed", "accepted"),
+    HANDOFF_STATUS_COMPLETED: ("handoff_completed", "completed"),
+    HANDOFF_STATUS_FAILED: ("error", "failed"),
 }
 
 
@@ -93,12 +94,13 @@ def _set_status(db: Session, handoff: HandoffRecord, next_status: str, message: 
     elif next_status in {HANDOFF_STATUS_COMPLETED, HANDOFF_STATUS_FAILED}:
         handoff.completed_at = now
 
+    event_type, event_status = STATUS_EVENT_MAP[next_status]
     _create_log(
         db,
         handoff=handoff,
-        action=LOG_ACTION_BY_STATUS[next_status],
-        level="error" if next_status == HANDOFF_STATUS_FAILED else "handoff",
-        message=message or f"Handoff status changed to {next_status}",
+        event_type=event_type,
+        event_status=event_status,
+        output_summary=message or f"Handoff status changed to {next_status}",
     )
 
 
@@ -153,12 +155,13 @@ def _build_fallback_summary(
 def _create_log(
     db: Session,
     handoff: HandoffRecord,
-    action: str,
-    level: str,
-    message: str,
+    event_type: str,
+    event_status: str,
+    output_summary: str,
     agent_id: Optional[str] = None,
     worker_id: Optional[str] = None,
     model_id: Optional[str] = None,
+    metadata: Optional[Dict[str, Any]] = None,
 ) -> ExecutionLog:
     log = ExecutionLog(
         goal_id=handoff.goal_id,
@@ -167,10 +170,12 @@ def _create_log(
         worker_id=worker_id or handoff.from_worker_id,
         model_id=model_id or handoff.from_model_id,
         handoff_id=handoff.id,
-        level=level,
-        action=action,
-        message=message,
+        event_type=event_type,
+        event_status=event_status,
+        output_summary=output_summary,
     )
+    if metadata:
+        log.set_metadata(metadata)
     db.add(log)
     return log
 
@@ -286,9 +291,10 @@ def trigger_handoff(
     _create_log(
         db,
         handoff=handoff,
-        action="handoff_requested",
-        level="handoff",
-        message=f"Handoff requested: {from_agent.name} -> {to_agent.name} ({reason})",
+        event_type="handoff_created",
+        event_status="created",
+        output_summary=f"Handoff requested: {from_agent.name} -> {to_agent.name} ({reason})",
+        metadata={"handoff_reason": reason, "trigger_type": "manual" if reason == "manual" else "auto"},
     )
 
     _set_status(db, handoff, HANDOFF_STATUS_GENERATING, "Generating handoff summary")
@@ -344,7 +350,8 @@ def list_handoffs(
     total = query.count()
     handoffs = query.order_by(HandoffRecord.created_at.desc()).offset((page - 1) * page_size).limit(page_size).all()
     items = [_serialize_handoff_list_item(db, handoff) for handoff in handoffs]
-    return {"items": items, "total": total, "page": page, "page_size": page_size}
+    total_pages = ceil(total / page_size) if page_size > 0 else 0
+    return {"items": items, "total": total, "page": page, "page_size": page_size, "total_pages": total_pages}
 
 
 def accept_handoff(db: Session, handoff_id: str, agent_id: Optional[str] = None, model_id: Optional[str] = None) -> Dict:
@@ -388,12 +395,13 @@ def accept_handoff(db: Session, handoff_id: str, agent_id: Optional[str] = None,
     _create_log(
         db,
         handoff=handoff,
-        action="handoff_worker_created",
-        level="exec",
-        message="New worker session created from handoff",
+        event_type="handoff_completed",
+        event_status="accepted",
+        output_summary="New worker session created from handoff",
         agent_id=accept_agent_id,
         worker_id=worker.id,
         model_id=accept_model_id,
+        metadata={"acceptance_time_ms": 0},
     )
 
     db.commit()
@@ -440,13 +448,6 @@ def update_handoff_result(
         "status": handoff.status,
         "result_after_handoff": handoff.result_after_handoff,
     }
-
-
-def list_logs(db: Session, handoff_id: Optional[str] = None) -> List[Dict]:
-    query = db.query(ExecutionLog)
-    if handoff_id:
-        query = query.filter(ExecutionLog.handoff_id == handoff_id)
-    return [log.to_dict() for log in query.order_by(ExecutionLog.created_at.asc()).all()]
 
 
 def _agent_labels(db: Session, agent_id: str) -> Tuple[Optional[str], Optional[str]]:

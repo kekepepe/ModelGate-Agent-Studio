@@ -139,9 +139,3 @@ def update_handoff_result(handoff_id: str, data: HandoffResultRequest, db: Sessi
         _error_response("INTERNAL_ERROR", str(e), 500)
 
 
-@router.get("/logs")
-def list_logs(handoff_id: Optional[str] = Query(None), db: Session = Depends(get_db)):
-    try:
-        return _success_response(handoff_service.list_logs(db, handoff_id=handoff_id))
-    except Exception as e:
-        _error_response("INTERNAL_ERROR", str(e), 500)

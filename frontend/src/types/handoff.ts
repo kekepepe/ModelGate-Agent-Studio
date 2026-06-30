@@ -99,6 +99,7 @@ export interface HandoffListResponse {
   total: number;
   page: number;
   page_size: number;
+  total_pages: number;
 }
 
 export interface HandoffFilters {

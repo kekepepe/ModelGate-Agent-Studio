@@ -143,14 +143,49 @@ class ExecutionLog(Base):
     id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
     goal_id = Column(String(36), nullable=True, index=True)
     task_id = Column(String(36), nullable=True, index=True)
-    agent_id = Column(String(36), nullable=True)
+    agent_id = Column(String(36), nullable=True, index=True)
     worker_id = Column(String(36), nullable=True)
-    model_id = Column(String(100), nullable=True)
+    model_id = Column(String(100), nullable=True, index=True)
     handoff_id = Column(String(36), nullable=True, index=True)
-    level = Column(String(50), nullable=False)
-    action = Column(String(100), nullable=False)
-    message = Column(Text, nullable=False)
+
+    event_type = Column(String(50), nullable=False, index=True)
+    event_status = Column(String(50), nullable=False, index=True)
+
+    input_summary = Column(Text, nullable=True)
+    output_summary = Column(Text, nullable=True)
+    token_usage = Column(Text, nullable=True)
+    latency_ms = Column(Integer, nullable=True)
+
+    error_type = Column(String(50), nullable=True)
+    error_code = Column(String(50), nullable=True)
+    error_message = Column(Text, nullable=True)
+
+    tool_name = Column(String(100), nullable=True)
+    quota_status = Column(String(50), nullable=True)
+    handoff_status = Column(String(50), nullable=True)
+
+    extra_metadata = Column(Text, nullable=True)
+    routing_info = Column(Text, nullable=True)
+
     created_at = Column(DateTime, nullable=False, default=lambda: datetime.now(timezone.utc))
+
+    def get_token_usage(self) -> Dict[str, Any]:
+        return json.loads(self.token_usage) if self.token_usage else {}
+
+    def set_token_usage(self, value: Dict[str, Any]) -> None:
+        self.token_usage = json.dumps(value, ensure_ascii=False)
+
+    def get_metadata(self) -> Dict[str, Any]:
+        return json.loads(self.extra_metadata) if self.extra_metadata else {}
+
+    def set_metadata(self, value: Dict[str, Any]) -> None:
+        self.extra_metadata = json.dumps(value, ensure_ascii=False)
+
+    def get_routing_info(self) -> Dict[str, Any]:
+        return json.loads(self.routing_info) if self.routing_info else {}
+
+    def set_routing_info(self, value: Dict[str, Any]) -> None:
+        self.routing_info = json.dumps(value, ensure_ascii=False)
 
     def to_dict(self) -> dict:
         return {
@@ -161,9 +196,20 @@ class ExecutionLog(Base):
             "worker_id": self.worker_id,
             "model_id": self.model_id,
             "handoff_id": self.handoff_id,
-            "level": self.level,
-            "action": self.action,
-            "message": self.message,
+            "event_type": self.event_type,
+            "event_status": self.event_status,
+            "input_summary": self.input_summary,
+            "output_summary": self.output_summary,
+            "token_usage": self.get_token_usage(),
+            "latency_ms": self.latency_ms,
+            "error_type": self.error_type,
+            "error_code": self.error_code,
+            "error_message": self.error_message,
+            "tool_name": self.tool_name,
+            "quota_status": self.quota_status,
+            "handoff_status": self.handoff_status,
+            "metadata": self.get_metadata(),
+            "routing_info": self.get_routing_info(),
             "created_at": self.created_at.isoformat() if self.created_at else None,
         }
 

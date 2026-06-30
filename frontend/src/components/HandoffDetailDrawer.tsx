@@ -72,7 +72,7 @@ export default function HandoffDetailDrawer({
           </div>
           <div className="flex items-center gap-2">
             {handoff && (
-              <button onClick={handleCopy} className="inline-flex items-center gap-1 px-2 py-1 text-xs text-stone-500 hover:text-stone-800 border border-stone-200 rounded-lg">
+              <button onClick={handleCopy} aria-label="复制摘要" className="inline-flex items-center gap-1 px-2 py-1 text-xs text-stone-500 hover:text-stone-800 border border-stone-200 rounded-lg">
                 <Copy size={13} /> {copied ? 'Copied' : '复制'}
               </button>
             )}
@@ -214,7 +214,7 @@ function SummarySection({ title, value }: { title: string; value: string | strin
         <div className="text-sm text-stone-300">—</div>
       ) : isArray ? (
         <ul className="space-y-1 text-sm text-stone-700 leading-relaxed">
-          {value.map((item, idx) => <li key={`${item}-${idx}`}>• {item}</li>)}
+          {value.map((item, idx) => <li key={idx}>• {item}</li>)}
         </ul>
       ) : (
         <p className="text-sm text-stone-700 leading-relaxed whitespace-pre-wrap">{value}</p>

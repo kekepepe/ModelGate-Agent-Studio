@@ -3,6 +3,7 @@ import AgentRegistryPage from './pages/AgentRegistryPage'
 import ModelRouterPage from './pages/ModelRouterPage'
 import QuotaOverviewPage from './pages/QuotaOverviewPage'
 import HandoffPage from './pages/HandoffPage'
+import LogsPage from './pages/LogsPage'
 
 function App() {
   return (
@@ -25,6 +26,9 @@ function App() {
             <Link to="/handoffs" className="text-stone-600 hover:text-stone-900">
               Handoff Manager
             </Link>
+            <Link to="/logs" className="text-stone-600 hover:text-stone-900">
+              Logs
+            </Link>
           </div>
         </div>
       </nav>
@@ -34,6 +38,7 @@ function App() {
           <Route path="/router" element={<ModelRouterPage />} />
           <Route path="/quota" element={<QuotaOverviewPage />} />
           <Route path="/handoffs" element={<HandoffPage />} />
+          <Route path="/logs" element={<LogsPage />} />
           <Route path="/" element={<AgentRegistryPage />} />
         </Routes>
       </main>

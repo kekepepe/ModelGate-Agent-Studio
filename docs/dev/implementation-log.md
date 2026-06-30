@@ -885,30 +885,48 @@ ExecutionLog
 
 ### 9. Fixes Completed
 
+**Round 1-4 原始修复：**
 - 重复 Handoff 触发时优先返回 409 而非 400：调整 service 中校验顺序。
 - HandoffDetailDrawer 关闭按钮补充 `aria-label`，增强可访问性。
 - 后端 model 与 schema 同步以保证 `Base.metadata.create_all` 注册。
 
+**Round 6 修复（基于 Audit Report）：**
+- 后端 `list_handoffs` 返回添加 `total_pages`，与 API Contract 分页规范对齐。
+- `HandoffConfirmModal` 提交时自动携带选中 Agent 的 `default_model_id` 作为 `to_model_id`。
+- `HandoffDetailDrawer` `SummarySection` 列表 key 改为 `idx`，消除 React key 重复警告。
+- `HandoffDetailDrawer` 复制按钮补充 `aria-label="复制摘要"`。
+
 ### 10. Test Result
 
+**最新测试结果（2026-06-30，Round 6 修复后）：**
+
 ```text
-# 后端
+# 后端 Handoff 专项测试
 cd backend
-./.venv/bin/python -m pytest --override-ini="addopts="
-# 114 passed (其中 Handoff 18 个新增)
+./.venv/bin/python -m pytest tests/test_handoff_api.py tests/test_handoff_service.py -v
+# 18 passed in 0.30s
 ```
 
 ```text
-# 前端
+# 前端 Handoff 专项测试
 cd frontend
-npx vitest run
-# Test Files 14 passed, Tests 88 passed (其中 Handoff 4 文件 16 个用例)
+npx vitest run src/components/__tests__/Handoff
+# Test Files  4 passed (4)
+# Tests  16 passed (16)
 ```
 
 ```text
 # 前端类型检查
+cd frontend
 npx tsc -b --noEmit
-# 0 Handoff 相关错误（仅遗留 Quota 警告）
+# 0 Handoff 相关错误（仅遗留 QuotaConfigForm.tsx useEffect 警告）
+```
+
+```text
+# 前端构建
+cd frontend
+npm run build
+# 构建通过
 ```
 
 ### 11. Next Step
@@ -917,7 +935,263 @@ npx tsc -b --noEmit
 - 完整 Task / Worker / Logs 模块替换当前 stub 表。
 - 引入真实 Summary 生成服务（LLM 调用或模板微调）。
 
+### 12. Round 5-7 完成记录
+
+| 轮次 | 内容 | 输出文件 | 状态 |
+|------|------|----------|------|
+| Round 5 | 自查实现结果 | `docs/dev/handoff-manager-audit-report.md` | 完成 |
+| Round 6 | 根据自查报告修复问题 | `docs/dev/handoff-manager-fix-report.md` | 完成 |
+| Round 7 | 更新 implementation log | `docs/dev/implementation-log.md`（本文件） | 完成 |
+
+**Round 5-7 新增文档文件：**
+- `docs/dev/handoff-manager-audit-report.md`
+- `docs/dev/handoff-manager-fix-report.md`
+
+**Round 6 修改文件（修复项）：**
+- `backend/src/services/handoff_service.py` — 分页响应添加 `total_pages`
+- `frontend/src/types/handoff.ts` — `HandoffListResponse` 添加 `total_pages`
+- `frontend/src/api/handoffs.ts` — fallback 值添加 `total_pages`
+- `frontend/src/components/HandoffConfirmModal.tsx` — 提交携带 `to_model_id`
+- `frontend/src/pages/HandoffPage.tsx` — `handleConfirmHandoff` 传递 `to_model_id`
+- `frontend/src/components/HandoffDetailDrawer.tsx` — key 去重 + aria-label
+- `frontend/src/components/__tests__/HandoffConfirmModal.test.tsx` — 更新断言
+
 ---
 
-> 日志生成日期：2026-06-29  
+> 日志首次生成日期：2026-06-29  
+> Round 5-7 更新日期：2026-06-30  
 > 对应实现计划：`docs/dev/handoff-manager-implementation-plan.md`
+
+---
+
+## Logs / Observability
+
+**模块名称：** Logs / Observability  
+**模块 slug：** `logs-observability`  
+**开发周期：** 2026-06-30  
+**对应 PRD：** `docs/prd/logs-observability-prd.md`  
+**对应 Stories：** `docs/stories/logs-observability-stories.md`  
+**对应 Tasks：** `docs/tasks/logs-observability-tasks.md`  
+**对应 UI Spec：** `docs/ui/logs-observability-ui-spec.md`  
+
+---
+
+### 完成的 Story
+
+| story_id | 故事摘要 | 状态 |
+|----------|----------|------|
+| US-LO-01 | 查看实时执行日志 | 完成（LogsPage 独立页面，Workspace 面板延后） |
+| US-LO-02 | 筛选特定类型日志 | 完成 |
+| US-LO-03 | 查看单条日志详情 | 完成 |
+| US-LO-04 | 查看 Task 完整执行时间线 | 完成 |
+| US-LO-05 | 查看错误日志定位失败原因 | 完成（错误高亮 + 详情，快速修复按钮延后） |
+| US-LO-06 | 查看 Token 使用统计 | P1 延后 |
+| US-LO-07 | 查看 Handoff 前后对比 | P1 延后 |
+
+---
+
+### 完成的 Task
+
+| task_id | 任务内容 | 状态 |
+|---------|----------|------|
+| LO-T1.1 | 创建 execution_logs 数据库表（扩展版） | 完成 |
+| LO-T1.2 | LogEventType/LogEventStatus 枚举 + 日志写入服务 | 完成 |
+| LO-T2.1 | GET /logs 列表 + 筛选 API | 完成 |
+| LO-T2.2 | GET /logs/:logId 详情 API | 完成 |
+| LO-T3.1 | GET /logs/task/:taskId/timeline API | 完成 |
+| LO-T4.1 | ExecutionLogPanel 组件（P0 独立页面方案） | 完成（LogsPage 替代 Workspace 面板） |
+| LO-T4.2 | 对接真实 API + 筛选 UI | 完成 |
+| LO-T4.3 | 错误日志自动展开 + 高亮 | 完成 |
+| LO-T5.1 | LogDetailDrawer 组件 | 完成 |
+| LO-T6.1 | TaskTimeline 组件（mock 数据） | 完成（直接对接真实 API） |
+| LO-T6.2 | LogsPage + 对接真实 timeline API | 完成 |
+| LO-T8.1 | 日志写入单元测试 | 完成（backend 13 tests） |
+| LO-T8.2 | API 集成测试 | 完成（含 13 log tests） |
+| LO-T8.3 | 前端组件测试 | 完成（17 tests） |
+| LO-T7.1 | GET /logs/aggregate 聚合统计 API | P1 延后 |
+| LO-T7.2 | TokenUsageSummary 组件 | P1 延后 |
+
+---
+
+### 新增文件列表
+
+#### 后端
+
+```
+backend/migrations/005_expand_execution_logs.sql
+backend/src/schemas/log.py
+backend/src/services/log_service.py
+backend/src/routes/logs.py
+backend/tests/test_log_api.py
+```
+
+#### 前端
+
+```
+frontend/src/types/log.ts
+frontend/src/api/logs.ts
+frontend/src/hooks/useLogs.ts
+frontend/src/pages/LogsPage.tsx
+frontend/src/components/LogListItem.tsx
+frontend/src/components/LogDetailDrawer.tsx
+frontend/src/components/LogFilters.tsx
+frontend/src/components/TaskTimeline.tsx
+frontend/src/components/__tests__/LogListItem.test.tsx
+frontend/src/components/__tests__/LogDetailDrawer.test.tsx
+frontend/src/components/__tests__/LogFilters.test.tsx
+frontend/src/components/__tests__/TaskTimeline.test.tsx
+```
+
+#### 文档
+
+```
+docs/dev/logs-observability-implementation-plan.md
+docs/dev/logs-observability-audit-report.md
+docs/dev/logs-observability-fix-report.md
+```
+
+---
+
+### 修改文件列表
+
+```
+backend/src/models/handoff.py          # 扩展 ExecutionLog：17 字段 + JSON helpers（重命名为 extra_metadata）
+backend/src/services/handoff_service.py # 更新 _create_log 使用 event_type/event_status
+backend/src/routes/handoffs.py         # 移除旧 GET /logs 端点
+backend/src/main.py                    # 注册 logs 路由
+frontend/src/App.tsx                   # 添加 /logs 路由和导航链接
+frontend/src/index.css                 # 添加 @keyframes newLogHighlight
+frontend/src/components/__tests__/LogDetailDrawer.test.tsx # 添加 MemoryRouter 包装
+```
+
+---
+
+### 新增 API 列表
+
+| 方法 | 路径 | 说明 |
+|------|------|------|
+| POST | `/api/v1/logs` | 创建日志记录（内部写入接口） |
+| GET | `/api/v1/logs` | 列表查询（支持 goal/task/agent/model/handoff/event_type/event_status/start_time/end_time/search 筛选 + 分页） |
+| GET | `/api/v1/logs/{log_id}` | 详情查询（含关联 Agent/Model/Task 名称） |
+| GET | `/api/v1/logs/task/{task_id}/timeline` | Task 执行时间线 + 统计摘要 |
+
+**响应格式：** `{ success: boolean, data?: object, error?: { code, message } }`
+
+---
+
+### 数据对象 / 字段定义
+
+#### ExecutionLog（后端 SQLAlchemy Model，扩展版）
+
+```python
+id: str (UUID PK)
+goal_id: str (nullable, index)
+task_id: str (nullable, index)
+agent_id: str (nullable, index)
+worker_id: str (nullable)
+model_id: str (nullable, index)
+handoff_id: str (nullable, index)
+event_type: str (not null, index)  # model_call | agent_step | tool_call | task_status_change | quota_status_change | handoff_created | handoff_completed | error | supervisor_review | memory_write_candidate
+event_status: str (not null, index)  # success | failed | error | info | warning | pending | running | completed | cancelled | timeout | rate_limited | quota_exceeded | validation_error | unknown | started | transition | detected | created | accepted | rejected | approved | needs_revision | skipped
+input_summary: str (nullable)
+output_summary: str (nullable)
+token_usage: str (JSON, nullable)  # {input_tokens, output_tokens, total_tokens}
+latency_ms: int (nullable)
+error_type: str (nullable)
+error_code: str (nullable)
+error_message: str (nullable)
+tool_name: str (nullable)
+quota_status: str (nullable)
+handoff_status: str (nullable)
+extra_metadata: str (JSON, nullable)  # 额外元数据（避免与 SQLAlchemy metadata 冲突）
+routing_info: str (JSON, nullable)  # {routing_reason, confidence, risk_flags[]}
+created_at: datetime
+```
+
+---
+
+### Mock 数据说明
+
+| Mock 数据 | 位置 | 原因 | 切换条件 |
+|-----------|------|------|----------|
+| Handoff Service 自动写入 handoff_created/handoff_completed 日志 | `handoff_service.py` `_create_log` | Runtime/Quota 模块未就绪 | 各模块接入 log_service.create_log 后自然产生 |
+| Task 列表时间线无数据 | LogsPage TaskSelector | 仅 Handoff 事件产生日志 | Runtime 上线 model_call/agent_step/error 日志后丰富 |
+| Workspace 底部 ExecutionLogPanel | 未实现 | Module 6 未就绪 | Module 6 开发时引入 |
+
+---
+
+### 已知问题
+
+| 问题 | 影响 | 计划修复时机 |
+|------|------|-------------|
+| LogsPage 为独立页面，非 Workspace 底部面板 | Workspace 实时监控暂不可用 | Module 6 开发时接入 |
+| 日志数据来源仅 Handoff Service | 日志类型覆盖不全（缺 model_call/agent_step/tool_call 等） | Runtime 模块就绪后 |
+| Token 统计聚合 API 未实现 | 无法按 Agent/Model 查看 token 消耗 | P1/MVP-B |
+| Handoff 对比 API 未实现 | 无法对比 Handoff 前后上下文 | P1/MVP-B |
+| migration 005 删除旧 execution_logs 表重建 | 丢失已有 Handoff 内部日志数据 | 可接受，数据量极小 |
+
+---
+
+### 已修复问题（Round 6）
+
+| 问题 | 修复文件 |
+|------|----------|
+| LogsPage 新日志无高亮动画 | `LogsPage.tsx` + `LogListItem.tsx` + `index.css` |
+| LogDetailDrawer 关联实体不可点击跳转 | `LogDetailDrawer.tsx`（添加 Link 组件） |
+
+---
+
+### 测试命令和结果
+
+**后端测试（全量）：**
+
+```bash
+cd backend
+./.venv/bin/python -m pytest tests/ -v
+```
+
+结果：**127 passed**（含 13 log API tests）
+
+**前端测试（全量）：**
+
+```bash
+cd frontend
+npx vitest run
+```
+
+结果：**105 passed**（含 17 log component tests）
+
+**前端构建：**
+
+```bash
+cd frontend
+npm run build
+```
+
+结果：**构建通过**
+
+---
+
+### 架构决策记录
+
+1. **独立 Logs 页面 vs Workspace 面板**：Workspace 为 Module 6，为不阻塞 Logs 模块开发，先以独立页面 `/logs` 承载全部功能。Workspace 开发时引入 LogListItem 等组件即可集成底部面板。
+
+2. **ExecutionLog 模型扩展 vs 新表**：使用扩展方案，在现有 `handoff.py` 的 ExecutionLog stub 上扩展字段。`extra_metadata` 列名解决 SQLAlchemy `metadata` 保留字冲突。
+
+3. **旧 `GET /logs` 端点移除**：`handoffs.py` 中的旧端点被 `logs.py` 全面替代，避免路由冲突。
+
+4. **SQLite JSON 存储**：token_usage、extra_metadata、routing_info 使用 Text 列存储 JSON 字符串，通过 model getter/setter 方法封装序列化。
+
+---
+
+### 下一步建议
+
+1. **进入 Agent Workspace 模块（Module 6）** — Logs 组件已就绪，Workspace 引入即可实现实时日志面板。
+2. **Runtime 模块接入日志** — Runtime 上线后将产生 model_call/agent_step/tool_call 等丰富日志，Logs 页面数据会更充实。
+3. **P1 补全** — Token 统计聚合 API、Handoff 对比 API、TokenUsageSummary 图表。
+4. **Quota Manager 接入日志** — quota_status_change 事件记录，补充日志类型覆盖。
+
+---
+
+> 日志生成日期：2026-06-30  
+> 对应实现计划：`docs/dev/logs-observability-implementation-plan.md`
