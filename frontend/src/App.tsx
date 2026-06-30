@@ -4,6 +4,8 @@ import ModelRouterPage from './pages/ModelRouterPage'
 import QuotaOverviewPage from './pages/QuotaOverviewPage'
 import HandoffPage from './pages/HandoffPage'
 import LogsPage from './pages/LogsPage'
+import WorkspacePage from './pages/WorkspacePage'
+import './styles/animations.css'
 
 function App() {
   return (
@@ -29,6 +31,9 @@ function App() {
             <Link to="/logs" className="text-stone-600 hover:text-stone-900">
               Logs
             </Link>
+            <Link to="/workspace" className="text-stone-600 hover:text-stone-900">
+              Workspace
+            </Link>
           </div>
         </div>
       </nav>
@@ -39,6 +44,7 @@ function App() {
           <Route path="/quota" element={<QuotaOverviewPage />} />
           <Route path="/handoffs" element={<HandoffPage />} />
           <Route path="/logs" element={<LogsPage />} />
+          <Route path="/workspace" element={<WorkspacePage />} />
           <Route path="/" element={<AgentRegistryPage />} />
         </Routes>
       </main>

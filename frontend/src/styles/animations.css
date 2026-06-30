@@ -1,0 +1,150 @@
+@keyframes breathe {
+  0%, 100% {
+    box-shadow: 0 0 0 0 rgba(59, 130, 246, 0.4);
+  }
+  50% {
+    box-shadow: 0 0 0 6px rgba(59, 130, 246, 0);
+  }
+}
+
+@keyframes breathe-purple {
+  0%, 100% {
+    box-shadow: 0 0 0 0 rgba(139, 92, 246, 0.4);
+  }
+  50% {
+    box-shadow: 0 0 0 6px rgba(139, 92, 246, 0);
+  }
+}
+
+@keyframes shake {
+  0%, 100% {
+    transform: translateX(0);
+  }
+  20% {
+    transform: translateX(-4px);
+  }
+  40% {
+    transform: translateX(4px);
+  }
+  60% {
+    transform: translateX(-2px);
+  }
+  80% {
+    transform: translateX(2px);
+  }
+}
+
+@keyframes rotate-border {
+  0% {
+    border-color: #8b5cf6;
+    box-shadow: 0 0 4px rgba(139, 92, 246, 0.3);
+  }
+  50% {
+    border-color: #a78bfa;
+    box-shadow: 0 0 8px rgba(139, 92, 246, 0.5);
+  }
+  100% {
+    border-color: #8b5cf6;
+    box-shadow: 0 0 4px rgba(139, 92, 246, 0.3);
+  }
+}
+
+@keyframes breathe-dot {
+  0%, 100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.4;
+  }
+}
+
+@keyframes dot-pulse {
+  0%, 100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.5;
+    transform: scale(1.3);
+  }
+}
+
+@keyframes slide-up {
+  from {
+    transform: translateY(100%);
+    opacity: 0;
+  }
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
+
+@keyframes slide-down {
+  from {
+    transform: translateY(0);
+    opacity: 1;
+  }
+  to {
+    transform: translateY(100%);
+    opacity: 0;
+  }
+}
+
+@keyframes border-flash {
+  0% {
+    border-color: #3b82f6;
+    box-shadow: 0 0 8px rgba(59, 130, 246, 0.5);
+  }
+  100% {
+    border-color: inherit;
+    box-shadow: none;
+  }
+}
+
+.animate-breathe {
+  animation: breathe 2s infinite;
+}
+
+.animate-breathe-purple {
+  animation: breathe-purple 2s infinite;
+}
+
+.animate-shake {
+  animation: shake 0.3s ease-in-out;
+}
+
+.animate-rotate-border {
+  animation: rotate-border 1.5s infinite;
+}
+
+.animate-breathe-dot {
+  animation: breathe-dot 2s infinite;
+}
+
+.animate-dot-pulse {
+  animation: dot-pulse 0.8s infinite;
+}
+
+.animate-slide-up {
+  animation: slide-up 0.3s ease-out;
+}
+
+.animate-slide-down {
+  animation: slide-down 0.3s ease-in;
+}
+
+.animate-border-flash {
+  animation: border-flash 1s ease-out forwards;
+}
+
+.task-card-enter {
+  opacity: 0;
+  transform: translateY(8px);
+}
+
+.task-card-enter-active {
+  opacity: 1;
+  transform: translateY(0);
+  transition: opacity 0.3s ease, transform 0.3s ease;
+}

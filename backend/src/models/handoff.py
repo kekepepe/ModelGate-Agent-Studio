@@ -117,6 +117,7 @@ class WorkerSession(Base):
     current_context = Column(Text, nullable=True)
     final_output = Column(Text, nullable=True)
     error_message = Column(Text, nullable=True)
+    total_tokens_used = Column(Integer, nullable=False, default=0)
     created_at = Column(DateTime, nullable=False, default=lambda: datetime.now(timezone.utc))
     updated_at = Column(DateTime, nullable=False, default=lambda: datetime.now(timezone.utc))
 
@@ -132,6 +133,7 @@ class WorkerSession(Base):
             "current_context": self.current_context,
             "final_output": self.final_output,
             "error_message": self.error_message,
+            "total_tokens_used": self.total_tokens_used,
             "created_at": self.created_at.isoformat() if self.created_at else None,
             "updated_at": self.updated_at.isoformat() if self.updated_at else None,
         }

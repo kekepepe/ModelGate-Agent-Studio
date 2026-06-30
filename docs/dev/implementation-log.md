@@ -1195,3 +1195,259 @@ npm run build
 
 > 日志生成日期：2026-06-30  
 > 对应实现计划：`docs/dev/logs-observability-implementation-plan.md`
+
+---
+
+## Agent Workspace
+
+**模块名称：** Agent Workspace  
+**模块 slug：** `agent-workspace`  
+**开发周期：** 2026-06-30  
+**对应 PRD：** `docs/prd/agent-workspace-prd.md`  
+**对应 Stories：** `docs/stories/agent-workspace-stories.md`  
+**对应 Tasks：** `docs/tasks/agent-workspace-tasks.md`  
+**对应 UI Spec：** `docs/ui/agent-workspace-ui-spec.md`
+
+---
+
+### 完成的 Story
+
+| story_id | 故事摘要 | 状态 |
+|----------|----------|------|
+| US-AW-01 | 输入 Goal 并启动任务 | 完成 |
+| US-AW-02 | 实时观察 Task 状态变化 | 完成 |
+| US-AW-03 | 查看 Task 详情和输出 | 完成 |
+| US-AW-04 | 查看 Agent Station 和 Worker 状态 | 完成 |
+| US-AW-05 | 查看执行日志 | 完成（集成 Logs 模块） |
+| US-AW-06 | Handoff 状态可视化 | 完成（TaskCard 集成 HandoffStatusIndicator prop） |
+| US-AW-07 | 额度风险徽章展示 | P1 延后 |
+| US-AW-08 | 模型路由决策展示 | P1 延后 |
+
+---
+
+### 完成的 Task
+
+| task_id | 任务内容 | 状态 |
+|---------|----------|------|
+| AW-T1.1 | 创建 goals 表 | 完成 |
+| AW-T1.2 | 创建 tasks 表 | 完成 |
+| AW-T1.3 | worker_sessions 扩展 (total_tokens_used) | 完成（复用已有表） |
+| AW-T1.4 | 状态枚举定义 | 完成（前端类型定义） |
+| AW-T2.1 | POST /goals + start API | 完成 |
+| AW-T2.2 | GET /tasks/:taskId API | 完成 |
+| AW-T2.3 | GET /workspace/:goalId/state API | 完成 |
+| AW-T3.1 | Workspace 页面 + 三栏布局 | 完成 |
+| AW-T3.2 | GoalInputPanel | 完成 |
+| AW-T3.3 | TopStatusBar | 完成 |
+| AW-T4.1 | TaskCard + 状态动画 | 完成 |
+| AW-T4.2 | AgentStationCard + WorkerBadge | 完成 |
+| AW-T4.3 | TaskTree | 完成 |
+| AW-T5.1 | TaskDetailPanel | 完成 |
+| AW-T5.2 | 对接真实状态数据（轮询 2s） | 完成 |
+| AW-T6.1 | BottomConsole 集成执行日志 | 完成（复用 LogListItem + LogFilters） |
+| AW-T6.2 | TaskCard 集成 HandoffStatusIndicator | 完成（handoffIndicator prop） |
+| AW-T7.1 | API 集成测试 | 完成（10 tests） |
+| AW-T7.2 | 前端组件测试 | 完成（40 tests） |
+| AW-T6.3 | RiskBadge 集成 | P1 延后 |
+| AW-T6.4 | RoutingResultCard 集成 | P1 延后 |
+| AW-T7.3 | E2E 工作流测试 | 延后 |
+
+---
+
+### 新增文件列表
+
+#### 后端
+
+```
+backend/migrations/006_create_goals_tasks.sql
+backend/src/models/workspace.py
+backend/src/schemas/workspace.py
+backend/src/services/goal_service.py
+backend/src/services/task_service.py
+backend/src/services/workspace_service.py
+backend/src/routes/goals.py
+backend/src/routes/tasks.py
+backend/src/routes/workspace.py
+backend/tests/test_workspace_api.py
+```
+
+#### 前端
+
+```
+frontend/src/types/workspace.ts
+frontend/src/api/workspace.ts
+frontend/src/hooks/useWorkspace.ts
+frontend/src/styles/animations.css
+frontend/src/pages/WorkspacePage.tsx
+frontend/src/components/GoalInputPanel.tsx
+frontend/src/components/TopStatusBar.tsx
+frontend/src/components/TaskCard.tsx
+frontend/src/components/AgentStationCard.tsx
+frontend/src/components/WorkerBadge.tsx
+frontend/src/components/TaskTree.tsx
+frontend/src/components/TaskDetailPanel.tsx
+frontend/src/components/BottomConsole.tsx
+frontend/src/components/__tests__/TopStatusBar.test.tsx
+frontend/src/components/__tests__/TaskCard.test.tsx
+frontend/src/components/__tests__/WorkerBadge.test.tsx
+frontend/src/components/__tests__/AgentStationCard.test.tsx
+frontend/src/components/__tests__/GoalInputPanel.test.tsx
+frontend/src/components/__tests__/TaskTree.test.tsx
+frontend/src/components/__tests__/TaskDetailPanel.test.tsx
+```
+
+#### 文档
+
+```
+docs/dev/agent-workspace-implementation-plan.md
+docs/dev/agent-workspace-audit-report.md
+docs/dev/agent-workspace-fix-report.md
+```
+
+---
+
+### 修改文件列表
+
+```
+backend/src/models/handoff.py    # WorkerSession 新增 total_tokens_used 列
+backend/src/main.py              # 注册 goals/tasks/workspace 路由
+frontend/src/App.tsx             # 新增 /workspace 路由和导航链接
+```
+
+---
+
+### 新增 API 列表
+
+| 方法 | 路径 | 说明 |
+|------|------|------|
+| POST | `/api/v1/goals` | 创建 Goal (title + description) |
+| POST | `/api/v1/goals/:goalId/start` | 启动 Goal，自动创建 Planner Task |
+| GET | `/api/v1/tasks/:taskId` | Task 详情（含 agent_name/model_name） |
+| GET | `/api/v1/workspace/:goalId/state` | 聚合状态查询（goal + tasks + agents + workers） |
+
+---
+
+### 数据对象 / 字段定义
+
+#### Goal
+
+```python
+id: str (UUID PK)
+title: str (required, max 255)
+description: str (nullable)
+status: str (default "idle")  # idle/planning/running/waiting/handoff/reviewing/completed/failed
+created_at: datetime
+updated_at: datetime
+```
+
+#### Task
+
+```python
+id: str (UUID PK)
+goal_id: str (FK -> goals.id)
+title: str (required)
+description: str (nullable)
+status: str (default "pending")  # pending/assigned/running/completed/failed/handoff
+assigned_agent_id: str (nullable, FK -> agent_stations.id)
+assigned_worker_id: str (nullable)
+output: str (nullable)
+tokens_used: int (default 0)
+duration_ms: int (nullable)
+priority: int (default 0)
+created_at: datetime
+updated_at: datetime
+```
+
+#### WorkerSession 扩展
+
+```python
+# 在已有 worker_sessions 表上新增：
+total_tokens_used: int (default 0)
+```
+
+---
+
+### 前端状态动画
+
+| 状态 | 动画 |
+|------|------|
+| running | breathe (box-shadow 呼吸，2s infinite) |
+| failed | shake (左右抖动，300ms) |
+| handoff | rotate-border (紫色边框脉动，1.5s) |
+| WorkerBadge running | breathe-dot (透明度呼吸，2s) |
+| WorkerBadge handoff_required | dot-pulse (缩放脉冲，0.8s) |
+| BottomConsole expand | slide-up (300ms) |
+| 所有状态变化 | CSS transition 300ms |
+
+---
+
+### 模块复用
+
+| 依赖模块 | 复用内容 |
+|----------|----------|
+| Agent Registry | agent_stations 表查询、Agent 名称/角色 |
+| Model Router | models 表查询 model display_name |
+| Handoff Manager | worker_sessions 表、HandoffStatusIndicator 组件 |
+| Logs / Observability | LogListItem 组件、LogFilters 组件、getLogs API |
+| Quota Manager | RiskBadge 组件（P1） |
+
+---
+
+### 已知问题
+
+| 问题 | 影响 | 计划修复时机 |
+|------|------|-------------|
+| Planner Agent 自动创建 Task 逻辑硬编码 | 仅创建 1 个初始 Task，无真实 Planning | Runtime 模块就绪后接入真实 Planner |
+| TaskDetailPanel Context/Logs Tab 为占位 | Tab 内容不完整 | 后续迭代实现 |
+| 无 E2E 工作流测试 | 缺少端到端验证 | Phase 3 任务，延后 |
+| RiskBadge、RoutingResultCard 未集成 | P1 功能缺失 | P1 阶段 |
+
+---
+
+### 测试命令和结果
+
+**后端测试（全量）：**
+
+```bash
+cd backend
+./.venv/bin/python -m pytest tests/ -v
+```
+
+结果：**137 passed**（含 10 workspace tests）
+
+**前端测试（全量）：**
+
+```bash
+cd frontend
+npx vitest run
+```
+
+结果：**145 passed**（含 40 workspace tests）
+
+**前端构建：**
+
+```bash
+cd frontend
+npm run build
+```
+
+结果：**构建通过**
+
+---
+
+### 架构决策记录
+
+1. **worker_sessions 表复用**：已有 Handoff Manager 创建的 worker_sessions 表，使用 ALTER TABLE ADD COLUMN 扩展 total_tokens_used 字段，避免创建重复表。
+
+2. **Goal/Task 独立模型**：创建独立的 goals 和 tasks 表，不依赖 Handoff Manager 的 handoff_tasks stub。Task 模型为后续 Runtime 和 Planning 模块预留完整字段。
+
+3. **Workspace 全页面 vs 普通路由**：WorkspacePage 使用 `h-[calc(100vh-56px)]` 全高度布局，内部三栏 + 底部控制台，与主 App 导航栏整合。
+
+4. **前端动画纯 CSS 实现**：breathe、shake、rotate-border 等动画均使用 CSS @keyframes，不依赖 JS 动画库，保证性能。
+
+5. **轮询间隔 2 秒**：`GET /workspace/:goalId/state` 由 `useWorkspaceState` hook 以 2 秒间隔轮询，Workspace 状态实时同步。
+
+---
+
+> 日志生成日期：2026-06-30  
+> 对应实现计划：`docs/dev/agent-workspace-implementation-plan.md`
