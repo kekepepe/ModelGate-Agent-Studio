@@ -77,9 +77,8 @@ describe('TaskDetailPanel', () => {
         <TaskDetailPanel task={mockTask} onClose={onClose} />
       </MemoryRouter>
     )
-    const closeBtn = screen.getByRole('button', { name: '' })
-    // The X button is the first button found
-    fireEvent.click(document.querySelector('.lucide-x')?.closest('button')!)
+    const closeBtn = document.querySelector('.lucide-x')?.closest('button')
+    if (closeBtn) fireEvent.click(closeBtn)
     expect(onClose).toHaveBeenCalled()
   })
 

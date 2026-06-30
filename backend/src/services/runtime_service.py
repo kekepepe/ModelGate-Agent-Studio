@@ -1,0 +1,533 @@
+"""Runtime orchestrator: Goal -> Task -> Worker -> Model -> Logs -> Quota -> Handoff -> Output.
+
+Orchestrates the full execution pipeline by stitching together existing
+services from all 6 modules. Uses a mock model provider (swappable to
+real OpenAI-compatible provider via the ModelProvider Protocol).
+"""
+
+import time
+import uuid
+from datetime import datetime, timezone
+from typing import Any, Dict, List, Optional
+
+from sqlalchemy.orm import Session
+
+from src.models.agent import AgentStation
+from src.models.handoff import HandoffRecord, HandoffTask, WorkerSession
+from src.models.model import Model
+from src.models.workspace import Goal, Task
+from src.services import (
+    goal_service,
+    handoff_service,
+    log_service,
+    quota_service,
+    router_service,
+    task_service,
+)
+from src.services.mock_provider import MockModelProvider, ModelProvider
+
+
+class RuntimeError(Exception):
+    pass
+
+
+class GoalNotReadyError(RuntimeError):
+    pass
+
+
+class TaskNotReadyError(RuntimeError):
+    pass
+
+
+_provider: Optional[MockModelProvider] = None
+
+ROLE_TO_TASK_TYPE = {
+    "planner": "planning",
+    "coder": "coding",
+    "reviewer": "review",
+    "research": "research",
+    "summarizer": "summarization",
+    "supervisor": "supervision",
+}
+
+
+def get_provider() -> MockModelProvider:
+    global _provider
+    if _provider is None:
+        _provider = MockModelProvider()
+        _configure_defaults(_provider)
+    return _provider
+
+
+def set_provider(provider: ModelProvider) -> None:
+    global _provider
+    _provider = provider  # type: ignore[assignment]
+
+
+def _configure_defaults(provider: MockModelProvider) -> None:
+    provider.configure_model(
+        model_id="model-gpt-4-turbo",
+        output_text_fn=lambda prompt, sys: f"[GPT-4 Turbo Plan]\nAnalyzed goal and created task breakdown:\n- Task 1: Core implementation\n- Task 2: Review and testing\n\nEstimated effort: moderate.",
+        input_tokens=200,
+        output_tokens=300,
+        latency_ms=600,
+    )
+    provider.configure_model(
+        model_id="model-claude-3-opus",
+        output_text_fn=lambda prompt, sys: f"[Claude 3 Opus]\nExecuted coding task successfully.\n```python\ndef solve():\n    # Implementation\n    return result\n```\nAll tests passing.",
+        input_tokens=250,
+        output_tokens=400,
+        latency_ms=800,
+    )
+    provider.configure_model(
+        model_id="model-claude-3-haiku",
+        output_text_fn=lambda prompt, sys: f"[Claude 3 Haiku]\nSummary generated.\nKey findings: task completed with expected quality.",
+        input_tokens=150,
+        output_tokens=200,
+        latency_ms=300,
+    )
+    provider.configure_model(
+        model_id="model-deepseek-coder",
+        output_text_fn=lambda prompt, sys: f"[DeepSeek Coder]\nGenerated implementation:\n```typescript\nfunction main() {{\n  // solution\n}}\n```",
+        input_tokens=200,
+        output_tokens=350,
+        latency_ms=500,
+    )
+
+
+def execute_goal_pipeline(db: Session, goal_id: str) -> Dict[str, Any]:
+    """Execute the full goal pipeline: Plan -> Execute Tasks -> Complete."""
+    goal = goal_service.get_goal(db, goal_id)
+    if goal.status not in ("planning", "running"):
+        raise GoalNotReadyError(f"Goal must be planning or running, current: {goal.status}")
+
+    start_time = time.time()
+    total_tokens = 0
+    tasks_completed = 0
+    tasks_failed = 0
+    tasks_handoff = 0
+    execution_log: List[Dict[str, Any]] = []
+
+    if goal.status == "planning":
+        goal.status = "running"
+        goal.updated_at = datetime.now(timezone.utc)
+        db.commit()
+
+    # Phase 1: Find and execute planner task
+    planner_task = _find_planner_task(db, goal_id)
+    if planner_task and planner_task.status in ("pending", "assigned"):
+        result = _execute_single_task(db, planner_task)
+        if result["status"] == "completed":
+            tasks_completed += 1
+            total_tokens += result.get("tokens_used", 0)
+        elif result["status"] == "handoff":
+            tasks_handoff += 1
+            total_tokens += result.get("tokens_used", 0)
+        else:
+            tasks_failed += 1
+        execution_log.append({
+            "phase": "planning",
+            "task_id": planner_task.id,
+            "title": planner_task.title,
+            "status": result["status"],
+            "tokens_used": result.get("tokens_used", 0),
+            "duration_ms": result.get("duration_ms", 0),
+        })
+
+    # Phase 2: Execute all pending execution tasks
+    while True:
+        task = _find_next_pending_task(db, goal_id)
+        if not task:
+            break
+        result = _execute_single_task(db, task)
+        if result["status"] == "completed":
+            tasks_completed += 1
+        elif result["status"] == "handoff":
+            tasks_handoff += 1
+        else:
+            tasks_failed += 1
+        total_tokens += result.get("tokens_used", 0)
+        execution_log.append({
+            "phase": "execution",
+            "task_id": task.id,
+            "title": task.title,
+            "status": result["status"],
+            "tokens_used": result.get("tokens_used", 0),
+            "duration_ms": result.get("duration_ms", 0),
+        })
+
+    # Phase 3: Determine final goal status
+    db.refresh(goal)
+    if tasks_handoff > 0:
+        goal.status = "handoff"
+    elif tasks_failed > 0 and tasks_completed == 0:
+        goal.status = "failed"
+    else:
+        goal.status = "completed"
+    goal.updated_at = datetime.now(timezone.utc)
+    db.commit()
+
+    total_elapsed = int((time.time() - start_time) * 1000)
+
+    return {
+        "goal_id": goal.id,
+        "status": goal.status,
+        "tasks_completed": tasks_completed,
+        "tasks_failed": tasks_failed,
+        "tasks_handoff": tasks_handoff,
+        "total_tokens_used": total_tokens,
+        "total_duration_ms": total_elapsed,
+        "execution_log": execution_log,
+    }
+
+
+def execute_task_step(db: Session, task_id: str) -> Dict[str, Any]:
+    """Execute a single task step."""
+    task = db.query(Task).filter(Task.id == task_id).first()
+    if not task:
+        raise TaskNotReadyError(f"Task '{task_id}' not found")
+    if task.status not in ("pending", "assigned"):
+        raise TaskNotReadyError(f"Task must be pending or assigned, current: {task.status}")
+
+    return _execute_single_task(db, task)
+
+
+def _execute_single_task(db: Session, task: Task) -> Dict[str, Any]:
+    """Internal: execute one task through model call -> logs -> quota."""
+    provider = get_provider()
+    start_ts = time.time()
+
+    # 1. Assign task
+    if task.status == "pending":
+        task.status = "assigned"
+        task.updated_at = datetime.now(timezone.utc)
+        db.commit()
+
+    # 2. Get agent
+    agent = db.query(AgentStation).filter(
+        AgentStation.id == task.assigned_agent_id,
+        AgentStation.is_enabled == True,
+    ).first()
+    if not agent:
+        raise TaskNotReadyError(f"Agent '{task.assigned_agent_id}' not found or disabled")
+
+    # 3. Select model via Router
+    task_type = ROLE_TO_TASK_TYPE.get(agent.role, "coding")
+    routing = None
+    try:
+        routing = router_service.select_model(
+            db=db,
+            task_id=task.id,
+            task_type=task_type,
+            task_description=task.description or task.title,
+            preferred_agent_id=agent.id,
+        )
+        selected_model_id = routing["selected_model_id"]
+    except Exception:
+        selected_model_id = agent.default_model_id
+
+    # 4. Check quota
+    intercept = quota_service.check_and_intercept(db, selected_model_id)
+    if intercept and intercept.get("intercepted"):
+        return _handle_quota_intercept(db, task, agent, selected_model_id, routing)
+
+    # 5. Get model info
+    model = db.query(Model).filter(Model.id == selected_model_id).first()
+    model_name = model.display_name if model else selected_model_id
+
+    # 6. Create WorkerSession
+    worker = WorkerSession(
+        id=str(uuid.uuid4()),
+        agent_id=agent.id,
+        model_id=selected_model_id,
+        goal_id=task.goal_id,
+        task_id=task.id,
+        status="running",
+        current_context=task.description or "",
+    )
+    db.add(worker)
+    db.flush()
+    task.assigned_worker_id = worker.id
+
+    # 7. Transition: assigned -> running
+    task.status = "running"
+    task.updated_at = datetime.now(timezone.utc)
+    if agent.status != "running":
+        agent.status = "running"
+        agent.current_task_id = task.id
+
+    log_service.create_log(db, {
+        "goal_id": task.goal_id,
+        "task_id": task.id,
+        "agent_id": agent.id,
+        "worker_id": worker.id,
+        "model_id": selected_model_id,
+        "event_type": "agent_step",
+        "event_status": "started",
+        "input_summary": task.description or task.title,
+        "metadata": {"task_type": task_type, "step": "execution"},
+    })
+    log_service.create_log(db, {
+        "goal_id": task.goal_id,
+        "task_id": task.id,
+        "agent_id": agent.id,
+        "event_type": "task_status_change",
+        "event_status": "transition",
+        "output_summary": f"Task status: assigned -> running (agent: {agent.name}, model: {model_name})",
+    })
+    db.commit()
+
+    # 8. Model call
+    try:
+        response = provider.generate(
+            prompt=task.description or task.title,
+            model_id=selected_model_id,
+            system_prompt=agent.system_prompt or None,
+        )
+    except Exception as e:
+        return _handle_task_failure(db, task, agent, worker, str(e))
+
+    elapsed_ms = int((time.time() - start_ts) * 1000)
+    latency_ms = response.latency_ms
+
+    # 9. Log model_call
+    log_service.create_log(db, {
+        "goal_id": task.goal_id,
+        "task_id": task.id,
+        "agent_id": agent.id,
+        "worker_id": worker.id,
+        "model_id": selected_model_id,
+        "event_type": "model_call",
+        "event_status": "completed",
+        "input_summary": (task.description or task.title)[:200],
+        "output_summary": response.text[:200],
+        "token_usage": {
+            "input_tokens": response.input_tokens,
+            "output_tokens": response.output_tokens,
+            "total_tokens": response.total_tokens,
+        },
+        "latency_ms": latency_ms,
+        "routing_info": {
+            "routing_reason": routing.get("routing_reason", {}).get("summary", "") if routing else "",
+            "confidence": routing.get("confidence", 0) if routing else 0,
+        },
+    })
+
+    # 10. Record quota usage
+    quota_result = quota_service.record_usage(
+        db=db,
+        provider=model.provider if model else "unknown",
+        model_id=selected_model_id,
+        model_name=model_name,
+        request_tokens=response.input_tokens,
+        response_tokens=response.output_tokens,
+        total_tokens=response.total_tokens,
+    )
+
+    # 11. Update task
+    task.status = "completed"
+    task.output = response.text
+    task.tokens_used = response.total_tokens
+    task.duration_ms = elapsed_ms
+    task.updated_at = datetime.now(timezone.utc)
+
+    # 12. Update worker
+    worker.status = "completed"
+    worker.final_output = response.text
+    worker.total_tokens_used = response.total_tokens
+    worker.updated_at = datetime.now(timezone.utc)
+
+    # 13. Update agent
+    agent.status = "idle"
+    agent.current_task_id = None
+    agent.total_tasks_completed = (agent.total_tasks_completed or 0) + 1
+    agent.updated_at = datetime.now(timezone.utc)
+
+    # 14. Log completion
+    log_service.create_log(db, {
+        "goal_id": task.goal_id,
+        "task_id": task.id,
+        "agent_id": agent.id,
+        "worker_id": worker.id,
+        "model_id": selected_model_id,
+        "event_type": "agent_step",
+        "event_status": "completed",
+        "output_summary": response.text[:200],
+        "token_usage": {
+            "input_tokens": response.input_tokens,
+            "output_tokens": response.output_tokens,
+            "total_tokens": response.total_tokens,
+        },
+        "latency_ms": latency_ms,
+        "quota_status": quota_result.get("updated_status", "unknown") if quota_result else "unknown",
+    })
+    log_service.create_log(db, {
+        "goal_id": task.goal_id,
+        "task_id": task.id,
+        "agent_id": agent.id,
+        "event_type": "task_status_change",
+        "event_status": "transition",
+        "output_summary": f"Task completed. Tokens: {response.total_tokens}, Duration: {elapsed_ms}ms",
+    })
+    db.commit()
+
+    return {
+        "task_id": task.id,
+        "status": "completed",
+        "output": response.text,
+        "tokens_used": response.total_tokens,
+        "duration_ms": elapsed_ms,
+        "model_name": model_name,
+        "worker_id": worker.id,
+        "quota_status": quota_result.get("updated_status", "unknown") if quota_result else "unknown",
+        "is_handoff": False,
+    }
+
+
+def _handle_task_failure(
+    db: Session, task: Task, agent: AgentStation, worker: WorkerSession, error_msg: str
+) -> Dict[str, Any]:
+    task.status = "failed"
+    task.updated_at = datetime.now(timezone.utc)
+    agent.status = "idle"
+    agent.current_task_id = None
+    agent.total_tasks_failed = (agent.total_tasks_failed or 0) + 1
+    agent.updated_at = datetime.now(timezone.utc)
+    worker.status = "failed"
+    worker.error_message = error_msg
+    worker.updated_at = datetime.now(timezone.utc)
+    log_service.create_log(db, {
+        "goal_id": task.goal_id,
+        "task_id": task.id,
+        "agent_id": agent.id,
+        "worker_id": worker.id,
+        "event_type": "error",
+        "event_status": "failed",
+        "error_message": error_msg,
+        "error_type": "runtime_error",
+    })
+    db.commit()
+    return {
+        "task_id": task.id,
+        "status": "failed",
+        "output": None,
+        "tokens_used": 0,
+        "duration_ms": 0,
+        "model_name": None,
+        "worker_id": worker.id,
+        "quota_status": None,
+        "is_handoff": False,
+    }
+
+
+def _handle_quota_intercept(
+    db: Session, task: Task, agent: AgentStation, model_id: str, routing: Dict
+) -> Dict[str, Any]:
+    """Handle intercepted model call by triggering handoff."""
+    backup_model_ids = routing.get("backup_model_ids", []) if routing else []
+    fallback_model_id = backup_model_ids[0] if backup_model_ids else agent.default_model_id
+
+    # Find a target agent different from current
+    target_agent = db.query(AgentStation).filter(
+        AgentStation.id != agent.id,
+        AgentStation.is_enabled == True,
+    ).first()
+
+    if not target_agent:
+        task.status = "failed"
+        task.updated_at = datetime.now(timezone.utc)
+        db.commit()
+        return {
+            "task_id": task.id,
+            "status": "failed",
+            "output": None,
+            "tokens_used": 0,
+            "duration_ms": 0,
+            "model_name": None,
+            "worker_id": None,
+            "quota_status": "limited",
+            "is_handoff": False,
+        }
+
+    # Create mirror HandoffTask for handoff service
+    ht = HandoffTask(
+        id=task.id,
+        goal_id=task.goal_id,
+        title=task.title,
+        description=task.description or "",
+        status="running",
+        assigned_agent_id=agent.id,
+        assigned_model_id=model_id,
+        current_output=task.output or "",
+    )
+    db.add(ht)
+    db.flush()
+
+    try:
+        result = handoff_service.trigger_handoff(
+            db=db,
+            task_id=task.id,
+            to_agent_id=target_agent.id,
+            to_model_id=fallback_model_id,
+            reason="quota_exceeded",
+            reason_description=f"Model {model_id} is in LIMITED/COOLDOWN status",
+        )
+    except handoff_service.HandoffServiceError:
+        task.status = "failed"
+        task.updated_at = datetime.now(timezone.utc)
+        db.commit()
+        return {
+            "task_id": task.id,
+            "status": "failed",
+            "output": None,
+            "tokens_used": 0,
+            "duration_ms": 0,
+            "model_name": None,
+            "worker_id": None,
+            "quota_status": "limited",
+            "is_handoff": False,
+        }
+
+    task.status = "handoff"
+    task.updated_at = datetime.now(timezone.utc)
+    agent.status = "handoff"
+    agent.total_handoffs_initiated = (agent.total_handoffs_initiated or 0) + 1
+    agent.updated_at = datetime.now(timezone.utc)
+    db.commit()
+
+    return {
+        "task_id": task.id,
+        "status": "handoff",
+        "output": None,
+        "tokens_used": 0,
+        "duration_ms": 0,
+        "model_name": model_id,
+        "worker_id": None,
+        "quota_status": "limited",
+        "is_handoff": True,
+    }
+
+
+def _find_planner_task(db: Session, goal_id: str) -> Optional[Task]:
+    planner_agents = db.query(AgentStation).filter(
+        AgentStation.role == "planner",
+        AgentStation.is_enabled == True,
+    ).all()
+    planner_ids = [a.id for a in planner_agents]
+    if not planner_ids:
+        return db.query(Task).filter(
+            Task.goal_id == goal_id,
+            Task.status.in_(["pending", "assigned"]),
+        ).first()
+    return db.query(Task).filter(
+        Task.goal_id == goal_id,
+        Task.assigned_agent_id.in_(planner_ids),
+        Task.status.in_(["pending", "assigned"]),
+    ).first()
+
+
+def _find_next_pending_task(db: Session, goal_id: str) -> Optional[Task]:
+    return db.query(Task).filter(
+        Task.goal_id == goal_id,
+        Task.status.in_(["pending", "assigned"]),
+    ).order_by(Task.priority.desc(), Task.created_at.asc()).first()

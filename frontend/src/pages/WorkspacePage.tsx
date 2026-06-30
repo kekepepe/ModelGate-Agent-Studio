@@ -1,5 +1,5 @@
 import { useState, useCallback } from 'react';
-import { useWorkspaceState, useTaskDetail } from '../hooks/useWorkspace';
+import { useWorkspaceState, useTaskDetail, useExecuteGoal } from '../hooks/useWorkspace';
 import TopStatusBar from '../components/TopStatusBar';
 import GoalInputPanel from '../components/GoalInputPanel';
 import TaskCard from '../components/TaskCard';
@@ -14,7 +14,8 @@ export default function WorkspacePage() {
   const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
 
   const { data: state, isLoading } = useWorkspaceState(goalId);
-  const { data: taskDetail } = useTaskDetail(selectedTaskId);
+  const { data: taskDetail, isLoading: isTaskLoading } = useTaskDetail(selectedTaskId);
+  const executeGoal = useExecuteGoal();
 
   const handleGoalCreated = useCallback((newGoalId: string) => {
     setGoalId(newGoalId);
@@ -29,7 +30,7 @@ export default function WorkspacePage() {
   });
 
   return (
-    <div className="flex flex-col h-[calc(100vh-56px)]">
+    <div className="flex flex-col flex-1 min-h-0">
       <TopStatusBar goal={state?.goal || null} tasks={state?.tasks || []} />
 
       <div className="flex-1 flex overflow-hidden">
@@ -64,12 +65,23 @@ export default function WorkspacePage() {
 
           {goalId && state && (
             <div className="space-y-4">
-              {/* Quick overview cards */}
-              <div className="grid grid-cols-4 gap-3">
-                <StatCard label="总 Task" value={state.tasks.length.toString()} />
-                <StatCard label="运行中" value={state.tasks.filter((t) => t.status === 'running').length.toString()} color="text-blue-600" />
-                <StatCard label="已完成" value={state.tasks.filter((t) => t.status === 'completed').length.toString()} color="text-green-600" />
-                <StatCard label="交接中" value={state.tasks.filter((t) => t.status === 'handoff').length.toString()} color="text-purple-600" />
+              {/* Quick overview cards + Execute */}
+              <div className="flex items-center gap-3">
+                <div className="grid grid-cols-4 gap-3 flex-1">
+                  <StatCard label="总 Task" value={state.tasks.length.toString()} />
+                  <StatCard label="运行中" value={state.tasks.filter((t) => t.status === 'running').length.toString()} color="text-blue-600" />
+                  <StatCard label="已完成" value={state.tasks.filter((t) => t.status === 'completed').length.toString()} color="text-green-600" />
+                  <StatCard label="交接中" value={state.tasks.filter((t) => t.status === 'handoff').length.toString()} color="text-purple-600" />
+                </div>
+                {state.goal && ['planning', 'running'].includes(state.goal.status) && (
+                  <button
+                    onClick={() => executeGoal.mutate(goalId!)}
+                    disabled={executeGoal.isPending}
+                    className="px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 disabled:opacity-40 flex-shrink-0"
+                  >
+                    {executeGoal.isPending ? '执行中...' : '▶ 执行'}
+                  </button>
+                )}
               </div>
 
               {/* Tasks section */}
@@ -124,6 +136,7 @@ export default function WorkspacePage() {
           {selectedTaskId && (
             <TaskDetailPanel
               task={taskDetail || null}
+              isLoading={isTaskLoading}
               onClose={() => setSelectedTaskId(null)}
             />
           )}

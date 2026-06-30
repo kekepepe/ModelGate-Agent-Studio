@@ -19,6 +19,7 @@ export default function BottomConsole({ goalId }: BottomConsoleProps) {
     queryKey: ['workspace-logs', allFilters],
     queryFn: () => getLogs(allFilters),
     enabled: !!goalId && expanded,
+    refetchInterval: expanded ? 2000 : false,
   });
 
   // If no goalId, show placeholder
