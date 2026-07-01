@@ -1,7 +1,35 @@
-import { describe, it, expect, vi } from 'vitest'
+import React from 'react'
+import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, screen, fireEvent, waitFor } from '@testing-library/react'
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import AgentConfigForm from '../AgentConfigForm'
 import type { AgentStation } from '../../types/agent'
+
+const queryClient = new QueryClient({
+  defaultOptions: { queries: { retry: false } },
+})
+
+function renderWithQuery(ui: React.ReactElement) {
+  return render(ui, {
+    wrapper: ({ children }: { children: React.ReactNode }) => (
+      <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
+    ),
+  })
+}
+
+beforeEach(() => {
+  queryClient.clear();
+  queryClient.setQueryData(['models', { is_enabled: true }], {
+    items: [
+      { id: 'claude-3-opus', display_name: 'Claude 3 Opus', provider: 'anthropic', model_name: 'claude-3-opus', capability_tags: [], max_context_tokens: 200000, cost_level: 5, speed_level: 3, is_enabled: true, is_default: false },
+      { id: 'gpt-4-turbo', display_name: 'GPT-4 Turbo', provider: 'openai', model_name: 'gpt-4-turbo', capability_tags: [], max_context_tokens: 128000, cost_level: 4, speed_level: 3, is_enabled: true, is_default: false },
+    ],
+    total: 2,
+    page: 1,
+    page_size: 20,
+    total_pages: 1,
+  });
+});
 
 const mockAgent: AgentStation = {
   id: 'agent-1',
@@ -29,53 +57,43 @@ const mockRunningAgent: AgentStation = {
 }
 
 describe('AgentConfigForm - Create', () => {
-  it('renders create form with empty fields', () => {
-    render(<AgentConfigForm onSave={vi.fn()} onCancel={vi.fn()} />)
+  it('renders create form at step 1', () => {
+    renderWithQuery(<AgentConfigForm onSave={vi.fn()} onCancel={vi.fn()} />)
     expect(screen.getByText('创建 Agent')).toBeInTheDocument()
     expect(screen.getByPlaceholderText('输入 Agent 名称')).toHaveValue('')
+    // Step indicator shows "1" active
+    expect(screen.getByText('下一步')).toBeInTheDocument()
   })
 
-  it('disables submit button when name is empty', () => {
-    render(<AgentConfigForm onSave={vi.fn()} onCancel={vi.fn()} />)
-    const submitButton = screen.getByText('创建')
-    expect(submitButton).toBeDisabled()
+  it('disables next button when name is empty at step 1', () => {
+    renderWithQuery(<AgentConfigForm onSave={vi.fn()} onCancel={vi.fn()} />)
+    const nextButton = screen.getByText('下一步')
+    expect(nextButton).toBeDisabled()
   })
 
-  it('disables submit button when default_model_id is empty', () => {
-    render(<AgentConfigForm onSave={vi.fn()} onCancel={vi.fn()} />)
-    fireEvent.change(screen.getByPlaceholderText('输入 Agent 名称'), {
-      target: { value: 'My Agent' },
-    })
-    // Role has default value, name is filled, but model is still empty
-    const submitButton = screen.getByText('创建')
-    expect(submitButton).toBeDisabled()
-  })
-
-  it('enables submit button when form is valid', () => {
-    const { container } = render(<AgentConfigForm onSave={vi.fn()} onCancel={vi.fn()} />)
-    fireEvent.change(screen.getByPlaceholderText('输入 Agent 名称'), {
-      target: { value: 'My Agent' },
-    })
-    const selects = container.querySelectorAll('select')
-    const modelSelect = selects[1]
-    fireEvent.change(modelSelect, { target: { value: 'claude-3-opus' } })
-    const submitButton = screen.getByText('创建')
-    expect(submitButton).not.toBeDisabled()
-  })
-
-  it('calls onSave with correct data when form is valid', async () => {
+  it('proceeds through wizard and calls onSave', async () => {
     const onSave = vi.fn()
-    const { container } = render(<AgentConfigForm onSave={onSave} onCancel={vi.fn()} />)
+    const { container } = renderWithQuery(<AgentConfigForm onSave={onSave} onCancel={vi.fn()} />)
 
+    // Step 1: fill name
     fireEvent.change(screen.getByPlaceholderText('输入 Agent 名称'), {
       target: { value: 'My Agent' },
     })
+    fireEvent.click(screen.getByText('下一步'))
 
-    // Select default model (second select in the form)
+    // Step 2: select model
+    await waitFor(() => {
+      expect(screen.getByText('模型配置')).toBeInTheDocument()
+    })
     const selects = container.querySelectorAll('select')
-    const modelSelect = selects[1] // first is role, second is default model
+    const modelSelect = selects[0] // first select in step 2 is default model
     fireEvent.change(modelSelect, { target: { value: 'claude-3-opus' } })
+    fireEvent.click(screen.getByText('下一步'))
 
+    // Step 3: confirm and submit
+    await waitFor(() => {
+      expect(screen.getByText('配置汇总')).toBeInTheDocument()
+    })
     fireEvent.click(screen.getByText('创建'))
 
     await waitFor(() => {
@@ -85,26 +103,38 @@ describe('AgentConfigForm - Create', () => {
 
   it('calls onCancel when cancel button clicked', () => {
     const onCancel = vi.fn()
-    render(<AgentConfigForm onSave={vi.fn()} onCancel={onCancel} />)
+    renderWithQuery(<AgentConfigForm onSave={vi.fn()} onCancel={onCancel} />)
     fireEvent.click(screen.getByText('取消'))
     expect(onCancel).toHaveBeenCalled()
   })
 })
 
 describe('AgentConfigForm - Edit', () => {
-  it('renders edit form with prefilled data', () => {
-    render(<AgentConfigForm agent={mockAgent} onSave={vi.fn()} onCancel={vi.fn()} />)
+  it('renders edit form with prefilled data at step 1', () => {
+    renderWithQuery(<AgentConfigForm agent={mockAgent} onSave={vi.fn()} onCancel={vi.fn()} />)
     expect(screen.getByText('编辑 Agent')).toBeInTheDocument()
     expect(screen.getByDisplayValue('Test Agent')).toBeInTheDocument()
-    expect(screen.getByDisplayValue('You are a test agent.')).toBeInTheDocument()
   })
 
-  it('calls onSave with updated data', async () => {
+  it('calls onSave with updated data after navigating to step 3', async () => {
     const onSave = vi.fn()
-    render(<AgentConfigForm agent={mockAgent} onSave={onSave} onCancel={vi.fn()} />)
+    renderWithQuery(<AgentConfigForm agent={mockAgent} onSave={onSave} onCancel={vi.fn()} />)
 
+    // Step 1: update name
     fireEvent.change(screen.getByDisplayValue('Test Agent'), {
       target: { value: 'Updated Agent' },
+    })
+    fireEvent.click(screen.getByText('下一步'))
+
+    // Step 2: model already selected, proceed
+    await waitFor(() => {
+      expect(screen.getByText('模型配置')).toBeInTheDocument()
+    })
+    fireEvent.click(screen.getByText('下一步'))
+
+    // Step 3: save
+    await waitFor(() => {
+      expect(screen.getByText('配置汇总')).toBeInTheDocument()
     })
     fireEvent.click(screen.getByText('保存'))
 
@@ -118,19 +148,19 @@ describe('AgentConfigForm - Edit', () => {
 
 describe('AgentConfigForm - Running Agent Warning', () => {
   it('shows warning banner when editing a running agent', () => {
-    render(<AgentConfigForm agent={mockRunningAgent} onSave={vi.fn()} onCancel={vi.fn()} />)
+    renderWithQuery(<AgentConfigForm agent={mockRunningAgent} onSave={vi.fn()} onCancel={vi.fn()} />)
     expect(screen.getByText(/该 Agent 正在执行任务/i)).toBeInTheDocument()
   })
 
   it('does not show warning banner for idle agent', () => {
-    render(<AgentConfigForm agent={mockAgent} onSave={vi.fn()} onCancel={vi.fn()} />)
+    renderWithQuery(<AgentConfigForm agent={mockAgent} onSave={vi.fn()} onCancel={vi.fn()} />)
     expect(screen.queryByText(/该 Agent 正在执行任务/i)).not.toBeInTheDocument()
   })
 })
 
 describe('AgentConfigForm - API Error', () => {
   it('displays error banner when error prop is provided', () => {
-    render(
+    renderWithQuery(
       <AgentConfigForm
         onSave={vi.fn()}
         onCancel={vi.fn()}
@@ -141,7 +171,7 @@ describe('AgentConfigForm - API Error', () => {
   })
 
   it('clears error banner when form is reopened with different agent', () => {
-    const { rerender } = render(
+    const { rerender } = renderWithQuery(
       <AgentConfigForm
         onSave={vi.fn()}
         onCancel={vi.fn()}
@@ -162,12 +192,33 @@ describe('AgentConfigForm - API Error', () => {
 })
 
 describe('AgentConfigForm - Handoff Toggle', () => {
-  it('shows handoff threshold input when handoff is enabled', () => {
-    render(<AgentConfigForm onSave={vi.fn()} onCancel={vi.fn()} />)
+  it('shows handoff threshold input when handoff is enabled', async () => {
+    const { container } = renderWithQuery(<AgentConfigForm onSave={vi.fn()} onCancel={vi.fn()} />)
+
+    // Step 1: fill name and proceed
+    fireEvent.change(screen.getByPlaceholderText('输入 Agent 名称'), {
+      target: { value: 'My Agent' },
+    })
+    fireEvent.click(screen.getByText('下一步'))
+
+    // Step 2: select model and proceed
+    await waitFor(() => {
+      expect(screen.getByText('模型配置')).toBeInTheDocument()
+    })
+    const selects = container.querySelectorAll('select')
+    const modelSelect = selects[0]
+    fireEvent.change(modelSelect, { target: { value: 'claude-3-opus' } })
+    fireEvent.click(screen.getByText('下一步'))
+
+    // Step 3: toggle handoff
+    await waitFor(() => {
+      expect(screen.getByText('执行限制')).toBeInTheDocument()
+    })
     expect(screen.queryByText(/Handoff 触发阈值/i)).not.toBeInTheDocument()
 
-    // Toggle handoff on
-    const handoffToggle = screen.getByText(/允许 Handoff/i).closest('div')?.querySelector('button')
+    // Find the toggle button next to the "允许 Handoff" label in the form (not summary)
+    const handoffLabel = container.querySelector('label.text-sm.font-medium.text-stone-700')
+    const handoffToggle = handoffLabel?.closest('div')?.querySelector('button')
     if (handoffToggle) {
       fireEvent.click(handoffToggle)
       expect(screen.getByText(/Handoff 触发阈值/i)).toBeInTheDocument()

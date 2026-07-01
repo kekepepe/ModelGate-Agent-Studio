@@ -1,18 +1,21 @@
 # ModelGate Agent Studio — 后续开发计划 v2
 
-> 整合日期：2026-07-01
-> 基于：Phase 0-7 已完成，前端体验测试发现新问题，整合遗留 P1/P2 任务
+> 最后更新：2026-07-01
+> P0/P1 全部完成 ✅
 
 ---
 
 ## 一、当前状态速览
 
-### 已完成（8 个阶段）
+### 最新测试结果
 
-| 模块 | 状态 | 后端测试 | 前端测试 |
-|------|------|---------|---------|
-| MVP-A Control Plane | 完成 | 127 | 145 |
-| MVP-B Runtime | 完成 | 37 | 0 |
+| 项目 | 测试数量 |
+|------|---------|
+| Backend | 187 (新增 15 模型管理 API) |
+| Frontend | 143 |
+| **总计** | **330** |
+
+### 已完成（8 个阶段 + P0/P1）
 | Supervisor Review | 完成 | 4 | 0 |
 | Memory/Skill 自进化 | 完成 | 4 | 0 |
 | Docker Compose | 完成 | - | - |
@@ -130,27 +133,25 @@ Step 3: 高级配置与确认（System Prompt、输出格式、Handoff 设置）
 
 ---
 
-## 四、优先级重排
+## 四、P0/P1 完成状态
 
-综合考虑**用户体验阻塞程度**和**开发成本**，建议按以下顺序推进：
+| 优先级 | 任务 | 状态 |
+|:---:|------|:---:|
+| **P0** | 模型管理 CRUD（后端 API + 前端页面） | ✅ 完成 |
+| **P0** | Agent 创建向导式表单重构 | ✅ 完成 |
+| **P0** | AgentConfigForm 动态加载模型列表 | ✅ 完成 |
+| **P1** | GitHub Actions CI/CD | ✅ 完成 |
+| **P2** | MCP Tool Layer MVP | 延后 |
+| **P2** | 可视化统计增强 | 延后 |
 
-| 优先级 | 任务 | 类型 | 预估工作量 | 阻塞性 |
-|:---:|------|------|:---:|:---:|
-| **P0** | 模型管理 CRUD（后端 API + 前端页面） | 新功能 | 2-3 天 | 高 |
-| **P0** | Agent 创建向导式表单重构 | 体验优化 | 1-2 天 | 中 |
-| **P0** | AgentConfigForm 动态加载模型列表 | 适配 | 0.5 天 | 中 |
-| **P1** | GitHub Actions CI/CD | 工程化 | 1 天 | 低 |
-| **P2** | MCP Tool Layer MVP | 新模块 | 5-7 天 | 低 |
-| **P2** | 可视化统计增强 | 体验增强 | 3-5 天 | 低 |
+### 本次交付
 
-### 为什么模型管理排 P0？
-
-当前系统核心卖点是"多模型 Agent 协作"，但用户**无法在 UI 上管理模型**，这是一个功能缺口而非体验优化。模型数据硬编码意味着：
-1. 每次添加新模型必须改代码重新部署
-2. Agent 配置中的模型列表与后端真实数据不同步
-3. 无法动态调整影响路由决策的 cost_level / speed_level
-
-这是一个**功能完整性问题**，优先于体验优化。
+| 类别 | 新增文件 | 修改文件 |
+|------|---------|---------|
+| 后端 | `schemas/model.py`, `routes/models.py`, `tests/test_models_api.py` | `main.py` |
+| 前端 | `types/model.ts`, `api/models.ts`, `hooks/useModels.ts`, `pages/ModelManagerPage.tsx` | `App.tsx`, `components/AgentConfigForm.tsx`, `components/__tests__/AgentConfigForm.test.tsx` |
+| CI/CD | `.github/workflows/ci.yml` | - |
+| 工程 | `backend/requirements.txt`, `Dockerfile`, `docker-compose.yml` 等 | - |
 
 ---
 

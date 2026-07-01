@@ -6,6 +6,7 @@ import HandoffPage from './pages/HandoffPage'
 import LogsPage from './pages/LogsPage'
 import WorkspacePage from './pages/WorkspacePage'
 import EvolutionReviewPage from './pages/EvolutionReviewPage'
+import ModelManagerPage from './pages/ModelManagerPage'
 import './styles/animations.css'
 
 function App() {
@@ -19,6 +20,9 @@ function App() {
           <div className="flex items-center gap-4 text-sm">
             <Link to="/agents" className="text-stone-600 hover:text-stone-900">
               Agent Registry
+            </Link>
+            <Link to="/models" className="text-stone-600 hover:text-stone-900">
+              Model Manager
             </Link>
             <Link to="/router" className="text-stone-600 hover:text-stone-900">
               Model Router
@@ -44,6 +48,7 @@ function App() {
       <main className="flex-1">
         <Routes>
           <Route path="/agents" element={<AgentRegistryPage />} />
+          <Route path="/models" element={<ModelManagerPage />} />
           <Route path="/router" element={<ModelRouterPage />} />
           <Route path="/quota" element={<QuotaOverviewPage />} />
           <Route path="/handoffs" element={<HandoffPage />} />
