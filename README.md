@@ -132,6 +132,62 @@ ModelGate Agent Studio 不是普通 AI 聊天工具，也不是简单的多 API 
 - **让模型额度、上下文、任务状态可以被统一管理**
 - **让模型可以换，但经验不能丢；让项目可以变，但方法可以继承**
 
+## 本地运行
+
+### 前置条件
+
+- Python 3.9+
+- Node.js 20+
+- npm
+
+### 后端
+
+```bash
+cd backend
+python3 -m venv .venv
+source .venv/bin/activate
+pip install -r requirements.txt
+cp .env.example .env  # 编辑配置
+.venv/bin/python -m uvicorn src.main:app --reload
+```
+
+### 前端
+
+```bash
+cd frontend
+cp .env.example .env  # 编辑配置
+npm install
+npm run dev
+```
+
+访问 http://localhost:5173
+
+### 切换 Provider
+
+```bash
+# 默认 Mock Provider（无需 API key）
+export MODEL_PROVIDER=mock
+
+# 真实 OpenAI-compatible Provider
+export MODEL_PROVIDER=openai
+export OPENAI_BASE_URL=https://api.openai.com/v1
+export OPENAI_API_KEY=sk-xxx
+```
+
+## 当前开发状态
+
+| 阶段 | 状态 | 后端 | 前端 | 总计 |
+|------|------|------|------|------|
+| MVP-A Control Plane | ✅ | 127 | 145 | 272 |
+| MVP-B Runtime | ✅ | 37 | 0 | 37 |
+| Supervisor Review | ✅ | 4 | 0 | 4 |
+| Memory / Skill 自进化 | ✅ | 4 | 0 | 4 |
+| **总计** | | **172** | **145** | **317** |
+
+**执行链路：** Goal → Router → Quota → Worker → Mock/Real Model → Logs → Quota Record → Task/Agent Status → Handoff → Supervisor Review → Memory Drafts → Skill Drafts
+
+**模块：** Agent Registry | Model Router | Quota Manager | Handoff Manager | Logs/Observability | Agent Workspace | Runtime Engine | Supervisor Review | Memory/Skill Evolution
+
 ## License
 
 MIT License

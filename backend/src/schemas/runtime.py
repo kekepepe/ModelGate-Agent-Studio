@@ -23,3 +23,23 @@ class GoalExecutionResult(BaseModel):
     total_tokens_used: int = 0
     total_duration_ms: int = 0
     execution_log: List[Dict[str, Any]] = Field(default_factory=list)
+
+
+class RuntimeStatusResponse(BaseModel):
+    goal_id: str
+    goal_title: str
+    goal_status: str
+    current_task_id: Optional[str] = None
+    total_tasks: int = 0
+    completed_tasks: int = 0
+    failed_tasks: int = 0
+    running_tasks: int = 0
+    handoff_tasks: int = 0
+    handoff_count: int = 0
+    total_tokens_used: int = 0
+    log_count: int = 0
+    model_call_count: int = 0
+    error_count: int = 0
+    final_output: Optional[str] = None
+    error_message: Optional[str] = None
+    quota_status: Optional[str] = None

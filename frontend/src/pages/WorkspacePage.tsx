@@ -1,5 +1,5 @@
 import { useState, useCallback } from 'react';
-import { useWorkspaceState, useTaskDetail, useExecuteGoal } from '../hooks/useWorkspace';
+import { useWorkspaceState, useTaskDetail, useExecuteGoal, useRuntimeStatus } from '../hooks/useWorkspace';
 import TopStatusBar from '../components/TopStatusBar';
 import GoalInputPanel from '../components/GoalInputPanel';
 import TaskCard from '../components/TaskCard';
@@ -7,6 +7,7 @@ import TaskTree from '../components/TaskTree';
 import AgentStationCard from '../components/AgentStationCard';
 import TaskDetailPanel from '../components/TaskDetailPanel';
 import BottomConsole from '../components/BottomConsole';
+import FinalOutputPanel from '../components/FinalOutputPanel';
 import type { WorkspaceWorker } from '../types/workspace';
 
 export default function WorkspacePage() {
@@ -15,6 +16,7 @@ export default function WorkspacePage() {
 
   const { data: state, isLoading } = useWorkspaceState(goalId);
   const { data: taskDetail, isLoading: isTaskLoading } = useTaskDetail(selectedTaskId);
+  const { data: runtimeStatus } = useRuntimeStatus(goalId);
   const executeGoal = useExecuteGoal();
 
   const handleGoalCreated = useCallback((newGoalId: string) => {
@@ -83,6 +85,19 @@ export default function WorkspacePage() {
                   </button>
                 )}
               </div>
+
+              {/* Final output when goal completed */}
+              {runtimeStatus && ['completed', 'failed', 'handoff'].includes(runtimeStatus.goal_status) && (
+                <FinalOutputPanel
+                  output={runtimeStatus.final_output}
+                  status={runtimeStatus.goal_status}
+                  tasksCompleted={runtimeStatus.completed_tasks}
+                  tasksFailed={runtimeStatus.failed_tasks}
+                  tasksHandoff={runtimeStatus.handoff_tasks}
+                  totalTokens={runtimeStatus.total_tokens_used}
+                  logCount={runtimeStatus.log_count}
+                />
+              )}
 
               {/* Tasks section */}
               {state.tasks.length > 0 && (

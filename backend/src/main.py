@@ -3,10 +3,12 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from src.core.config import settings
 from src.core.database import engine, Base, SessionLocal
-from src.routes import agents, router as router_routes, quota as quota_routes, handoffs as handoff_routes, logs as log_routes, goals as goal_routes, tasks as task_routes, workspace as workspace_routes, runtime as runtime_routes
+from src.routes import agents, router as router_routes, quota as quota_routes, handoffs as handoff_routes, logs as log_routes, goals as goal_routes, tasks as task_routes, workspace as workspace_routes, runtime as runtime_routes, review as review_routes, knowledge as knowledge_routes
 from src.data.models import MODEL_SEEDS
 from src.models.model import Model
 from src.models import handoff as handoff_models
+from src.models import supervisor as supervisor_models
+from src.models import knowledge as knowledge_models
 
 Base.metadata.create_all(bind=engine)
 
@@ -32,6 +34,8 @@ app.include_router(goal_routes.router, prefix=settings.api_v1_prefix)
 app.include_router(task_routes.router, prefix=settings.api_v1_prefix)
 app.include_router(workspace_routes.router, prefix=settings.api_v1_prefix)
 app.include_router(runtime_routes.router, prefix=settings.api_v1_prefix)
+app.include_router(review_routes.router, prefix=settings.api_v1_prefix)
+app.include_router(knowledge_routes.router, prefix=settings.api_v1_prefix)
 
 
 def _seed_models():

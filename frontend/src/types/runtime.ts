@@ -20,3 +20,23 @@ export interface GoalExecutionResult {
   total_duration_ms: number;
   execution_log: ExecutionStep[];
 }
+
+export interface RuntimeStatusResponse {
+  goal_id: string;
+  goal_title: string;
+  goal_status: string;
+  current_task_id?: string | null;
+  total_tasks: number;
+  completed_tasks: number;
+  failed_tasks: number;
+  running_tasks: number;
+  handoff_tasks: number;
+  handoff_count: number;
+  total_tokens_used: number;
+  log_count: number;
+  model_call_count: number;
+  error_count: number;
+  final_output?: string | null;
+  error_message?: string | null;
+  quota_status?: string | null;
+}

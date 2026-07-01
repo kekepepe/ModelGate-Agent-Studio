@@ -16,7 +16,7 @@ def seed_agents(db_session):
         ),
         AgentStation(
             id=str(uuid.uuid4()), name="Coder", role="coder",
-            default_model_id="model-claude-3-opus", status="idle", is_enabled=True,
+            default_model_id="model-claude-opus", status="idle", is_enabled=True,
             system_prompt="Write clean code.",
         ),
         AgentStation(
@@ -36,7 +36,7 @@ def seed_models(db_session):
         Model(id="model-gpt-4-turbo", provider="openai", model_name="gpt-4-turbo",
               display_name="GPT-4 Turbo", is_enabled=True, max_context_tokens=128000,
               cost_level=4, speed_level=3),
-        Model(id="model-claude-3-opus", provider="anthropic", model_name="claude-3-opus",
+        Model(id="model-claude-opus", provider="anthropic", model_name="claude-3-opus",
               display_name="Claude 3 Opus", is_enabled=True, max_context_tokens=200000,
               cost_level=5, speed_level=3),
         Model(id="model-claude-3-haiku", provider="anthropic", model_name="claude-3-haiku",

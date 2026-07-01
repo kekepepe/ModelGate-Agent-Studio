@@ -1,9 +1,10 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { createGoal, getTask, getWorkspaceState, startGoal } from '../api/workspace';
-import { executeGoal as apiExecuteGoal, executeStep as apiExecuteStep } from '../api/runtime';
+import { executeGoal as apiExecuteGoal, executeStep as apiExecuteStep, getRuntimeStatus } from '../api/runtime';
 
 const WORKSPACE_QUERY_KEY = 'workspace-state';
 const TASK_DETAIL_KEY = 'task-detail';
+const RUNTIME_STATUS_KEY = 'runtime-status';
 
 export function useWorkspaceState(goalId: string | null) {
   return useQuery({
@@ -54,5 +55,14 @@ export function useExecuteStep() {
       queryClient.invalidateQueries({ queryKey: [TASK_DETAIL_KEY, data.task_id] });
       queryClient.invalidateQueries({ queryKey: [WORKSPACE_QUERY_KEY] });
     },
+  });
+}
+
+export function useRuntimeStatus(goalId: string | null) {
+  return useQuery({
+    queryKey: [RUNTIME_STATUS_KEY, goalId],
+    queryFn: () => getRuntimeStatus(goalId!),
+    enabled: !!goalId,
+    refetchInterval: 2000,
   });
 }

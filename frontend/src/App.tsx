@@ -5,6 +5,7 @@ import QuotaOverviewPage from './pages/QuotaOverviewPage'
 import HandoffPage from './pages/HandoffPage'
 import LogsPage from './pages/LogsPage'
 import WorkspacePage from './pages/WorkspacePage'
+import EvolutionReviewPage from './pages/EvolutionReviewPage'
 import './styles/animations.css'
 
 function App() {
@@ -34,6 +35,9 @@ function App() {
             <Link to="/workspace" className="text-stone-600 hover:text-stone-900">
               Workspace
             </Link>
+            <Link to="/evolution" className="text-stone-600 hover:text-stone-900">
+              Evolution
+            </Link>
           </div>
         </div>
       </nav>
@@ -45,6 +49,7 @@ function App() {
           <Route path="/handoffs" element={<HandoffPage />} />
           <Route path="/logs" element={<LogsPage />} />
           <Route path="/workspace" element={<WorkspacePage />} />
+          <Route path="/evolution" element={<EvolutionReviewPage />} />
           <Route path="/" element={<AgentRegistryPage />} />
         </Routes>
       </main>

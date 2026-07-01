@@ -15,7 +15,7 @@ def _seed_runtime_data(db_session):
     )
     coder = AgentStation(
         id=str(uuid.uuid4()), name="Coder", role="coder",
-        default_model_id="model-claude-3-opus", status="idle", is_enabled=True,
+        default_model_id="model-claude-opus", status="idle", is_enabled=True,
         system_prompt="Write code.",
     )
     db_session.add_all([planner, coder])
@@ -24,7 +24,7 @@ def _seed_runtime_data(db_session):
         Model(id="model-gpt-4-turbo", provider="openai", model_name="gpt-4-turbo",
               display_name="GPT-4 Turbo", is_enabled=True, max_context_tokens=128000,
               cost_level=4, speed_level=3),
-        Model(id="model-claude-3-opus", provider="anthropic", model_name="claude-3-opus",
+        Model(id="model-claude-opus", provider="anthropic", model_name="claude-3-opus",
               display_name="Claude 3 Opus", is_enabled=True, max_context_tokens=200000,
               cost_level=5, speed_level=3),
     ]
@@ -90,3 +90,37 @@ class TestExecuteStepAPI:
     def test_execute_step_not_found(self, client: TestClient):
         resp = client.post("/api/v1/runtime/execute-step/nonexistent")
         assert resp.status_code == 400
+
+
+class TestRuntimeStatusAPI:
+    def test_status_after_execute(self, client: TestClient, db_session):
+        goal, _ = _seed_runtime_data(db_session)
+        # Execute first to generate data
+        client.post(f"/api/v1/runtime/execute/{goal.id}")
+        # Now check status
+        resp = client.get(f"/api/v1/runtime/status/{goal.id}")
+        assert resp.status_code == 200
+        data = resp.json()["data"]
+        assert data["goal_id"] == goal.id
+        assert data["goal_title"] == "API Test Goal"
+        assert data["goal_status"] in ("completed", "running", "planning")
+        assert data["total_tasks"] >= 1
+        assert data["completed_tasks"] >= 1
+        assert data["log_count"] > 0
+        assert data["model_call_count"] > 0
+
+    def test_status_goal_not_found(self, client: TestClient):
+        resp = client.get("/api/v1/runtime/status/nonexistent")
+        assert resp.status_code == 404
+
+    def test_status_no_execution_yet(self, client: TestClient, db_session):
+        from src.models.workspace import Goal
+        goal = Goal(id=str(uuid.uuid4()), title="Fresh Goal", status="planning")
+        db_session.add(goal)
+        db_session.commit()
+        resp = client.get(f"/api/v1/runtime/status/{goal.id}")
+        assert resp.status_code == 200
+        data = resp.json()["data"]
+        assert data["total_tasks"] == 0
+        assert data["completed_tasks"] == 0
+        assert data["log_count"] == 0

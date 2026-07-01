@@ -13,7 +13,7 @@ from typing import Any, Dict, List, Optional
 from sqlalchemy.orm import Session
 
 from src.models.agent import AgentStation
-from src.models.handoff import HandoffRecord, HandoffTask, WorkerSession
+from src.models.handoff import ExecutionLog, HandoffRecord, HandoffTask, WorkerSession
 from src.models.model import Model
 from src.models.workspace import Goal, Task
 from src.services import (
@@ -24,7 +24,8 @@ from src.services import (
     router_service,
     task_service,
 )
-from src.services.mock_provider import MockModelProvider, ModelProvider
+from src.services.providers import get_provider
+from src.services.providers.base import ModelRequest
 
 
 class RuntimeError(Exception):
@@ -39,8 +40,6 @@ class TaskNotReadyError(RuntimeError):
     pass
 
 
-_provider: Optional[MockModelProvider] = None
-
 ROLE_TO_TASK_TYPE = {
     "planner": "planning",
     "coder": "coding",
@@ -49,50 +48,6 @@ ROLE_TO_TASK_TYPE = {
     "summarizer": "summarization",
     "supervisor": "supervision",
 }
-
-
-def get_provider() -> MockModelProvider:
-    global _provider
-    if _provider is None:
-        _provider = MockModelProvider()
-        _configure_defaults(_provider)
-    return _provider
-
-
-def set_provider(provider: ModelProvider) -> None:
-    global _provider
-    _provider = provider  # type: ignore[assignment]
-
-
-def _configure_defaults(provider: MockModelProvider) -> None:
-    provider.configure_model(
-        model_id="model-gpt-4-turbo",
-        output_text_fn=lambda prompt, sys: f"[GPT-4 Turbo Plan]\nAnalyzed goal and created task breakdown:\n- Task 1: Core implementation\n- Task 2: Review and testing\n\nEstimated effort: moderate.",
-        input_tokens=200,
-        output_tokens=300,
-        latency_ms=600,
-    )
-    provider.configure_model(
-        model_id="model-claude-3-opus",
-        output_text_fn=lambda prompt, sys: f"[Claude 3 Opus]\nExecuted coding task successfully.\n```python\ndef solve():\n    # Implementation\n    return result\n```\nAll tests passing.",
-        input_tokens=250,
-        output_tokens=400,
-        latency_ms=800,
-    )
-    provider.configure_model(
-        model_id="model-claude-3-haiku",
-        output_text_fn=lambda prompt, sys: f"[Claude 3 Haiku]\nSummary generated.\nKey findings: task completed with expected quality.",
-        input_tokens=150,
-        output_tokens=200,
-        latency_ms=300,
-    )
-    provider.configure_model(
-        model_id="model-deepseek-coder",
-        output_text_fn=lambda prompt, sys: f"[DeepSeek Coder]\nGenerated implementation:\n```typescript\nfunction main() {{\n  // solution\n}}\n```",
-        input_tokens=200,
-        output_tokens=350,
-        latency_ms=500,
-    )
 
 
 def execute_goal_pipeline(db: Session, goal_id: str) -> Dict[str, Any]:
@@ -156,7 +111,7 @@ def execute_goal_pipeline(db: Session, goal_id: str) -> Dict[str, Any]:
             "duration_ms": result.get("duration_ms", 0),
         })
 
-    # Phase 3: Determine final goal status
+    # Phase 3: Determine initial goal status
     db.refresh(goal)
     if tasks_handoff > 0:
         goal.status = "handoff"
@@ -166,6 +121,26 @@ def execute_goal_pipeline(db: Session, goal_id: str) -> Dict[str, Any]:
         goal.status = "completed"
     goal.updated_at = datetime.now(timezone.utc)
     db.commit()
+
+    # Phase 4: Supervisor Review
+    review_result = None
+    run_id = f"run-{goal.id[:8]}"
+    if goal.status == "completed" and tasks_completed > 0:
+        try:
+            from src.services import review_service as review_svc
+            review_result = review_svc.generate_review(db, goal.id, run_id)
+            total_tokens += review_result.get("tokens_used", 0)
+        except Exception:
+            pass
+
+    # Phase 5: Memory Curation (after review passes)
+    memory_result = None
+    if review_result and review_result.get("passed"):
+        try:
+            from src.services import curator_service as curator_svc
+            memory_result = curator_svc.generate_memories(db, goal.id, run_id)
+        except Exception:
+            pass
 
     total_elapsed = int((time.time() - start_time) * 1000)
 
@@ -178,6 +153,8 @@ def execute_goal_pipeline(db: Session, goal_id: str) -> Dict[str, Any]:
         "total_tokens_used": total_tokens,
         "total_duration_ms": total_elapsed,
         "execution_log": execution_log,
+        "review": review_result,
+        "memory": memory_result,
     }
 
 
@@ -279,11 +256,20 @@ def _execute_single_task(db: Session, task: Task) -> Dict[str, Any]:
 
     # 8. Model call
     try:
-        response = provider.generate(
-            prompt=task.description or task.title,
-            model_id=selected_model_id,
-            system_prompt=agent.system_prompt or None,
+        import asyncio
+        provider = get_provider()
+        messages = []
+        if agent.system_prompt:
+            messages.append({"role": "system", "content": agent.system_prompt})
+        messages.append({"role": "user", "content": task.description or task.title})
+        req = ModelRequest(
+            provider=model.provider if model else "unknown",
+            model=selected_model_id,
+            messages=messages,
         )
+        loop = asyncio.new_event_loop()
+        response = loop.run_until_complete(provider.generate(req))
+        loop.close()
     except Exception as e:
         return _handle_task_failure(db, task, agent, worker, str(e))
 
@@ -300,7 +286,7 @@ def _execute_single_task(db: Session, task: Task) -> Dict[str, Any]:
         "event_type": "model_call",
         "event_status": "completed",
         "input_summary": (task.description or task.title)[:200],
-        "output_summary": response.text[:200],
+        "output_summary": response.content[:200],
         "token_usage": {
             "input_tokens": response.input_tokens,
             "output_tokens": response.output_tokens,
@@ -326,14 +312,14 @@ def _execute_single_task(db: Session, task: Task) -> Dict[str, Any]:
 
     # 11. Update task
     task.status = "completed"
-    task.output = response.text
+    task.output = response.content
     task.tokens_used = response.total_tokens
     task.duration_ms = elapsed_ms
     task.updated_at = datetime.now(timezone.utc)
 
     # 12. Update worker
     worker.status = "completed"
-    worker.final_output = response.text
+    worker.final_output = response.content
     worker.total_tokens_used = response.total_tokens
     worker.updated_at = datetime.now(timezone.utc)
 
@@ -352,7 +338,7 @@ def _execute_single_task(db: Session, task: Task) -> Dict[str, Any]:
         "model_id": selected_model_id,
         "event_type": "agent_step",
         "event_status": "completed",
-        "output_summary": response.text[:200],
+        "output_summary": response.content[:200],
         "token_usage": {
             "input_tokens": response.input_tokens,
             "output_tokens": response.output_tokens,
@@ -374,7 +360,7 @@ def _execute_single_task(db: Session, task: Task) -> Dict[str, Any]:
     return {
         "task_id": task.id,
         "status": "completed",
-        "output": response.text,
+        "output": response.content,
         "tokens_used": response.total_tokens,
         "duration_ms": elapsed_ms,
         "model_name": model_name,
@@ -531,3 +517,75 @@ def _find_next_pending_task(db: Session, goal_id: str) -> Optional[Task]:
         Task.goal_id == goal_id,
         Task.status.in_(["pending", "assigned"]),
     ).order_by(Task.priority.desc(), Task.created_at.asc()).first()
+
+
+def get_runtime_status(db: Session, goal_id: str) -> Dict[str, Any]:
+    """Get the current runtime status for a goal by querying existing tables.
+
+    No new table needed — aggregates from goals, tasks, worker_sessions,
+    handoff_records, execution_logs, and quota_records.
+    """
+    goal = goal_service.get_goal(db, goal_id)
+
+    tasks = db.query(Task).filter(Task.goal_id == goal_id).all()
+    total_tasks = len(tasks)
+    completed_tasks = sum(1 for t in tasks if t.status == "completed")
+    failed_tasks = sum(1 for t in tasks if t.status == "failed")
+    running_tasks = sum(1 for t in tasks if t.status == "running")
+    handoff_tasks = sum(1 for t in tasks if t.status == "handoff")
+
+    running_task = next((t for t in tasks if t.status == "running"), None)
+
+    total_tokens_used = sum(t.tokens_used or 0 for t in tasks)
+
+    handoff_count = db.query(HandoffRecord).filter(
+        HandoffRecord.goal_id == goal_id
+    ).count()
+
+    log_count = db.query(ExecutionLog).filter(
+        ExecutionLog.goal_id == goal_id
+    ).count()
+
+    model_call_count = db.query(ExecutionLog).filter(
+        ExecutionLog.goal_id == goal_id,
+        ExecutionLog.event_type == "model_call",
+    ).count()
+
+    error_count = db.query(ExecutionLog).filter(
+        ExecutionLog.goal_id == goal_id,
+        ExecutionLog.event_status.in_(["error", "failed"]),
+    ).count()
+
+    # Find final output from last completed task
+    last_completed = db.query(Task).filter(
+        Task.goal_id == goal_id,
+        Task.status == "completed",
+    ).order_by(Task.updated_at.desc()).first()
+    final_output = last_completed.output if last_completed else None
+
+    # Find any error message from failed tasks
+    last_failed = db.query(Task).filter(
+        Task.goal_id == goal_id,
+        Task.status == "failed",
+    ).first()
+    error_message = last_failed.description if last_failed else None
+
+    return {
+        "goal_id": goal.id,
+        "goal_title": goal.title,
+        "goal_status": goal.status,
+        "current_task_id": running_task.id if running_task else None,
+        "total_tasks": total_tasks,
+        "completed_tasks": completed_tasks,
+        "failed_tasks": failed_tasks,
+        "running_tasks": running_tasks,
+        "handoff_tasks": handoff_tasks,
+        "handoff_count": handoff_count,
+        "total_tokens_used": total_tokens_used,
+        "log_count": log_count,
+        "model_call_count": model_call_count,
+        "error_count": error_count,
+        "final_output": final_output,
+        "error_message": error_message,
+        "quota_status": None,
+    }

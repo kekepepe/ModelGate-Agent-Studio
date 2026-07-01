@@ -40,3 +40,14 @@ def execute_step(task_id: str, db: Session = Depends(get_db)):
         _error("BAD_REQUEST", str(e), 400)
     except Exception as e:
         _error("INTERNAL_ERROR", str(e), 500)
+
+
+@router.get("/runtime/status/{goal_id}")
+def get_runtime_status(goal_id: str, db: Session = Depends(get_db)):
+    try:
+        result = runtime_service.get_runtime_status(db, goal_id)
+        return _success(result)
+    except goal_service.GoalNotFoundError as e:
+        _error("NOT_FOUND", str(e), 404)
+    except Exception as e:
+        _error("INTERNAL_ERROR", str(e), 500)
