@@ -1,0 +1,40 @@
+version: "3.8"
+
+services:
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: modelgate-backend
+    volumes:
+      - modelgate-data:/app/data
+    environment:
+      - DATABASE_URL=sqlite:///./data/modelgate.db
+      - MODEL_PROVIDER=${MODEL_PROVIDER:-mock}
+      - OPENAI_BASE_URL=${OPENAI_BASE_URL:-https://api.openai.com/v1}
+      - OPENAI_API_KEY=${OPENAI_API_KEY:-}
+      - OPENAI_TIMEOUT=${OPENAI_TIMEOUT:-60}
+      - APP_NAME=ModelGate Agent Studio
+      - DEBUG=true
+      - API_V1_PREFIX=/api/v1
+    networks:
+      - modelgate-net
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: modelgate-frontend
+    ports:
+      - "80:80"
+    depends_on:
+      - backend
+    networks:
+      - modelgate-net
+
+volumes:
+  modelgate-data:
+
+networks:
+  modelgate-net:
+    driver: bridge

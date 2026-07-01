@@ -123,7 +123,7 @@ API 可以跑
 阶段 4：Memory / RAG / Skill 自进化 MVP
 阶段 5：MCP / Tool Layer MVP
 阶段 6：可视化与统计增强
-阶段 7：部署、演示与求职包装
+阶段 7：部署、演示与工程包装
 ```
 
 优先级如下：
@@ -137,7 +137,7 @@ API 可以跑
 | 阶段 4 | Memory / RAG / Skill 自进化 MVP | P1 | Runtime 稳定后做 |
 | 阶段 5 | MCP / Tool Layer MVP | P2 | 后期做 |
 | 阶段 6 | 可视化与统计增强 | P2 | 穿插做 |
-| 阶段 7 | 部署、演示与求职包装 | P0 / P1 | Demo 稳定后马上做 |
+| 阶段 7 | 部署、演示与工程包装 | P0 / P1 | Demo 稳定后马上做 |
 
 ---
 
@@ -875,11 +875,11 @@ ToolCallLog
 
 ---
 
-# 阶段 7：部署、演示与求职包装
+# 阶段 7：部署、演示与工程包装
 
 ## 7.1 阶段目标
 
-把项目变成可以展示、可以录屏、可以写进简历、可以给面试官看的完整作品。
+把项目变成可以展示、可以录屏、可稳定部署的完整作品。
 
 ## 7.2 部署与工程化
 
@@ -953,14 +953,6 @@ DeepSeek Mock quota risk → Handoff to Claude Mock
 0:55 - 1:35 在 Workspace 执行一个 Goal
 1:35 - 1:50 展示 Logs 和 Quota 记录
 1:50 - 2:00 展示最终输出和项目亮点总结
-```
-
-## 7.6 简历描述
-
-建议简历项目描述：
-
-```text
-开发 ModelGate Agent Studio 多模型 Agent 协作平台，面向多 AI Coding Plan 与多 Provider API 场景，设计并实现 Agent Registry、Model Router、Quota Manager、Handoff Manager、Runtime Engine、Logs Observability 与 Workspace 可视化模块。平台支持 Goal 到 Task 的执行链路、模型能力路由、额度感知调度、WorkerSession 执行记录、Handoff Summary 任务交接和 Runtime 日志追踪，形成可测试、可演示的多模型 Agent 协作闭环。项目采用 FastAPI、SQLAlchemy、Next.js、TypeScript 等技术栈，完成 300+ 前后端自动化测试。
 ```
 
 ---
@@ -1093,7 +1085,7 @@ MVP-B：Runtime Closed Loop Completed
 这时项目就可以开始做两件事：
 
 1. 接入真实 Provider。
-2. 录制 Demo / 整理 README / 写简历项目经历。
+2. 录制 Demo / 整理 README / 完善文档。
 
 ---
 
@@ -1111,7 +1103,7 @@ MVP-B：Runtime Closed Loop Completed
 7. Supervisor 审查
 8. Memory / RAG / Skill 自进化
 9. MCP Tool Layer
-10. 部署与求职包装
+10. 部署与工程包装
 ```
 
 一句话总结：

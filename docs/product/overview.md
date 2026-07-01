@@ -2,7 +2,7 @@
 
 > 来源：`ModelGate Agent Studio 产品定义文档 v1.md`
 >
-> 用途：产品名称、定位、愿景、目标用户、口号、简介、亮点等高阶信息。用于产品介绍、合作沟通、求职自我介绍、官网与对外宣传。
+> 用途：产品名称、定位、愿景、目标用户、口号、简介、亮点等高阶信息。用于产品介绍、合作沟通、技术分享、官网与对外宣传。
 >
 > 章节范围：原文档第 1–42 节（共 12 个二级标题，已重新编号为 1–12）。
 
@@ -114,12 +114,7 @@ ModelGate Agent Studio 是一个面向开发者的多模型 Agent 协作与自�
 
 Turn multiple AI models into a coordinated team that remembers, learns, and hands off work.
 
-## 10. 简历项目描述
-
-
-开发 ModelGate Agent Studio 多模型 Agent 协作与自进化知识平台，面向多 AI Coding Plan 与多 Provider API 场景，支持 Goal 解析、任务拆解、模型能力路由、Agent 角色分配、额度感知调度、Handoff Summary 任务交接、本地 Memory、RAG 检索与 Skill 沉淀机制。平台能够将每次任务执行中的上下文、项目经验、错误修复和工作流程沉淀为本地知识库，使未来接入的不同模型均可读取并复用历史经验，实现多模型 Agent 团队的持续协作与自我优化。
-
-## 11. 项目亮点
+## 10. 项目亮点
 
 
 1. 设计多模型 Agent 编排架构，将不同模型组织为 Planner、Coder、Reviewer、Researcher、Summarizer、Supervisor 等角色化 Agent。

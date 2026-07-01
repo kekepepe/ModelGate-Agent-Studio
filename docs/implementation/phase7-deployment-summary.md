@@ -1,4 +1,4 @@
-# Phase 7: 部署、Demo 与求职包装 — 实施总结
+# Phase 7: 部署、Demo 与工程包装 — 实施总结
 
 > 完成日期：2026-07-01
 
@@ -11,6 +11,13 @@
 ### 配置文件
 - `backend/.env.example` — 后端环境变量模板
 - `frontend/.env.example` — 前端环境变量模板
+
+### Docker Compose 一键启动
+- `docker-compose.yml` — 编排后端 + 前端 + 数据卷
+- `backend/Dockerfile` — Python 3.11 镜像，uvicorn 启动
+- `frontend/Dockerfile` — 多阶段构建（Node 编译 + Nginx 托管）
+- `frontend/nginx.conf` — 反向代理 `/api/v1` 到后端服务
+- `backend/.dockerignore` / `frontend/.dockerignore`
 
 ### Demo 数据
 - `backend/seed_demo_data.py` — 一键创建 6 agents + 1 goal + 4 tasks 的演示数据

@@ -174,6 +174,52 @@ export OPENAI_BASE_URL=https://api.openai.com/v1
 export OPENAI_API_KEY=sk-xxx
 ```
 
+## Docker 一键启动
+
+### 前置条件
+
+- Docker
+- Docker Compose
+
+### 启动
+
+```bash
+# 1. 复制环境变量模板（可选，默认使用 Mock Provider）
+cp backend/.env.example backend/.env
+cp frontend/.env.example frontend/.env
+
+# 2. 构建并启动
+docker-compose up --build
+
+# 3. 打开浏览器
+open http://localhost
+```
+
+### 创建 Demo 数据
+
+```bash
+# 在容器内运行 seed 脚本
+docker exec -it modelgate-backend python seed_demo_data.py
+```
+
+### 切换 Provider（Docker）
+
+```bash
+# Mock（默认）
+MODEL_PROVIDER=mock docker-compose up
+
+# 真实 OpenAI API
+MODEL_PROVIDER=openai OPENAI_API_KEY=sk-xxx docker-compose up
+```
+
+### 停止
+
+```bash
+docker-compose down
+# 保留数据库数据
+docker-compose down -v
+```
+
 ## 当前开发状态
 
 | 阶段 | 状态 | 后端 | 前端 | 总计 |
