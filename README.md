@@ -220,6 +220,19 @@ docker-compose down
 docker-compose down -v
 ```
 
+### 开发模式（代码热重载）
+
+修改代码后自动刷新，无需手动重启：
+
+```bash
+docker-compose -f docker-compose.dev.yml up --build
+```
+
+| 模式 | 前端地址 | 后端地址 | 代码变更 |
+|------|---------|---------|---------|
+| 生产 | http://localhost | 内部 8000 | 需重新 build |
+| 开发 | http://localhost:5173 | http://localhost:8000 | 自动热重载 |
+
 ## 当前开发状态
 
 | 阶段 | 状态 | 后端 | 前端 | 总计 |

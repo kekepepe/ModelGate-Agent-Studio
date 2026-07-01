@@ -13,8 +13,9 @@
 - `frontend/.env.example` — 前端环境变量模板
 
 ### Docker Compose 一键启动
-- `docker-compose.yml` — 编排后端 + 前端 + 数据卷
-- `backend/Dockerfile` — Python 3.11 镜像，uvicorn 启动
+- `docker-compose.yml` — 生产模式：Nginx 静态文件 + uvicorn
+- `docker-compose.dev.yml` — 开发模式：Vite HMR + uvicorn --reload（代码热重载）
+- `backend/Dockerfile` — Python 3.9 镜像，uvicorn 启动
 - `frontend/Dockerfile` — 多阶段构建（Node 编译 + Nginx 托管）
 - `frontend/nginx.conf` — 反向代理 `/api/v1` 到后端服务
 - `backend/.dockerignore` / `frontend/.dockerignore`
@@ -28,9 +29,9 @@
 ## 2. 最终测试结果
 
 ```text
-Backend: 172 passed
-Frontend: 145 passed
-Total: 317 passed
+Backend: 187 passed (新增 15 模型管理 API)
+Frontend: 143 passed
+Total: 330 passed
 Status: 零回归
 Build: 通过
 ```
@@ -87,6 +88,5 @@ MVP-B-6: Deployment & Demo     ✅ (README, .env.example, seed_demo_data.py)
 
 - MCP Tool Layer (P2)
 - Visualization & Statistics (P2)
-- Docker Compose 固化 (P1)
-- CI/CD Pipeline (P1)
-- Demo 视频录制
+- Docker Compose 固化 ✅ 已完成（含开发模式热重载）
+- CI/CD Pipeline ✅ 已完成（.github/workflows/ci.yml）
