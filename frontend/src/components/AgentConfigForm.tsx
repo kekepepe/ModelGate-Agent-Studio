@@ -1,8 +1,8 @@
 import { useState, useEffect } from 'react';
 import { X, AlertTriangle, Loader2, ChevronLeft, Check } from 'lucide-react';
 import type { AgentStation, AgentCreateData, AgentUpdateData } from '../types/agent';
-import { MOCK_TOOLS } from '../types/agent';
 import { useModels } from '../hooks/useModels';
+import { useTools } from '../hooks/useTools';
 
 interface AgentConfigFormProps {
   agent?: AgentStation;
@@ -36,6 +36,7 @@ export default function AgentConfigForm({ agent, initialData, onSave, onCancel, 
   const [apiError, setApiError] = useState<string | null>(error || null);
 
   const { data: modelsData, isLoading: modelsLoading } = useModels({ is_enabled: true });
+  const { data: toolsData, isLoading: toolsLoading } = useTools({ is_enabled: true });
 
   useEffect(() => {
     if (agent) {
@@ -133,11 +134,12 @@ export default function AgentConfigForm({ agent, initialData, onSave, onCancel, 
   };
 
   const models = modelsData?.items || [];
+  const tools = toolsData?.items || [];
 
   // Summary helpers
   const selectedModel = models.find((m) => m.id === form.default_model_id);
   const selectedBackupModels = models.filter((m) => form.backup_model_ids?.includes(m.id));
-  const selectedTools = MOCK_TOOLS.filter((t) => form.allowed_tools?.includes(t.id));
+  const selectedTools = tools.filter((t) => form.allowed_tools?.includes(t.name));
 
   return (
     <div className="flex flex-col h-full">
@@ -309,25 +311,36 @@ export default function AgentConfigForm({ agent, initialData, onSave, onCancel, 
 
             <section>
               <h3 className="text-xs font-semibold uppercase tracking-wide text-stone-400 mb-3">工具权限</h3>
+              {toolsLoading && (
+                <div className="text-sm text-stone-400">加载工具列表...</div>
+              )}
+              {!toolsLoading && tools.length === 0 && (
+                <div className="text-sm text-stone-400">暂无可用的工具</div>
+              )}
+              {!toolsLoading && tools.length > 0 && (
               <div className="space-y-2">
-                {MOCK_TOOLS.map((tool) => (
+                {tools.map((tool) => (
                   <label key={tool.id} className="flex items-start gap-2 text-sm">
                     <input
                       type="checkbox"
-                      checked={(form.allowed_tools || []).includes(tool.id)}
-                      onChange={() => toggleTool(tool.id)}
+                      checked={(form.allowed_tools || []).includes(tool.name)}
+                      onChange={() => toggleTool(tool.name)}
                       className="rounded border-stone-300 mt-0.5"
                     />
                     <div>
-                      <span className="text-stone-700">{tool.name}</span>
+                      <span className="text-stone-700">{tool.display_name}</span>
                       <span className="text-stone-400 text-xs ml-2">{tool.description}</span>
                       {tool.risk_level === 'high' && (
-                        <span className="text-amber-600 text-xs ml-2">⚠️ 高风险</span>
+                        <span className="text-amber-600 text-xs ml-2">高风险</span>
+                      )}
+                      {tool.risk_level === 'medium' && (
+                        <span className="text-amber-500 text-xs ml-2">中风险</span>
                       )}
                     </div>
                   </label>
                 ))}
               </div>
+              )}
             </section>
           </div>
         )}

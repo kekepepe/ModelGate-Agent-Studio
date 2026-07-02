@@ -1,6 +1,7 @@
 import { describe, it, expect, vi } from 'vitest'
 import { render, screen, fireEvent } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import TaskDetailPanel from '../TaskDetailPanel'
 import type { WorkspaceTask } from '../../types/workspace'
 
@@ -20,40 +21,41 @@ const mockTask: WorkspaceTask = {
   priority: 1,
 }
 
+function renderWithProviders(ui: React.ReactElement) {
+  const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+  return render(
+    <QueryClientProvider client={qc}>
+      <MemoryRouter>{ui}</MemoryRouter>
+    </QueryClientProvider>
+  )
+}
+
 describe('TaskDetailPanel', () => {
   it('renders null when task is null', () => {
-    const { container } = render(
-      <MemoryRouter>
-        <TaskDetailPanel task={null} onClose={vi.fn()} />
-      </MemoryRouter>
+    const { container } = renderWithProviders(
+      <TaskDetailPanel task={null} onClose={vi.fn()} />
     )
     expect(container.firstChild).toBeNull()
   })
 
   it('shows task title', () => {
-    render(
-      <MemoryRouter>
-        <TaskDetailPanel task={mockTask} onClose={vi.fn()} />
-      </MemoryRouter>
+    renderWithProviders(
+      <TaskDetailPanel task={mockTask} onClose={vi.fn()} />
     )
     expect(screen.getByText('Build login page')).toBeInTheDocument()
   })
 
   it('shows overview tab by default', () => {
-    render(
-      <MemoryRouter>
-        <TaskDetailPanel task={mockTask} onClose={vi.fn()} />
-      </MemoryRouter>
+    renderWithProviders(
+      <TaskDetailPanel task={mockTask} onClose={vi.fn()} />
     )
     expect(screen.getByText('Coder #1')).toBeInTheDocument()
     expect(screen.getByText('1,500')).toBeInTheDocument()
   })
 
   it('switches to task tab and shows output', () => {
-    render(
-      <MemoryRouter>
-        <TaskDetailPanel task={mockTask} onClose={vi.fn()} />
-      </MemoryRouter>
+    renderWithProviders(
+      <TaskDetailPanel task={mockTask} onClose={vi.fn()} />
     )
     fireEvent.click(screen.getByText('Task'))
     expect(screen.getByText('Create a login form')).toBeInTheDocument()
@@ -61,10 +63,8 @@ describe('TaskDetailPanel', () => {
   })
 
   it('switches to context tab showing placeholder', () => {
-    render(
-      <MemoryRouter>
-        <TaskDetailPanel task={mockTask} onClose={vi.fn()} />
-      </MemoryRouter>
+    renderWithProviders(
+      <TaskDetailPanel task={mockTask} onClose={vi.fn()} />
     )
     fireEvent.click(screen.getByText('Context'))
     expect(screen.getByText('上下文信息待实现')).toBeInTheDocument()
@@ -72,10 +72,8 @@ describe('TaskDetailPanel', () => {
 
   it('calls onClose when close button clicked', () => {
     const onClose = vi.fn()
-    render(
-      <MemoryRouter>
-        <TaskDetailPanel task={mockTask} onClose={onClose} />
-      </MemoryRouter>
+    renderWithProviders(
+      <TaskDetailPanel task={mockTask} onClose={onClose} />
     )
     const closeBtn = document.querySelector('.lucide-x')?.closest('button')
     if (closeBtn) fireEvent.click(closeBtn)
@@ -83,10 +81,8 @@ describe('TaskDetailPanel', () => {
   })
 
   it('shows loading state', () => {
-    render(
-      <MemoryRouter>
-        <TaskDetailPanel task={mockTask} isLoading onClose={vi.fn()} />
-      </MemoryRouter>
+    renderWithProviders(
+      <TaskDetailPanel task={mockTask} isLoading onClose={vi.fn()} />
     )
     expect(document.querySelector('.animate-pulse')).toBeTruthy()
   })

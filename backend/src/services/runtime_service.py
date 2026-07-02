@@ -5,6 +5,7 @@ services from all 6 modules. Uses a mock model provider (swappable to
 real OpenAI-compatible provider via the ModelProvider Protocol).
 """
 
+import json
 import time
 import uuid
 from datetime import datetime, timezone
@@ -254,7 +255,35 @@ def _execute_single_task(db: Session, task: Task) -> Dict[str, Any]:
     })
     db.commit()
 
-    # 8. Model call
+    # 8. Build tools from agent.allowed_tools
+    allowed_tool_names = agent.get_allowed_tools() if agent else []
+    tools_payload = None
+    if allowed_tool_names:
+        from src.models.tool import ToolDefinition as ToolDefORM
+        from src.services.tool_service import BUILTIN_TOOLS
+        tool_defs = db.query(ToolDefORM).filter(
+            ToolDefORM.name.in_(allowed_tool_names),
+            ToolDefORM.is_enabled == True,
+        ).all()
+        tools_payload = []
+        for td in tool_defs:
+            params = td.get_parameters()
+            tools_payload.append({
+                "type": "function",
+                "function": {
+                    "name": td.name,
+                    "description": td.description,
+                    "parameters": params,
+                },
+            })
+
+    # 9. Model call with tool-call loop
+    max_tool_loops = agent.max_tool_calls_per_task or 20
+    total_input_tokens = 0
+    total_output_tokens = 0
+    final_content = ""
+    tool_call_count = 0
+
     try:
         import asyncio
         provider = get_provider()
@@ -262,65 +291,127 @@ def _execute_single_task(db: Session, task: Task) -> Dict[str, Any]:
         if agent.system_prompt:
             messages.append({"role": "system", "content": agent.system_prompt})
         messages.append({"role": "user", "content": task.description or task.title})
-        req = ModelRequest(
-            provider=model.provider if model else "unknown",
-            model=selected_model_id,
-            messages=messages,
-        )
-        loop = asyncio.new_event_loop()
-        response = loop.run_until_complete(provider.generate(req))
-        loop.close()
+
+        for _ in range(max_tool_loops + 1):
+            req = ModelRequest(
+                provider=model.provider if model else "unknown",
+                model=selected_model_id,
+                messages=messages,
+                tools=tools_payload,
+            )
+            loop = asyncio.new_event_loop()
+            response = loop.run_until_complete(provider.generate(req))
+            loop.close()
+
+            total_input_tokens += response.input_tokens
+            total_output_tokens += response.output_tokens
+
+            # Log model_call
+            log_service.create_log(db, {
+                "goal_id": task.goal_id,
+                "task_id": task.id,
+                "agent_id": agent.id,
+                "worker_id": worker.id,
+                "model_id": selected_model_id,
+                "event_type": "model_call",
+                "event_status": "completed",
+                "input_summary": (task.description or task.title)[:200],
+                "output_summary": response.content[:200],
+                "token_usage": {
+                    "input_tokens": response.input_tokens,
+                    "output_tokens": response.output_tokens,
+                    "total_tokens": response.total_tokens,
+                },
+                "latency_ms": response.latency_ms,
+                "routing_info": {
+                    "routing_reason": routing.get("routing_reason", {}).get("summary", "") if routing else "",
+                    "confidence": routing.get("confidence", 0) if routing else 0,
+                },
+            })
+
+            if response.finish_reason == "tool_calls" and response.tool_calls:
+                from src.services.tool_service import ToolExecutor, ToolNotAllowedError, ToolNotFoundError
+                executor = ToolExecutor()
+                messages.append({"role": "assistant", "content": response.content or "", "tool_calls": response.tool_calls})
+                for tc in response.tool_calls:
+                    func = tc.get("function", {})
+                    tool_name = func.get("name", "")
+                    try:
+                        arguments = json.loads(func.get("arguments", "{}"))
+                    except (json.JSONDecodeError, TypeError):
+                        arguments = {}
+                    try:
+                        call_record = loop.run_until_complete(
+                            executor.execute(
+                                db=db, tool_name=tool_name, arguments=arguments,
+                                goal_id=task.goal_id, task_id=task.id,
+                                agent_id=agent.id, worker_id=worker.id,
+                            )
+                        )
+                        tool_result = call_record.tool_output or ""
+                    except (ToolNotAllowedError, ToolNotFoundError) as e:
+                        call_record = None
+                        tool_result = f"Error: {str(e)}"
+                        log_service.create_log(db, {
+                            "goal_id": task.goal_id,
+                            "task_id": task.id,
+                            "agent_id": agent.id,
+                            "worker_id": worker.id,
+                            "event_type": "tool_call",
+                            "event_status": "failed",
+                            "tool_name": tool_name,
+                            "error_message": str(e),
+                        })
+                    if call_record:
+                        log_service.create_log(db, {
+                            "goal_id": task.goal_id,
+                            "task_id": task.id,
+                            "agent_id": agent.id,
+                            "worker_id": worker.id,
+                            "event_type": "tool_call",
+                            "event_status": call_record.status,
+                            "tool_name": tool_name,
+                            "output_summary": (call_record.tool_output or "")[:200],
+                            "latency_ms": call_record.latency_ms,
+                            "error_message": call_record.error_message,
+                        })
+                    messages.append({
+                        "role": "tool",
+                        "tool_call_id": tc.get("id", str(uuid.uuid4())),
+                        "content": tool_result,
+                    })
+                    tool_call_count += 1
+            else:
+                final_content = response.content
+                break
     except Exception as e:
         return _handle_task_failure(db, task, agent, worker, str(e))
 
-    elapsed_ms = int((time.time() - start_ts) * 1000)
-    latency_ms = response.latency_ms
-
-    # 9. Log model_call
-    log_service.create_log(db, {
-        "goal_id": task.goal_id,
-        "task_id": task.id,
-        "agent_id": agent.id,
-        "worker_id": worker.id,
-        "model_id": selected_model_id,
-        "event_type": "model_call",
-        "event_status": "completed",
-        "input_summary": (task.description or task.title)[:200],
-        "output_summary": response.content[:200],
-        "token_usage": {
-            "input_tokens": response.input_tokens,
-            "output_tokens": response.output_tokens,
-            "total_tokens": response.total_tokens,
-        },
-        "latency_ms": latency_ms,
-        "routing_info": {
-            "routing_reason": routing.get("routing_reason", {}).get("summary", "") if routing else "",
-            "confidence": routing.get("confidence", 0) if routing else 0,
-        },
-    })
-
     # 10. Record quota usage
+    total_tokens = total_input_tokens + total_output_tokens
     quota_result = quota_service.record_usage(
         db=db,
         provider=model.provider if model else "unknown",
         model_id=selected_model_id,
         model_name=model_name,
-        request_tokens=response.input_tokens,
-        response_tokens=response.output_tokens,
-        total_tokens=response.total_tokens,
+        request_tokens=total_input_tokens,
+        response_tokens=total_output_tokens,
+        total_tokens=total_tokens,
     )
+
+    elapsed_ms = int((time.time() - start_ts) * 1000)
 
     # 11. Update task
     task.status = "completed"
-    task.output = response.content
-    task.tokens_used = response.total_tokens
+    task.output = final_content
+    task.tokens_used = total_tokens
     task.duration_ms = elapsed_ms
     task.updated_at = datetime.now(timezone.utc)
 
     # 12. Update worker
     worker.status = "completed"
-    worker.final_output = response.content
-    worker.total_tokens_used = response.total_tokens
+    worker.final_output = final_content
+    worker.total_tokens_used = total_tokens
     worker.updated_at = datetime.now(timezone.utc)
 
     # 13. Update agent
@@ -338,14 +429,15 @@ def _execute_single_task(db: Session, task: Task) -> Dict[str, Any]:
         "model_id": selected_model_id,
         "event_type": "agent_step",
         "event_status": "completed",
-        "output_summary": response.content[:200],
+        "output_summary": final_content[:200],
         "token_usage": {
-            "input_tokens": response.input_tokens,
-            "output_tokens": response.output_tokens,
-            "total_tokens": response.total_tokens,
+            "input_tokens": total_input_tokens,
+            "output_tokens": total_output_tokens,
+            "total_tokens": total_tokens,
         },
-        "latency_ms": latency_ms,
+        "latency_ms": elapsed_ms,
         "quota_status": quota_result.get("updated_status", "unknown") if quota_result else "unknown",
+        "metadata": {"tool_call_count": tool_call_count},
     })
     log_service.create_log(db, {
         "goal_id": task.goal_id,
@@ -353,20 +445,21 @@ def _execute_single_task(db: Session, task: Task) -> Dict[str, Any]:
         "agent_id": agent.id,
         "event_type": "task_status_change",
         "event_status": "transition",
-        "output_summary": f"Task completed. Tokens: {response.total_tokens}, Duration: {elapsed_ms}ms",
+        "output_summary": f"Task completed. Tokens: {total_tokens}, Duration: {elapsed_ms}ms, Tool calls: {tool_call_count}",
     })
     db.commit()
 
     return {
         "task_id": task.id,
         "status": "completed",
-        "output": response.content,
-        "tokens_used": response.total_tokens,
+        "output": final_content,
+        "tokens_used": total_tokens,
         "duration_ms": elapsed_ms,
         "model_name": model_name,
         "worker_id": worker.id,
         "quota_status": quota_result.get("updated_status", "unknown") if quota_result else "unknown",
         "is_handoff": False,
+        "tool_call_count": tool_call_count,
     }
 
 

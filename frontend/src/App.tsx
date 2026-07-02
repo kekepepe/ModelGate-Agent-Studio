@@ -7,6 +7,8 @@ import LogsPage from './pages/LogsPage'
 import WorkspacePage from './pages/WorkspacePage'
 import EvolutionReviewPage from './pages/EvolutionReviewPage'
 import ModelManagerPage from './pages/ModelManagerPage'
+import DashboardPage from './pages/DashboardPage'
+import ToolManagerPage from './pages/ToolManagerPage'
 import './styles/animations.css'
 
 function App() {
@@ -18,6 +20,9 @@ function App() {
             ModelGate
           </Link>
           <div className="flex items-center gap-4 text-sm">
+            <Link to="/dashboard" className="text-stone-600 hover:text-stone-900">
+              Dashboard
+            </Link>
             <Link to="/agents" className="text-stone-600 hover:text-stone-900">
               Agent Registry
             </Link>
@@ -33,6 +38,9 @@ function App() {
             <Link to="/handoffs" className="text-stone-600 hover:text-stone-900">
               Handoff Manager
             </Link>
+            <Link to="/tools" className="text-stone-600 hover:text-stone-900">
+              Tools
+            </Link>
             <Link to="/logs" className="text-stone-600 hover:text-stone-900">
               Logs
             </Link>
@@ -47,15 +55,17 @@ function App() {
       </nav>
       <main className="flex-1">
         <Routes>
+          <Route path="/dashboard" element={<DashboardPage />} />
           <Route path="/agents" element={<AgentRegistryPage />} />
           <Route path="/models" element={<ModelManagerPage />} />
           <Route path="/router" element={<ModelRouterPage />} />
           <Route path="/quota" element={<QuotaOverviewPage />} />
           <Route path="/handoffs" element={<HandoffPage />} />
+          <Route path="/tools" element={<ToolManagerPage />} />
           <Route path="/logs" element={<LogsPage />} />
           <Route path="/workspace" element={<WorkspacePage />} />
           <Route path="/evolution" element={<EvolutionReviewPage />} />
-          <Route path="/" element={<AgentRegistryPage />} />
+          <Route path="/" element={<DashboardPage />} />
         </Routes>
       </main>
     </div>

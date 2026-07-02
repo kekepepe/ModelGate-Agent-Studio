@@ -1,7 +1,8 @@
 import { useState } from 'react';
-import { Copy, X } from 'lucide-react';
+import { Copy, X, Wrench } from 'lucide-react';
 import type { WorkspaceTask } from '../types/workspace';
 import { TASK_STATUS_LABELS } from '../types/workspace';
+import { useToolCalls } from '../hooks/useTools';
 
 interface TaskDetailPanelProps {
   task?: WorkspaceTask | null;
@@ -14,8 +15,13 @@ type TabKey = 'overview' | 'task' | 'context' | 'logs';
 export default function TaskDetailPanel({ task, isLoading, onClose }: TaskDetailPanelProps) {
   const [activeTab, setActiveTab] = useState<TabKey>('overview');
   const [copied, setCopied] = useState(false);
+  const { data: toolCallsData } = useToolCalls(
+    task ? { task_id: task.id } : {}
+  );
 
   if (!task) return null;
+
+  const toolCalls = toolCallsData?.items || [];
 
   const handleCopy = async () => {
     if (!task.output) return;
@@ -124,6 +130,38 @@ export default function TaskDetailPanel({ task, isLoading, onClose }: TaskDetail
               </div>
             ) : (
               <p className="text-sm text-stone-400">尚未产出输出</p>
+            )}
+
+            {/* Tool Call Records */}
+            {toolCalls.length > 0 && (
+              <div>
+                <h4 className="text-xs font-semibold text-stone-400 mb-2 uppercase flex items-center gap-1">
+                  <Wrench size={12} /> 工具调用记录 ({toolCalls.length})
+                </h4>
+                <div className="space-y-2">
+                  {toolCalls.map((tc) => (
+                    <div key={tc.id} className="bg-stone-50 border border-stone-200 rounded-lg p-2 text-sm">
+                      <div className="flex items-center justify-between mb-1">
+                        <span className="font-mono text-xs text-stone-700">{tc.tool_name}</span>
+                        <span className={`text-xs ${tc.status === 'completed' ? 'text-green-600' : 'text-red-600'}`}>
+                          {tc.status === 'completed' ? '✅' : '❌'} {tc.latency_ms}ms
+                        </span>
+                      </div>
+                      <p className="text-xs text-stone-500 truncate">
+                        输入: {JSON.stringify(tc.tool_input).substring(0, 80)}
+                      </p>
+                      {tc.tool_output && (
+                        <p className="text-xs text-stone-600 mt-1 line-clamp-2">
+                          {tc.tool_output.substring(0, 200)}
+                        </p>
+                      )}
+                      {tc.error_message && (
+                        <p className="text-xs text-red-600 mt-1">{tc.error_message}</p>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </div>
             )}
           </div>
         )}

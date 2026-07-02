@@ -28,6 +28,7 @@ class ModelResponse:
     latency_ms: int
     raw_response: Optional[Dict[str, Any]] = None
     finish_reason: str = "stop"
+    tool_calls: Optional[List[Dict[str, Any]]] = None
 
 
 class ModelProvider(Protocol):

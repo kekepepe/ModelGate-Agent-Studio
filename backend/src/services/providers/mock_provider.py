@@ -21,6 +21,7 @@ class _ModelConfig:
     input_tokens_fn: Optional[Callable[[str], int]] = None
     output_tokens: Optional[int] = None
     latency_ms: Optional[int] = None
+    tool_calls: Optional[list] = None
 
 
 class MockModelProvider:
@@ -41,6 +42,7 @@ class MockModelProvider:
         input_tokens_fn: Optional[Callable[[str], int]] = None,
         output_tokens: Optional[int] = None,
         latency_ms: Optional[int] = None,
+        tool_calls: Optional[list] = None,
     ) -> None:
         self._configs[model_id] = _ModelConfig(
             output_text=output_text,
@@ -49,6 +51,7 @@ class MockModelProvider:
             input_tokens_fn=input_tokens_fn,
             output_tokens=output_tokens,
             latency_ms=latency_ms,
+            tool_calls=tool_calls,
         )
 
     async def generate(self, request: ModelRequest) -> ModelResponse:
@@ -84,13 +87,15 @@ class MockModelProvider:
         else:
             output_tokens = min(self._default_output_tokens, int(len(output) / 4))
 
+        tool_calls = config.tool_calls if config else None
         resp = ModelResponse(
             content=output,
             input_tokens=input_tokens,
             output_tokens=output_tokens,
             total_tokens=input_tokens + output_tokens,
             latency_ms=latency_ms,
-            finish_reason="stop",
+            finish_reason="tool_calls" if tool_calls else "stop",
+            tool_calls=tool_calls,
         )
         self._call_history.append({"request": request, "response": resp})
         return resp

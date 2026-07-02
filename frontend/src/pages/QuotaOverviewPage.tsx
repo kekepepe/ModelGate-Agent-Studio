@@ -1,10 +1,12 @@
 import { useState, useMemo } from 'react';
 import { Search, RefreshCw, BarChart3 } from 'lucide-react';
 import { useOverview, useModelStatus, useUpdateQuotaConfig, useResetQuotaStatus } from '../hooks/useQuota';
+import { useDashboardTrends } from '../hooks/useDashboard';
 import type { QuotaOverviewItem, QuotaStatus } from '../types/quota';
 import { STATUS_COLORS, STATUS_BG_COLORS, STATUS_LABELS, PROVIDER_LABELS } from '../types/quota';
 import ModelUsageCard from '../components/ModelUsageCard';
 import QuotaAlertBanner from '../components/QuotaAlertBanner';
+import QuotaTrendChart from '../components/QuotaTrendChart';
 
 interface SummaryCard {
   key: string;
@@ -38,6 +40,7 @@ export default function QuotaOverviewPage() {
     sort_by: sortBy,
     order: sortOrder,
   });
+  const { data: trendData, error: trendError } = useDashboardTrends(7);
 
   const { data: detailData } = useModelStatus(expandedModelId || '');
   const updateQuota = useUpdateQuotaConfig();
@@ -292,6 +295,16 @@ export default function QuotaOverviewPage() {
               />
             ))}
           </div>
+        )}
+      </div>
+
+      <div className="mt-6">
+        {trendError ? (
+          <div className="bg-white border border-stone-200 rounded-xl p-4 text-sm text-stone-500">
+            Quota 趋势加载失败：{(trendError as Error).message}
+          </div>
+        ) : (
+          <QuotaTrendChart data={trendData?.daily || []} compact />
         )}
       </div>
     </div>
