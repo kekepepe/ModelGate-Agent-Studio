@@ -9,6 +9,8 @@ export interface Model {
   speed_level: number;
   is_enabled: boolean;
   is_default: boolean;
+  api_key?: string | null;
+  api_base_url?: string | null;
   created_at?: string;
   updated_at?: string;
 }
@@ -23,6 +25,8 @@ export interface ModelCreateData {
   speed_level?: number;
   is_enabled?: boolean;
   is_default?: boolean;
+  api_key?: string | null;
+  api_base_url?: string | null;
 }
 
 export interface ModelUpdateData {
@@ -35,6 +39,8 @@ export interface ModelUpdateData {
   speed_level?: number;
   is_enabled?: boolean;
   is_default?: boolean;
+  api_key?: string | null;
+  api_base_url?: string | null;
 }
 
 export interface ModelFilters {

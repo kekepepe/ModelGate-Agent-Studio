@@ -246,6 +246,8 @@ function ModelFormModal({ model, onSave, onCancel, isSubmitting, error }: ModelF
     speed_level: model?.speed_level || 3,
     is_enabled: model?.is_enabled ?? true,
     is_default: model?.is_default ?? false,
+    api_key: model?.api_key || '',
+    api_base_url: model?.api_base_url || '',
   });
 
   const handleChange = (field: keyof ModelCreateData, value: unknown) => {
@@ -322,6 +324,32 @@ function ModelFormModal({ model, onSave, onCancel, isSubmitting, error }: ModelF
               className="w-full px-3 py-2 text-sm border border-stone-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-stone-300"
               placeholder="如 GPT-4 Turbo"
             />
+          </div>
+
+          <div>
+            <label className="block text-xs font-medium text-stone-600 mb-1">API Key</label>
+            <input
+              type="password"
+              value={form.api_key || ''}
+              onChange={(e) => handleChange('api_key', e.target.value)}
+              className="w-full px-3 py-2 text-sm border border-stone-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-stone-300"
+              placeholder={isEdit && !form.api_key ? '留空则不修改' : '输入 API Key'}
+            />
+            {isEdit && model?.api_key && (
+              <p className="text-xs text-stone-400 mt-1">已设置 API Key，留空则不修改</p>
+            )}
+          </div>
+
+          <div>
+            <label className="block text-xs font-medium text-stone-600 mb-1">API Base URL</label>
+            <input
+              type="url"
+              value={form.api_base_url || ''}
+              onChange={(e) => handleChange('api_base_url', e.target.value)}
+              className="w-full px-3 py-2 text-sm border border-stone-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-stone-300"
+              placeholder="如 https://api.openai.com/v1"
+            />
+            <p className="text-xs text-stone-400 mt-1">自定义 API 端点，留空则使用默认地址</p>
           </div>
 
           <div className="grid grid-cols-3 gap-4">

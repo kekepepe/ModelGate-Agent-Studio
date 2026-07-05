@@ -21,6 +21,8 @@ class Model(Base):
     speed_level = Column(Integer, nullable=False, default=3)
     is_enabled = Column(Boolean, nullable=False, default=True)
     is_default = Column(Boolean, nullable=False, default=False)
+    api_key = Column(Text, nullable=True, default=None)
+    api_base_url = Column(String(500), nullable=True, default=None)
     created_at = Column(DateTime, nullable=False, default=lambda: datetime.now(timezone.utc))
     updated_at = Column(DateTime, nullable=False, default=lambda: datetime.now(timezone.utc))
 
@@ -42,6 +44,8 @@ class Model(Base):
             "speed_level": self.speed_level,
             "is_enabled": self.is_enabled,
             "is_default": self.is_default,
+            "api_key": self.api_key,
+            "api_base_url": self.api_base_url,
             "created_at": self.created_at.isoformat() if self.created_at else None,
             "updated_at": self.updated_at.isoformat() if self.updated_at else None,
         }

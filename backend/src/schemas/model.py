@@ -13,6 +13,8 @@ class ModelBase(BaseModel):
     speed_level: Optional[int] = 3
     is_enabled: Optional[bool] = True
     is_default: Optional[bool] = False
+    api_key: Optional[str] = None
+    api_base_url: Optional[str] = None
 
     @field_validator("cost_level")
     @classmethod
@@ -50,6 +52,8 @@ class ModelUpdate(BaseModel):
     speed_level: Optional[int] = None
     is_enabled: Optional[bool] = None
     is_default: Optional[bool] = None
+    api_key: Optional[str] = None
+    api_base_url: Optional[str] = None
 
     @field_validator("cost_level")
     @classmethod
@@ -77,6 +81,8 @@ class ModelOut(BaseModel):
     speed_level: int
     is_enabled: bool
     is_default: bool
+    api_key: Optional[str] = None
+    api_base_url: Optional[str] = None
     created_at: Optional[str] = None
     updated_at: Optional[str] = None
 

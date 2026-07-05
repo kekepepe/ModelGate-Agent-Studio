@@ -78,6 +78,8 @@ def create_model(data: ModelCreate, db: Session = Depends(get_db)):
         speed_level=data.speed_level or 3,
         is_enabled=data.is_enabled if data.is_enabled is not None else True,
         is_default=data.is_default if data.is_default is not None else False,
+        api_key=data.api_key,
+        api_base_url=data.api_base_url,
     )
     if data.capability_tags:
         model.set_capability_tags(data.capability_tags)
@@ -113,6 +115,8 @@ def update_model(model_id: str, data: ModelUpdate, db: Session = Depends(get_db)
         "speed_level": data.speed_level,
         "is_enabled": data.is_enabled,
         "is_default": data.is_default,
+        "api_key": data.api_key,
+        "api_base_url": data.api_base_url,
     }
     for field, value in update_fields.items():
         if value is not None:
