@@ -16,7 +16,7 @@ class Model(Base):
     model_name = Column(String(100), nullable=False)
     display_name = Column(String(100), nullable=False)
     capability_tags = Column(Text, nullable=False, default="[]")
-    max_context_tokens = Column(Integer, nullable=False, default=8192)
+    max_context_tokens = Column(Integer, nullable=False, default=131072)
     cost_level = Column(Integer, nullable=False, default=3)
     speed_level = Column(Integer, nullable=False, default=3)
     is_enabled = Column(Boolean, nullable=False, default=True)

@@ -74,6 +74,15 @@ class TestCreateModel:
         assert data["data"]["cost_level"] == 4
         assert data["data"]["capability_tags"] == ["coding", "reasoning"]
 
+    def test_context_window_is_limited_to_supported_tiers(self, client):
+        resp = client.post("/api/v1/models", json={
+            "provider": "openai",
+            "model_name": "gpt-test",
+            "display_name": "GPT Test",
+            "max_context_tokens": 200000,
+        })
+        assert resp.status_code == 422
+
     def test_create_model_duplicate_name(self, client):
         client.post("/api/v1/models", json={
             "provider": "openai",

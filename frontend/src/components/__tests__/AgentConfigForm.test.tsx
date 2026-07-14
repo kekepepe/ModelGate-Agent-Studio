@@ -192,8 +192,9 @@ describe('AgentConfigForm - API Error', () => {
 })
 
 describe('AgentConfigForm - Handoff Toggle', () => {
-  it('shows handoff threshold input when handoff is enabled', async () => {
-    const { container } = renderWithQuery(<AgentConfigForm onSave={vi.fn()} onCancel={vi.fn()} />)
+  it('uses a percentage and derives the token threshold from the selected model', async () => {
+    const onSave = vi.fn()
+    const { container } = renderWithQuery(<AgentConfigForm onSave={onSave} onCancel={vi.fn()} />)
 
     // Step 1: fill name and proceed
     fireEvent.change(screen.getByPlaceholderText('输入 Agent 名称'), {
@@ -222,6 +223,18 @@ describe('AgentConfigForm - Handoff Toggle', () => {
     if (handoffToggle) {
       fireEvent.click(handoffToggle)
       expect(screen.getByText(/Handoff 触发阈值/i)).toBeInTheDocument()
+      expect(screen.getByText(/195K 上下文计算，当前将在 156K 时触发/)).toBeInTheDocument()
+
+      const thresholdInput = screen.getByRole('spinbutton', { name: /Handoff 触发阈值/i })
+      fireEvent.change(thresholdInput, { target: { value: '75' } })
+      expect(screen.getByText(/当前将在 146K 时触发/)).toBeInTheDocument()
+
+      fireEvent.click(screen.getByText('创建'))
+      await waitFor(() => {
+        expect(onSave).toHaveBeenCalledWith(expect.objectContaining({
+          handoff_threshold_tokens: 150000,
+        }))
+      })
     }
   })
 })

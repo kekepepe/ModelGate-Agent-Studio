@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { Plus, Search, X, AlertTriangle, Loader2, Trash2, Edit3, Power, PowerOff } from 'lucide-react';
 import { useModels, useCreateModel, useUpdateModel, useDeleteModel, useToggleModel } from '../hooks/useModels';
 import type { Model, ModelCreateData, ModelUpdateData } from '../types/model';
+import { DEFAULT_MODEL_CONTEXT_TOKENS, formatTokenCount, MODEL_CONTEXT_OPTIONS } from '../constants/modelContext';
 
 const PROVIDER_OPTIONS = [
   'openai', 'anthropic', 'deepseek', 'moonshot', 'google', 'meta', 'mistral', 'custom',
@@ -158,7 +159,7 @@ export default function ModelManagerPage() {
                     </span>
                   </td>
                   <td className="px-4 py-3 text-stone-600">
-                    {(model.max_context_tokens / 1000).toFixed(0)}K
+                    {formatTokenCount(model.max_context_tokens)}
                   </td>
                   <td className="px-4 py-3">
                     <div className="flex flex-wrap gap-1">
@@ -241,7 +242,7 @@ function ModelFormModal({ model, onSave, onCancel, isSubmitting, error }: ModelF
     model_name: model?.model_name || '',
     display_name: model?.display_name || '',
     capability_tags: model?.capability_tags || [],
-    max_context_tokens: model?.max_context_tokens || 8192,
+    max_context_tokens: model?.max_context_tokens || DEFAULT_MODEL_CONTEXT_TOKENS,
     cost_level: model?.cost_level || 3,
     speed_level: model?.speed_level || 3,
     is_enabled: model?.is_enabled ?? true,
@@ -376,14 +377,16 @@ function ModelFormModal({ model, onSave, onCancel, isSubmitting, error }: ModelF
               />
             </div>
             <div>
-              <label className="block text-xs font-medium text-stone-600 mb-1">Max Tokens</label>
-              <input
-                type="number"
-                min={1}
+              <label className="block text-xs font-medium text-stone-600 mb-1">最大上下文</label>
+              <select
                 value={form.max_context_tokens}
-                onChange={(e) => handleChange('max_context_tokens', parseInt(e.target.value) || 8192)}
+                onChange={(e) => handleChange('max_context_tokens', Number(e.target.value))}
                 className="w-full px-3 py-2 text-sm border border-stone-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-stone-300"
-              />
+              >
+                {MODEL_CONTEXT_OPTIONS.map((option) => (
+                  <option key={option.value} value={option.value}>{option.label}</option>
+                ))}
+              </select>
             </div>
           </div>
 

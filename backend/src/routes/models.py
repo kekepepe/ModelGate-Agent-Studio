@@ -4,7 +4,7 @@ from sqlalchemy.orm import Session
 
 from src.core.database import get_db
 from src.models.model import Model as ModelORM
-from src.schemas.model import ModelCreate, ModelUpdate, ModelOut, ModelListResponse
+from src.schemas.model import DEFAULT_MODEL_CONTEXT_TOKENS, ModelCreate, ModelUpdate, ModelOut, ModelListResponse
 
 router = APIRouter(tags=["models"])
 
@@ -73,7 +73,7 @@ def create_model(data: ModelCreate, db: Session = Depends(get_db)):
         provider=data.provider,
         model_name=data.model_name,
         display_name=data.display_name,
-        max_context_tokens=data.max_context_tokens or 8192,
+        max_context_tokens=data.max_context_tokens or DEFAULT_MODEL_CONTEXT_TOKENS,
         cost_level=data.cost_level or 3,
         speed_level=data.speed_level or 3,
         is_enabled=data.is_enabled if data.is_enabled is not None else True,

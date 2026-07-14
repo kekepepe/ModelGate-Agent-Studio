@@ -126,6 +126,16 @@ class TestCreateAgent:
         assert resp.status_code == 400
         assert resp.json()["detail"]["error"]["code"] == "BAD_REQUEST"
 
+    def test_create_agent_accepts_handoff_threshold_for_one_million_context(self, client):
+        resp = client.post("/api/v1/agents", json={
+            "name": "Long Context Agent",
+            "role": "coder",
+            "default_model_id": "model-1",
+            "allow_handoff": True,
+            "handoff_threshold_tokens": 838861,
+        })
+        assert resp.status_code == 201
+
 
 class TestGetAgent:
     def test_get_agent_success(self, client):

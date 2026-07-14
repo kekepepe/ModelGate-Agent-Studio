@@ -10,6 +10,7 @@ from src.models.agent import AgentStation
 from src.models import handoff as handoff_models
 from src.models import supervisor as supervisor_models
 from src.models import tool as tool_models
+from src.schemas.model import MODEL_CONTEXT_TOKEN_OPTIONS
 from src.services.tool_service import seed_builtin_tools
 
 Base.metadata.create_all(bind=engine)
@@ -76,6 +77,39 @@ def _seed_models():
 
 
 _seed_models()
+
+
+def _normalize_model_context_windows():
+    """Move legacy context values onto the supported product tiers.
+
+    Handoff thresholds are stored as concrete token counts for runtime
+    compatibility, so preserve each Agent's old trigger ratio while its default
+    model is moved to a new tier.
+    """
+    db = SessionLocal()
+    try:
+        changed = False
+        for model in db.query(Model).all():
+            if model.max_context_tokens in MODEL_CONTEXT_TOKEN_OPTIONS:
+                continue
+            old_context = model.max_context_tokens
+            new_context = min(MODEL_CONTEXT_TOKEN_OPTIONS, key=lambda tier: abs(tier - old_context))
+            for agent in db.query(AgentStation).filter(
+                AgentStation.default_model_id == model.id,
+                AgentStation.handoff_threshold_tokens.is_not(None),
+            ):
+                agent.handoff_threshold_tokens = round(
+                    new_context * agent.handoff_threshold_tokens / old_context
+                )
+            model.max_context_tokens = new_context
+            changed = True
+        if changed:
+            db.commit()
+    finally:
+        db.close()
+
+
+_normalize_model_context_windows()
 
 
 def _seed_tools():

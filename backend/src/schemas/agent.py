@@ -39,8 +39,6 @@ class AgentCreate(BaseModel):
     def validate_threshold(cls, v: Optional[int]) -> Optional[int]:
         if v is not None and v < 1000:
             raise ValueError("handoff_threshold_tokens must be at least 1000")
-        if v is not None and v > 100000:
-            raise ValueError("handoff_threshold_tokens must not exceed 100000")
         return v
 
 
@@ -71,8 +69,6 @@ class AgentUpdate(BaseModel):
     def validate_threshold(cls, v: Optional[int]) -> Optional[int]:
         if v is not None and v < 1000:
             raise ValueError("handoff_threshold_tokens must be at least 1000")
-        if v is not None and v > 100000:
-            raise ValueError("handoff_threshold_tokens must not exceed 100000")
         return v
 
 

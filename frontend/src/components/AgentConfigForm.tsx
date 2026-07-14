@@ -3,6 +3,7 @@ import { X, AlertTriangle, Loader2, ChevronLeft, Check } from 'lucide-react';
 import type { AgentStation, AgentCreateData, AgentUpdateData } from '../types/agent';
 import { useModels } from '../hooks/useModels';
 import { useTools } from '../hooks/useTools';
+import { formatTokenCount } from '../constants/modelContext';
 
 interface AgentConfigFormProps {
   agent?: AgentStation;
@@ -140,6 +141,20 @@ export default function AgentConfigForm({ agent, initialData, onSave, onCancel, 
   const selectedModel = models.find((m) => m.id === form.default_model_id);
   const selectedBackupModels = models.filter((m) => form.backup_model_ids?.includes(m.id));
   const selectedTools = tools.filter((t) => form.allowed_tools?.includes(t.name));
+  const handoffPercent = selectedModel && form.handoff_threshold_tokens
+    ? Math.round((form.handoff_threshold_tokens / selectedModel.max_context_tokens) * 100)
+    : 80;
+
+  const handleDefaultModelChange = (modelId: string) => {
+    const nextModel = models.find((model) => model.id === modelId);
+    const currentPercent = selectedModel && form.handoff_threshold_tokens
+      ? form.handoff_threshold_tokens / selectedModel.max_context_tokens
+      : 0.8;
+    handleChange('default_model_id', modelId);
+    if (form.allow_handoff && nextModel) {
+      handleChange('handoff_threshold_tokens', Math.round(nextModel.max_context_tokens * currentPercent));
+    }
+  };
 
   return (
     <div className="flex flex-col h-full">
@@ -261,7 +276,7 @@ export default function AgentConfigForm({ agent, initialData, onSave, onCancel, 
                   </label>
                   <select
                     value={form.default_model_id}
-                    onChange={(e) => handleChange('default_model_id', e.target.value)}
+                    onChange={(e) => handleDefaultModelChange(e.target.value)}
                     className={`w-full px-3 py-2 text-sm border rounded-lg focus:outline-none focus:ring-2 focus:ring-stone-300 ${
                       errors.default_model_id ? 'border-red-500' : 'border-stone-200'
                     }`}
@@ -392,7 +407,13 @@ export default function AgentConfigForm({ agent, initialData, onSave, onCancel, 
                   <label className="text-sm font-medium text-stone-700">允许 Handoff</label>
                   <button
                     type="button"
-                    onClick={() => handleChange('allow_handoff', !form.allow_handoff)}
+                    onClick={() => {
+                      const allowHandoff = !form.allow_handoff;
+                      handleChange('allow_handoff', allowHandoff);
+                      if (allowHandoff && selectedModel && !form.handoff_threshold_tokens) {
+                        handleChange('handoff_threshold_tokens', Math.round(selectedModel.max_context_tokens * 0.8));
+                      }
+                    }}
                     className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
                       form.allow_handoff ? 'bg-green-700' : 'bg-stone-300'
                     }`}
@@ -407,18 +428,29 @@ export default function AgentConfigForm({ agent, initialData, onSave, onCancel, 
 
                 {form.allow_handoff && (
                   <div>
-                    <label className="block text-xs font-medium text-stone-600 mb-1">
-                      Handoff 触发阈值（tokens）
+                    <label htmlFor="handoff-threshold-percent" className="block text-xs font-medium text-stone-600 mb-1">
+                      Handoff 触发阈值（最大上下文百分比）
                     </label>
                     <input
+                      id="handoff-threshold-percent"
                       type="number"
-                      min={1000}
-                      max={100000}
-                      value={form.handoff_threshold_tokens || ''}
-                      onChange={(e) => handleChange('handoff_threshold_tokens', parseInt(e.target.value) || undefined)}
+                      min={1}
+                      max={100}
+                      value={handoffPercent}
+                      onChange={(e) => {
+                        const percent = Math.min(100, Math.max(1, Number(e.target.value) || 1));
+                        handleChange(
+                          'handoff_threshold_tokens',
+                          selectedModel ? Math.round(selectedModel.max_context_tokens * percent / 100) : undefined,
+                        );
+                      }}
                       className="w-full px-3 py-2 text-sm border border-stone-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-stone-300"
-                      placeholder="建议 1000-100000"
                     />
+                    <p className="mt-1 text-xs text-stone-400">
+                      {selectedModel
+                        ? `按 ${selectedModel.display_name} 的 ${formatTokenCount(selectedModel.max_context_tokens)} 上下文计算，当前将在 ${formatTokenCount(Math.round(selectedModel.max_context_tokens * handoffPercent / 100))} 时触发。`
+                        : '请先选择默认模型以计算实际触发 token。'}
+                    </p>
                   </div>
                 )}
               </div>

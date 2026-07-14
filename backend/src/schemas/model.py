@@ -2,13 +2,16 @@ from typing import List, Optional
 from datetime import datetime
 from pydantic import BaseModel, Field, field_validator, ConfigDict
 
+MODEL_CONTEXT_TOKEN_OPTIONS = {128 * 1024, 256 * 1024, 512 * 1024, 1024 * 1024}
+DEFAULT_MODEL_CONTEXT_TOKENS = 128 * 1024
+
 
 class ModelBase(BaseModel):
     provider: str = Field(..., min_length=1, max_length=50)
     model_name: str = Field(..., min_length=1, max_length=100)
     display_name: str = Field(..., min_length=1, max_length=100)
     capability_tags: Optional[List[str]] = Field(default_factory=list)
-    max_context_tokens: Optional[int] = 8192
+    max_context_tokens: Optional[int] = DEFAULT_MODEL_CONTEXT_TOKENS
     cost_level: Optional[int] = 3
     speed_level: Optional[int] = 3
     is_enabled: Optional[bool] = True
@@ -33,8 +36,8 @@ class ModelBase(BaseModel):
     @field_validator("max_context_tokens")
     @classmethod
     def validate_max_context(cls, v: Optional[int]) -> Optional[int]:
-        if v is not None and v < 1:
-            raise ValueError("max_context_tokens must be greater than 0")
+        if v is not None and v not in MODEL_CONTEXT_TOKEN_OPTIONS:
+            raise ValueError("max_context_tokens must be one of: 128K, 256K, 512K, 1M")
         return v
 
 
@@ -54,6 +57,13 @@ class ModelUpdate(BaseModel):
     is_default: Optional[bool] = None
     api_key: Optional[str] = None
     api_base_url: Optional[str] = None
+
+    @field_validator("max_context_tokens")
+    @classmethod
+    def validate_max_context(cls, v: Optional[int]) -> Optional[int]:
+        if v is not None and v not in MODEL_CONTEXT_TOKEN_OPTIONS:
+            raise ValueError("max_context_tokens must be one of: 128K, 256K, 512K, 1M")
+        return v
 
     @field_validator("cost_level")
     @classmethod
