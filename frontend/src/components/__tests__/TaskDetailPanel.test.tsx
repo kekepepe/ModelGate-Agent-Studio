@@ -53,11 +53,11 @@ describe('TaskDetailPanel', () => {
     expect(screen.getByText('1,500')).toBeInTheDocument()
   })
 
-  it('switches to task tab and shows output', () => {
+  it('switches to output tab and shows output', () => {
     renderWithProviders(
       <TaskDetailPanel task={mockTask} onClose={vi.fn()} />
     )
-    fireEvent.click(screen.getByText('Task'))
+    fireEvent.click(screen.getByText('输出'))
     expect(screen.getByText('Create a login form')).toBeInTheDocument()
     expect(screen.getByText(/import React/)).toBeInTheDocument()
   })

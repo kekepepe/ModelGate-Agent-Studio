@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Copy, X, Wrench } from 'lucide-react';
 import type { WorkspaceHandoff, WorkspaceTask } from '../types/workspace';
 import { TASK_STATUS_LABELS } from '../types/workspace';
@@ -12,7 +12,7 @@ interface TaskDetailPanelProps {
   onOpenHandoff?: (handoffId: string) => void;
 }
 
-type TabKey = 'overview' | 'task' | 'router' | 'context' | 'handoff' | 'logs';
+type TabKey = 'overview' | 'output' | 'router' | 'context' | 'handoff' | 'logs';
 
 export default function TaskDetailPanel({ task, isLoading, onClose, handoffs = [], onOpenHandoff }: TaskDetailPanelProps) {
   const [activeTab, setActiveTab] = useState<TabKey>('overview');
@@ -20,6 +20,12 @@ export default function TaskDetailPanel({ task, isLoading, onClose, handoffs = [
   const { data: toolCallsData } = useToolCalls(
     task ? { task_id: task.id } : {}
   );
+
+  useEffect(() => {
+    if (task) {
+      setActiveTab(task.status === 'completed' && task.output ? 'output' : 'overview');
+    }
+  }, [task?.id]);
 
   if (!task) return null;
 
@@ -34,7 +40,7 @@ export default function TaskDetailPanel({ task, isLoading, onClose, handoffs = [
 
   const tabs: { key: TabKey; label: string }[] = [
     { key: 'overview', label: 'Overview' },
-    { key: 'task', label: 'Task' },
+    { key: 'output', label: '输出' },
     { key: 'router', label: 'Router' },
     { key: 'context', label: 'Context' },
     { key: 'handoff', label: 'Handoff' },
@@ -119,7 +125,7 @@ export default function TaskDetailPanel({ task, isLoading, onClose, handoffs = [
           </div>
         )}
 
-        {activeTab === 'task' && (
+        {activeTab === 'output' && (
           <div className="space-y-3">
             {task.description && (
               <div>

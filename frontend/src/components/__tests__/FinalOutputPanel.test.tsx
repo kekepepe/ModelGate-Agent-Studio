@@ -1,5 +1,5 @@
-import { describe, expect, it } from 'vitest';
-import { render, screen } from '@testing-library/react';
+import { describe, expect, it, vi } from 'vitest';
+import { fireEvent, render, screen } from '@testing-library/react';
 import FinalOutputPanel from '../FinalOutputPanel';
 
 describe('FinalOutputPanel', () => {
@@ -28,5 +28,24 @@ describe('FinalOutputPanel', () => {
     expect(screen.getByText('质量检查通过')).toBeInTheDocument();
     expect(screen.getByText('Coder model')).toBeInTheDocument();
     expect(screen.getByText(/执行期间发生 1 次 Handoff/)).toBeInTheDocument();
+  });
+
+  it('lists each task output and opens the selected task', () => {
+    const onOpenTask = vi.fn();
+    render(
+      <FinalOutputPanel
+        status="completed"
+        tasksCompleted={1}
+        tasksFailed={0}
+        tasksHandoff={0}
+        totalTokens={500}
+        logCount={3}
+        taskOutputs={[{ id: 'task-1', title: '实现登录页', output: '登录页面代码已生成。' }]}
+        onOpenTask={onOpenTask}
+      />,
+    );
+
+    fireEvent.click(screen.getByText('实现登录页'));
+    expect(onOpenTask).toHaveBeenCalledWith('task-1');
   });
 });

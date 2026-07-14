@@ -2,6 +2,12 @@ import { useState } from 'react';
 import { Copy, CheckCircle, AlertTriangle, XCircle } from 'lucide-react';
 import type { FinalSummary } from '../types/runtime';
 
+interface TaskOutput {
+  id: string;
+  title: string;
+  output: string;
+}
+
 interface FinalOutputPanelProps {
   output?: string | null;
   status: string;
@@ -11,6 +17,8 @@ interface FinalOutputPanelProps {
   totalTokens: number;
   logCount: number;
   finalSummary?: FinalSummary | null;
+  taskOutputs?: TaskOutput[];
+  onOpenTask?: (taskId: string) => void;
 }
 
 export default function FinalOutputPanel({
@@ -22,6 +30,8 @@ export default function FinalOutputPanel({
   totalTokens,
   logCount,
   finalSummary,
+  taskOutputs = [],
+  onOpenTask,
 }: FinalOutputPanelProps) {
   const [copied, setCopied] = useState(false);
 
@@ -49,7 +59,7 @@ export default function FinalOutputPanel({
       <div className="flex items-center gap-2 mb-3">
         <StatusIcon size={18} className={statusColor} />
         <h3 className="text-sm font-semibold text-stone-800">
-          {status === 'completed' ? '执行完成' : status === 'failed' ? '执行失败' : '执行中'}
+          {status === 'completed' ? '执行完成，交付内容如下' : status === 'failed' ? '执行失败，可查看已产出内容' : '任务执行中'}
         </h3>
       </div>
 
@@ -85,6 +95,26 @@ export default function FinalOutputPanel({
             {output}
           </pre>
         </div>
+      )}
+
+      {taskOutputs.length > 0 && (
+        <section className="mt-4 border-t border-stone-200 pt-3" aria-label="任务产出">
+          <h4 className="mb-2 text-xs font-semibold text-stone-700">任务产出</h4>
+          <div className="space-y-2">
+            {taskOutputs.map((task) => (
+              <button
+                key={task.id}
+                type="button"
+                onClick={() => onOpenTask?.(task.id)}
+                className="w-full rounded-lg border border-stone-200 bg-white/70 px-3 py-2 text-left hover:border-stone-400"
+              >
+                <div className="text-xs font-medium text-stone-700">{task.title}</div>
+                <p className="mt-1 line-clamp-2 text-xs leading-relaxed text-stone-500">{task.output}</p>
+              </button>
+            ))}
+          </div>
+          <p className="mt-2 text-[11px] text-stone-400">点击任一项可在右侧查看和复制完整内容。</p>
+        </section>
       )}
 
       {tasksFailed > 0 && (

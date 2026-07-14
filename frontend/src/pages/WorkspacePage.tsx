@@ -45,6 +45,10 @@ export default function WorkspacePage() {
   });
 
   const agents = agentsData?.items || [];
+  const taskOutputs = (state?.tasks || [])
+    .filter((task) => Boolean(task.output))
+    .map((task) => ({ id: task.id, title: task.title, output: task.output! }));
+  const latestTaskOutput = taskOutputs.at(-1)?.output || null;
   const activeHandoffTask = handoffTaskId ? state?.tasks.find((task) => task.id === handoffTaskId) : null;
   const handleConfirmHandoff = (request: { to_agent_id: string; to_model_id?: string; reason: HandoffReason; reason_description?: string }) => {
     if (!handoffTaskId) return;
@@ -104,7 +108,14 @@ export default function WorkspacePage() {
                 </div>
                 {state.goal && ['planning', 'running'].includes(state.goal.status) && (
                   <button
-                    onClick={() => executeGoal.mutate(goalId!)}
+                    onClick={() => executeGoal.mutate(goalId!, {
+                      onSuccess: (result) => {
+                        const lastCompleted = [...result.execution_log]
+                          .reverse()
+                          .find((step) => step.status === 'completed');
+                        if (lastCompleted) setSelectedTaskId(lastCompleted.task_id);
+                      },
+                    })}
                     disabled={executeGoal.isPending}
                     className="px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 disabled:opacity-40 flex-shrink-0"
                   >
@@ -114,16 +125,18 @@ export default function WorkspacePage() {
               </div>
 
               {/* Final output when goal completed */}
-              {runtimeStatus && ['completed', 'failed', 'handoff'].includes(runtimeStatus.goal_status) && (
+              {(taskOutputs.length > 0 || (runtimeStatus && ['completed', 'failed', 'handoff'].includes(runtimeStatus.goal_status))) && (
                 <FinalOutputPanel
-                  output={runtimeStatus.final_output}
-                  status={runtimeStatus.goal_status}
-                  tasksCompleted={runtimeStatus.completed_tasks}
-                  tasksFailed={runtimeStatus.failed_tasks}
-                  tasksHandoff={runtimeStatus.handoff_tasks}
-                  totalTokens={runtimeStatus.total_tokens_used}
-                  logCount={runtimeStatus.log_count}
-                  finalSummary={runtimeStatus.final_summary}
+                  output={runtimeStatus?.final_output || latestTaskOutput}
+                  status={runtimeStatus?.goal_status || state.goal?.status || 'running'}
+                  tasksCompleted={runtimeStatus?.completed_tasks || taskOutputs.length}
+                  tasksFailed={runtimeStatus?.failed_tasks || 0}
+                  tasksHandoff={runtimeStatus?.handoff_tasks || 0}
+                  totalTokens={runtimeStatus?.total_tokens_used || state.tasks.reduce((total, task) => total + task.tokens_used, 0)}
+                  logCount={runtimeStatus?.log_count || 0}
+                  finalSummary={runtimeStatus?.final_summary}
+                  taskOutputs={taskOutputs}
+                  onOpenTask={setSelectedTaskId}
                 />
               )}
 
