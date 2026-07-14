@@ -22,6 +22,7 @@ class _ModelConfig:
     output_tokens: Optional[int] = None
     latency_ms: Optional[int] = None
     tool_calls: Optional[list] = None
+    raise_error: Optional[str] = None
 
 
 class MockModelProvider:
@@ -43,6 +44,7 @@ class MockModelProvider:
         output_tokens: Optional[int] = None,
         latency_ms: Optional[int] = None,
         tool_calls: Optional[list] = None,
+        raise_error: Optional[str] = None,
     ) -> None:
         self._configs[model_id] = _ModelConfig(
             output_text=output_text,
@@ -52,11 +54,15 @@ class MockModelProvider:
             output_tokens=output_tokens,
             latency_ms=latency_ms,
             tool_calls=tool_calls,
+            raise_error=raise_error,
         )
 
     async def generate(self, request: ModelRequest) -> ModelResponse:
         config = self._configs.get(request.model)
         model_id = request.model
+
+        if config and config.raise_error:
+            raise RuntimeError(config.raise_error)
 
         if config and config.latency_ms is not None:
             latency_ms = config.latency_ms

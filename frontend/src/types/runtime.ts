@@ -39,4 +39,20 @@ export interface RuntimeStatusResponse {
   final_output?: string | null;
   error_message?: string | null;
   quota_status?: string | null;
+  final_summary?: FinalSummary | null;
+}
+
+export interface FinalSummary {
+  completed: string[];
+  incomplete: string[];
+  quality: {
+    status: string;
+    passed?: boolean | null;
+    summary?: string | null;
+    reviewer_model_id?: string | null;
+  };
+  risks: string[];
+  models: Array<{ id: string; name: string; cost_level?: number | null }>;
+  handoff_count: number;
+  cost: { currency_estimate?: number | null; available: boolean; note: string };
 }

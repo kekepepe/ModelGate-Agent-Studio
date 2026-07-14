@@ -94,6 +94,9 @@ function MemoryCard({ memory, onApprove, isApproving }: { memory: MemoryDraft; o
           </div>
           <h3 className="text-sm font-semibold text-stone-800">{memory.title}</h3>
           <p className="text-sm text-stone-600 mt-1 whitespace-pre-wrap line-clamp-3">{memory.content}</p>
+          <p className="mt-2 text-xs text-stone-500">
+            来源 Goal：{memory.source_goal_id || '未记录'}{memory.reason ? ` · 生成依据：${memory.reason}` : ''}
+          </p>
           {memory.tags.length > 0 && (
             <div className="flex gap-1 mt-2">
               {memory.tags.map((tag) => (
@@ -137,6 +140,7 @@ function SkillCard({ skill, onApprove, isApproving }: { skill: SkillDraft; onApp
           </div>
           <h3 className="text-sm font-semibold text-stone-800">{skill.name}</h3>
           {skill.scenario && <p className="text-sm text-stone-500 mt-1">{skill.scenario}</p>}
+          <p className="mt-2 text-xs text-stone-500">来源运行：{skill.source_run_id || '未记录'}</p>
           <div className="grid grid-cols-3 gap-2 mt-2 text-xs text-stone-600">
             <div><span className="text-stone-400">Steps: </span>{skill.steps.length}</div>
             <div><span className="text-stone-400">Agents: </span>{skill.recommended_agents.length}</div>

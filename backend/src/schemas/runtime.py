@@ -11,6 +11,7 @@ class ExecutionStepResult(BaseModel):
     model_name: Optional[str] = None
     worker_id: Optional[str] = None
     quota_status: Optional[str] = None
+    final_summary: Optional[Dict[str, Any]] = None
     is_handoff: bool = False
 
 

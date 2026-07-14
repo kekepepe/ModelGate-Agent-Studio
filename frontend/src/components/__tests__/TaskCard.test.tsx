@@ -58,4 +58,46 @@ describe('TaskCard', () => {
     render(<TaskCard id="t-1" title="H" status="handoff" handoffIndicator={indicator} />)
     expect(screen.getByTestId('handoff-indicator')).toBeInTheDocument()
   })
+
+  it('offers handoff from an active task without selecting the card', () => {
+    const onRequestHandoff = vi.fn()
+    const onSelect = vi.fn()
+    render(
+      <TaskCard
+        id="t-1"
+        title="Active task"
+        status="running"
+        onSelect={onSelect}
+        onRequestHandoff={onRequestHandoff}
+        agentName="Coder"
+        modelName="GPT-4o"
+        outputSnippet="Implementation is in progress"
+      />
+    )
+    expect(screen.getByText('Coder')).toBeInTheDocument()
+    expect(screen.getByText('GPT-4o')).toBeInTheDocument()
+    expect(screen.getByText('Implementation is in progress')).toBeInTheDocument()
+    fireEvent.click(screen.getByText('交接任务'))
+    expect(onRequestHandoff).toHaveBeenCalledWith('t-1')
+    expect(onSelect).not.toHaveBeenCalled()
+  })
+
+  it('opens the task handoff timeline from its handoff summary', () => {
+    const onOpenHandoff = vi.fn()
+    render(
+      <TaskCard
+        id="t-1"
+        title="Handoff task"
+        status="handoff"
+        handoff={{
+          id: 'h-1', task_id: 't-1', status: 'ready', reason: 'manual',
+          from_agent_id: 'a-1', from_agent_name: 'Coder', from_model_id: 'gpt',
+          to_agent_id: 'a-2', to_agent_name: 'Reviewer', to_model_id: 'claude',
+        }}
+        onOpenHandoff={onOpenHandoff}
+      />
+    )
+    fireEvent.click(screen.getByText(/交接 Coder → Reviewer/))
+    expect(onOpenHandoff).toHaveBeenCalledWith('h-1')
+  })
 })

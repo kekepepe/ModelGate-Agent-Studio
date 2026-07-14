@@ -2,7 +2,7 @@
 
 > 本文档是 ModelGate Agent Studio 所有技术文档和产品文档的入口索引。
 >
-> **原则**：以 `prd/` 目录下的技术型 PRD 为唯一权威需求来源。与 PRD 冲突的早期文档已归档至 `_archive/`，不再维护。
+> **原则**：产品方向、信息架构与开发优先级以路线图中的最新“下一阶段产品与开发总方案”为准；具体数据对象、状态枚举和接口契约再由对应 PRD 与架构文档定义。
 
 ---
 
@@ -10,11 +10,11 @@
 
 如果你是第一次接触本项目，建议按以下顺序阅读：
 
-1. **[product/overview.md](product/overview.md)** — 产品定位、愿景、目标用户（5 分钟）
-2. **[roadmap.md](roadmap.md)** — V0 → MVP → V1 的产品路线图（5 分钟）
-3. **[mvp/MVP-功能优先级裁剪.md](mvp/MVP-功能优先级裁剪.md)** — MVP 范围与 MoSCoW 优先级（10 分钟）
-4. **[prd/agent-workspace-prd.md](prd/agent-workspace-prd.md)** — 核心页面：Workspace 状态可视化（20 分钟）
-5. **[prd/handoff-manager-prd.md](prd/handoff-manager-prd.md)** — 核心能力：Handoff 交接（15 分钟）
+1. **[roadmap/2026-07-14-下一阶段产品与开发总方案.md](roadmap/2026-07-14-下一阶段产品与开发总方案.md)** — 当前产品方向、Workspace 主入口与 Handoff 收拢方案（15 分钟）
+2. **[product/overview.md](product/overview.md)** — 产品定位、愿景、目标用户（5 分钟）
+3. **[roadmap.md](roadmap.md)** — V0 → MVP → V1 的历史产品路线图（5 分钟）
+4. **[mvp/MVP-功能优先级裁剪.md](mvp/MVP-功能优先级裁剪.md)** — MVP 范围与 MoSCoW 优先级（10 分钟）
+5. **[prd/agent-workspace-prd.md](prd/agent-workspace-prd.md)** — Workspace 的既有状态可视化需求（20 分钟）
 6. **[architecture/数据结构与数据库Schema.md](architecture/数据结构与数据库Schema.md)** — 权威数据结构总览（10 分钟）
 
 之后按需阅读其他 PRD：
@@ -33,7 +33,7 @@
 | 文件 | 说明 | 阶段 |
 |------|------|------|
 | [agent-workspace-prd.md](prd/agent-workspace-prd.md) | Workspace 页面：状态可视化、布局、组件、状态机 | MVP-A/B |
-| [handoff-manager-prd.md](prd/handoff-manager-prd.md) | Handoff Manager：交接流程、Summary、状态流转 | MVP-A/B |
+| [handoff-manager-prd.md](prd/handoff-manager-prd.md) | Handoff 数据与流程参考；日常 UI 已调整为 Workspace 内能力 | MVP-A/B（历史页面范围） |
 | [model-router-prd.md](prd/model-router-prd.md) | Model Router：规则评分路由、风险标记 | MVP-A/B |
 | [quota-manager-prd.md](prd/quota-manager-prd.md) | Quota Manager：额度记录、估算、风险状态 | MVP-A/B |
 | [agent-registry-prd.md](prd/agent-registry-prd.md) | Agent Registry：Agent Station CRUD、模板 | MVP-A/B |
@@ -77,6 +77,7 @@
 |------|------|
 | [MVP-功能优先级裁剪.md](mvp/MVP-功能优先级裁剪.md) | MoSCoW 优先级分析，MVP-A/B/C 范围定义 |
 | [roadmap.md](../roadmap.md) | 产品路线图：V0 → MVP → V1 |
+| [2026-07-14-下一阶段产品与开发总方案.md](roadmap/2026-07-14-下一阶段产品与开发总方案.md) | **当前开发总方案**：Workspace 主入口、Handoff 收拢、阶段任务与验收 |
 
 ### `product/` — 产品概述（对外用）
 
@@ -89,6 +90,12 @@
 | 文件 | 说明 |
 |------|------|
 | [Demo-Script与测试用例.md](demo/Demo-Script与测试用例.md) | 标准 Demo 流程和测试用例 |
+
+### `deployment/` — 部署与运行
+
+| 文件 | 说明 |
+|------|------|
+| [部署指南.md](deployment/部署指南.md) | Docker Compose、真实 Provider、备份、上线门槛与验收 |
 
 ### `_archive/` — 归档历史文档（不再维护）
 
@@ -121,11 +128,11 @@
 
 ## 文档维护规则
 
-1. **PRD 优先**：任何数据对象、状态枚举、接口定义的冲突，以 `prd/` 目录下的 PRD 为准。
+1. **方向优先级**：产品方向、页面归属和开发优先级以最新下一阶段开发总方案为准；数据对象、状态枚举、接口定义的冲突，以对应 PRD 为准。
 2. **变更同步**：修改 PRD 中的数据对象后，同步更新 `architecture/数据结构与数据库Schema.md`。
 3. **归档不删**：`_archive/` 中的文档保留历史，但不再维护。新开发不引用归档文档。
 4. **用户故事驱动**：每个 PRD 模块应配套 `stories/` 下的用户故事文档，作为开发验收依据。
 
 ---
 
-> 最后更新：2026-06-25
+> 最后更新：2026-07-14

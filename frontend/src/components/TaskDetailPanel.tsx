@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Copy, X, Wrench } from 'lucide-react';
-import type { WorkspaceTask } from '../types/workspace';
+import type { WorkspaceHandoff, WorkspaceTask } from '../types/workspace';
 import { TASK_STATUS_LABELS } from '../types/workspace';
 import { useToolCalls } from '../hooks/useTools';
 
@@ -8,11 +8,13 @@ interface TaskDetailPanelProps {
   task?: WorkspaceTask | null;
   isLoading?: boolean;
   onClose: () => void;
+  handoffs?: WorkspaceHandoff[];
+  onOpenHandoff?: (handoffId: string) => void;
 }
 
-type TabKey = 'overview' | 'task' | 'context' | 'logs';
+type TabKey = 'overview' | 'task' | 'router' | 'context' | 'handoff' | 'logs';
 
-export default function TaskDetailPanel({ task, isLoading, onClose }: TaskDetailPanelProps) {
+export default function TaskDetailPanel({ task, isLoading, onClose, handoffs = [], onOpenHandoff }: TaskDetailPanelProps) {
   const [activeTab, setActiveTab] = useState<TabKey>('overview');
   const [copied, setCopied] = useState(false);
   const { data: toolCallsData } = useToolCalls(
@@ -33,7 +35,9 @@ export default function TaskDetailPanel({ task, isLoading, onClose }: TaskDetail
   const tabs: { key: TabKey; label: string }[] = [
     { key: 'overview', label: 'Overview' },
     { key: 'task', label: 'Task' },
+    { key: 'router', label: 'Router' },
     { key: 'context', label: 'Context' },
+    { key: 'handoff', label: 'Handoff' },
     { key: 'logs', label: 'Logs' },
   ];
 
@@ -98,6 +102,14 @@ export default function TaskDetailPanel({ task, isLoading, onClose }: TaskDetail
               <span className="text-stone-400">Token 消耗</span>
               <span className="text-stone-700">{task.tokens_used.toLocaleString()}</span>
             </div>
+            {task.quota && (
+              <div className="flex justify-between">
+                <span className="text-stone-400">额度状态</span>
+                <span className={task.quota.quota_status === 'limited' || task.quota.quota_status === 'cooldown' ? 'text-red-700 font-medium' : 'text-stone-700'}>
+                  {quotaLabel(task.quota.quota_status)}{task.quota.usage_percent != null ? ` · ${Math.round(task.quota.usage_percent * 100)}%` : ''}
+                </span>
+              </div>
+            )}
             {task.duration_ms != null && (
               <div className="flex justify-between">
                 <span className="text-stone-400">耗时</span>
@@ -167,11 +179,88 @@ export default function TaskDetailPanel({ task, isLoading, onClose }: TaskDetail
         )}
 
         {activeTab === 'context' && (
-          <p className="text-sm text-stone-400">上下文信息待实现</p>
+          task.context ? (
+            <div>
+              <p className="mb-2 text-xs text-stone-400">当前 Worker 接收到的上下文（包含交接摘要时会在此呈现）。</p>
+              <pre className="max-h-96 overflow-y-auto whitespace-pre-wrap break-words rounded-lg border border-stone-200 bg-stone-50 p-3 text-xs leading-relaxed text-stone-700">{formatContext(task.context)}</pre>
+            </div>
+          ) : (
+            <p className="text-sm text-stone-400">当前 Task 尚未建立可继承上下文。</p>
+          )
+        )}
+
+        {activeTab === 'router' && (
+          task.routing_decision ? (
+            <div className="space-y-4">
+              <section>
+                <h4 className="text-xs font-semibold uppercase text-stone-400">选择理由</h4>
+                <p className="mt-1 text-sm leading-relaxed text-stone-700">{task.routing_decision.routing_reason?.summary || '已记录模型路由决策。'}</p>
+                <p className="mt-1 text-xs text-stone-400">置信度 {Math.round((task.routing_decision.confidence || 0) * 100)}%</p>
+              </section>
+              <ListSection title="主要因素" items={task.routing_decision.routing_reason?.primary_factors || []} />
+              <ListSection title="取舍" items={task.routing_decision.routing_reason?.tradeoffs || []} emptyText="未记录明显取舍。" />
+              <ListSection title="备用模型" items={task.routing_decision.backup_model_ids || []} emptyText="暂无备用模型。" mono />
+              {(task.routing_decision.risk_flags || []).length > 0 && (
+                <section>
+                  <h4 className="text-xs font-semibold uppercase text-stone-400">风险提示</h4>
+                  <div className="mt-2 space-y-2">
+                    {task.routing_decision.risk_flags?.map((risk, index) => (
+                      <div key={`${risk.type}-${index}`} className="rounded-lg border border-amber-200 bg-amber-50 p-2 text-xs text-amber-800">
+                        {risk.message}{risk.suggestion ? ` · ${risk.suggestion}` : ''}
+                      </div>
+                    ))}
+                  </div>
+                </section>
+              )}
+            </div>
+          ) : (
+            <p className="text-sm text-stone-400">尚未执行模型路由；运行 Task 后会在此显示选择依据。</p>
+          )
+        )}
+
+        {activeTab === 'handoff' && (
+          handoffs.length > 0 ? (
+            <div className="space-y-3">
+              <p className="text-xs text-stone-400">交接按发生顺序保留在当前任务中。</p>
+              {handoffs.map((handoff) => (
+                <button
+                  key={handoff.id}
+                  type="button"
+                  onClick={() => onOpenHandoff?.(handoff.id)}
+                  className="w-full text-left rounded-lg border border-stone-200 bg-stone-50 p-3 hover:border-stone-400"
+                >
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="text-sm font-medium text-stone-700 truncate">
+                      {handoff.from_agent_name || '原 Agent'} → {handoff.to_agent_name || '接手 Agent'}
+                    </span>
+                    <span className="text-[11px] text-purple-700">{handoff.status}</span>
+                  </div>
+                  <p className="mt-1 text-xs text-stone-500">{handoff.reason_description || handoff.reason}</p>
+                </button>
+              ))}
+            </div>
+          ) : (
+            <p className="text-sm text-stone-400">当前 Task 尚无交接记录。</p>
+          )
         )}
 
         {activeTab === 'logs' && (
-          <p className="text-sm text-stone-400">该 Task 相关日志的缩略列表（点击跳转完整日志）</p>
+          task.recent_logs && task.recent_logs.length > 0 ? (
+            <div className="space-y-2">
+              <p className="text-xs text-stone-400">展示当前 Task 最近 10 条运行事件。</p>
+              {task.recent_logs.map((log) => (
+                <div key={log.id} className="rounded-lg border border-stone-200 bg-stone-50 p-3">
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="text-xs font-medium text-stone-700">{log.event_type} · {log.event_status}</span>
+                    <span className="text-[10px] text-stone-400">{formatTimestamp(log.created_at)}</span>
+                  </div>
+                  <p className="mt-1 text-xs leading-relaxed text-stone-500">{log.error_message || log.output_summary || log.input_summary || '无附加摘要'}</p>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <p className="text-sm text-stone-400">当前 Task 尚无运行日志。</p>
+          )
         )}
       </div>
     </aside>
@@ -184,4 +273,34 @@ function formatDuration(ms: number): string {
   const min = Math.floor(ms / 60000);
   const sec = Math.floor((ms % 60000) / 1000);
   return `${min}m ${sec}s`;
+}
+
+function quotaLabel(status: string): string {
+  return ({ normal: '正常', warning: '注意', near_limit: '接近上限', limited: '已受限', cooldown: '冷却中', unknown: '未知' } as Record<string, string>)[status] || status;
+}
+
+function formatContext(context: string): string {
+  try {
+    return JSON.stringify(JSON.parse(context), null, 2);
+  } catch {
+    return context;
+  }
+}
+
+function formatTimestamp(value?: string | null): string {
+  if (!value) return '—';
+  return new Date(value).toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+}
+
+function ListSection({ title, items, emptyText = '—', mono = false }: { title: string; items: string[]; emptyText?: string; mono?: boolean }) {
+  return (
+    <section>
+      <h4 className="text-xs font-semibold uppercase text-stone-400">{title}</h4>
+      {items.length > 0 ? (
+        <ul className={`mt-2 space-y-1 text-sm text-stone-700 ${mono ? 'font-mono text-xs' : ''}`}>
+          {items.map((item, index) => <li key={`${item}-${index}`}>• {item}</li>)}
+        </ul>
+      ) : <p className="mt-1 text-sm text-stone-400">{emptyText}</p>}
+    </section>
+  );
 }

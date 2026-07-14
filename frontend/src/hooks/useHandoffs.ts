@@ -29,6 +29,7 @@ export function useTriggerHandoff() {
       api.triggerHandoff(taskId, request),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: [HANDOFFS_KEY] });
+      qc.invalidateQueries({ queryKey: ['workspace-state'] });
     },
   });
 }
@@ -41,6 +42,7 @@ export function useAcceptHandoff() {
     onSuccess: (_data, vars) => {
       qc.invalidateQueries({ queryKey: [HANDOFFS_KEY] });
       qc.invalidateQueries({ queryKey: [HANDOFF_KEY, vars.handoffId] });
+      qc.invalidateQueries({ queryKey: ['workspace-state'] });
     },
   });
 }
@@ -53,6 +55,7 @@ export function useUpdateHandoffResult() {
     onSuccess: (_data, vars) => {
       qc.invalidateQueries({ queryKey: [HANDOFFS_KEY] });
       qc.invalidateQueries({ queryKey: [HANDOFF_KEY, vars.handoffId] });
+      qc.invalidateQueries({ queryKey: ['workspace-state'] });
     },
   });
 }

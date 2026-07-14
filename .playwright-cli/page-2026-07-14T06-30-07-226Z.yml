@@ -1,0 +1,141 @@
+- generic [ref=e3]:
+  - navigation [ref=e4]:
+    - generic [ref=e5]:
+      - link "ModelGate" [ref=e6] [cursor=pointer]:
+        - /url: /
+      - generic [ref=e7]:
+        - link "Dashboard" [ref=e8] [cursor=pointer]:
+          - /url: /dashboard
+        - link "Agent Registry" [ref=e9] [cursor=pointer]:
+          - /url: /agents
+        - link "Model Manager" [ref=e10] [cursor=pointer]:
+          - /url: /models
+        - link "Tools" [ref=e11] [cursor=pointer]:
+          - /url: /tools
+        - link "Logs" [ref=e12] [cursor=pointer]:
+          - /url: /logs
+        - link "Workspace" [ref=e13] [cursor=pointer]:
+          - /url: /workspace
+        - link "Evolution" [ref=e14] [cursor=pointer]:
+          - /url: /evolution
+  - main [ref=e15]:
+    - generic [ref=e16]:
+      - generic [ref=e35]:
+        - generic [ref=e36]:
+          - 'heading "Goal: 验证三步骤协作流" [level=1] [ref=e37]'
+          - generic [ref=e38]: 已完成
+        - generic [ref=e39]:
+          - generic [ref=e40]: "进度: 3/3 Tasks"
+          - generic [ref=e41]: "Token: 1,700"
+      - generic [ref=e17]:
+        - complementary [ref=e18]:
+          - generic [ref=e19]:
+            - heading "当前 Goal" [level=3] [ref=e42]
+            - paragraph [ref=e43]: 验证三步骤协作流
+            - paragraph [ref=e44]: 13b87128-07da-4325-9985-b0571dccef19
+          - generic [ref=e24]:
+            - heading "任务列表" [level=3] [ref=e25]
+            - generic [ref=e45]:
+              - 'button "✓ Plan: 验证三步骤协作流" [ref=e128]':
+                - generic [ref=e47]: ✓
+                - generic [ref=e48]: "Plan: 验证三步骤协作流"
+              - 'button "✓ Build: 验证三步骤协作流" [ref=e129]':
+                - generic [ref=e50]: ✓
+                - generic [ref=e51]: "Build: 验证三步骤协作流"
+              - 'button "✓ Review: 验证三步骤协作流" [ref=e130]':
+                - generic [ref=e53]: ✓
+                - generic [ref=e54]: "Review: 验证三步骤协作流"
+            - generic [ref=e27]: 3 个 Task · 0 个进行中 · 3 个已完成
+        - main [ref=e28]:
+          - generic [ref=e55]:
+            - generic [ref=e57]:
+              - generic [ref=e58]:
+                - generic [ref=e59]: 总 Task
+                - generic [ref=e60]: "3"
+              - generic [ref=e61]:
+                - generic [ref=e62]: 运行中
+                - generic [ref=e63]: "0"
+              - generic [ref=e64]:
+                - generic [ref=e65]: 已完成
+                - generic [ref=e66]: "3"
+              - generic [ref=e67]:
+                - generic [ref=e68]: 交接中
+                - generic [ref=e69]: "0"
+            - generic [ref=e131]:
+              - heading "执行完成" [level=3] [ref=e136]
+              - generic [ref=e137]:
+                - generic [ref=e138]:
+                  - generic [ref=e139]: Tasks
+                  - generic [ref=e140]: 3/3
+                - generic [ref=e141]:
+                  - generic [ref=e142]: Token
+                  - generic [ref=e143]: 1,700
+                - generic [ref=e144]:
+                  - generic [ref=e145]: 日志
+                  - generic [ref=e146]: 15 条
+              - generic [ref=e147]:
+                - generic [ref=e148]:
+                  - generic [ref=e149]: Final Output
+                  - button "复制" [ref=e150]
+                - generic [ref=e154]: "[GPT-4 Turbo Plan] Analyzed goal and created task breakdown: - Task 1: Core implementation - Task 2: Review and testing Estimated effort: moderate."
+            - region "任务协作流" [ref=e71]:
+              - generic [ref=e72]:
+                - generic [ref=e73]:
+                  - heading "任务协作流" [level=3] [ref=e74]
+                  - paragraph [ref=e75]: 当前计划按步骤串行推进；每一步都保留执行者、模型、风险与交接记录。
+                - generic [ref=e76]:
+                  - generic [ref=e77]: 3 步
+                  - generic [ref=e78]: 0 次交接
+              - list "任务执行顺序" [ref=e79]:
+                - listitem [ref=e80]:
+                  - generic [ref=e82]: "1"
+                  - 'button "✓ Plan: 验证三步骤协作流 P30 已完成 650 tokens Planner Claude 3 Opus 额度 normal [Claude 3 Opus] Executed coding task successfully. ```python def solve(): # Implementation return result ``` All tests passing." [ref=e155] [cursor=pointer]':
+                    - generic [ref=e85]:
+                      - generic [ref=e86]: ✓
+                      - generic [ref=e87]:
+                        - generic [ref=e88]:
+                          - paragraph [ref=e89]: "Plan: 验证三步骤协作流"
+                          - generic [ref=e90]: P30
+                        - generic [ref=e91]:
+                          - generic [ref=e92]: 已完成
+                          - generic [ref=e156]: 650 tokens
+                        - generic [ref=e93]:
+                          - generic [ref=e94]: Planner
+                          - generic [ref=e157]: Claude 3 Opus
+                        - generic [ref=e158]: 额度 normal
+                    - paragraph [ref=e159]: "[Claude 3 Opus] Executed coding task successfully. ```python def solve(): # Implementation return result ``` All tests passing."
+                - listitem [ref=e95]:
+                  - generic [ref=e97]: "2"
+                  - 'button "✓ Build: 验证三步骤协作流 P20 已完成 550 tokens Coder DeepSeek Coder 额度 normal [DeepSeek Coder] Generated implementation: ```typescript function main() { // solution } ```" [ref=e160] [cursor=pointer]':
+                    - generic [ref=e100]:
+                      - generic [ref=e101]: ✓
+                      - generic [ref=e102]:
+                        - generic [ref=e103]:
+                          - paragraph [ref=e104]: "Build: 验证三步骤协作流"
+                          - generic [ref=e105]: P20
+                        - generic [ref=e106]:
+                          - generic [ref=e107]: 已完成
+                          - generic [ref=e161]: 550 tokens
+                        - generic [ref=e108]:
+                          - generic [ref=e109]: Coder
+                          - generic [ref=e162]: DeepSeek Coder
+                        - generic [ref=e163]: 额度 normal
+                    - paragraph [ref=e164]: "[DeepSeek Coder] Generated implementation: ```typescript function main() { // solution } ```"
+                - listitem [ref=e110]:
+                  - generic [ref=e111]: "3"
+                  - 'button "✓ Review: 验证三步骤协作流 P10 已完成 500 tokens Reviewer GPT-4 Turbo 额度 normal [GPT-4 Turbo Plan] Analyzed goal and created task breakdown: - Task 1: Core implementation - Task 2: Review and testing Estimated effort: moderate." [ref=e165] [cursor=pointer]':
+                    - generic [ref=e114]:
+                      - generic [ref=e115]: ✓
+                      - generic [ref=e116]:
+                        - generic [ref=e117]:
+                          - paragraph [ref=e118]: "Review: 验证三步骤协作流"
+                          - generic [ref=e119]: P10
+                        - generic [ref=e120]:
+                          - generic [ref=e121]: 已完成
+                          - generic [ref=e166]: 500 tokens
+                        - generic [ref=e122]:
+                          - generic [ref=e123]: Reviewer
+                          - generic [ref=e167]: GPT-4 Turbo
+                        - generic [ref=e168]: 额度 normal
+                    - paragraph [ref=e169]: "[GPT-4 Turbo Plan] Analyzed goal and created task breakdown: - Task 1: Core implementation - Task 2: Review and testing Estimated effort: moderate."
+      - button "执行日志 · 加载中..." [ref=e124]

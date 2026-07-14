@@ -14,7 +14,7 @@ from typing import Any, Dict, List, Optional
 from sqlalchemy.orm import Session
 
 from src.models.agent import AgentStation
-from src.models.handoff import ExecutionLog, HandoffRecord, HandoffTask, WorkerSession
+from src.models.handoff import ExecutionLog, HandoffRecord, WorkerSession
 from src.models.model import Model
 from src.models.workspace import Goal, Task
 from src.services import (
@@ -164,7 +164,16 @@ def execute_task_step(db: Session, task_id: str) -> Dict[str, Any]:
     task = db.query(Task).filter(Task.id == task_id).first()
     if not task:
         raise TaskNotReadyError(f"Task '{task_id}' not found")
-    if task.status not in ("pending", "assigned"):
+    resumed_worker = None
+    if task.assigned_worker_id:
+        resumed_worker = db.query(WorkerSession).filter(WorkerSession.id == task.assigned_worker_id).first()
+    can_resume_handoff = bool(
+        task.status == "running"
+        and resumed_worker
+        and resumed_worker.inherited_from_handoff_id
+        and resumed_worker.status == "running"
+    )
+    if task.status not in ("pending", "assigned") and not can_resume_handoff:
         raise TaskNotReadyError(f"Task must be pending or assigned, current: {task.status}")
 
     return _execute_single_task(db, task)
@@ -189,22 +198,56 @@ def _execute_single_task(db: Session, task: Task) -> Dict[str, Any]:
     if not agent:
         raise TaskNotReadyError(f"Agent '{task.assigned_agent_id}' not found or disabled")
 
-    # 3. Select model via Router
+    # 3. Resume an accepted Handoff with its chosen model and inherited context.
+    # For ordinary tasks, compute a new routing decision as before.
+    worker = None
+    resumed_from_handoff = False
     task_type = ROLE_TO_TASK_TYPE.get(agent.role, "coding")
-    routing = None
-    try:
-        routing = router_service.select_model(
-            db=db,
-            task_id=task.id,
-            task_type=task_type,
-            task_description=task.description or task.title,
-            preferred_agent_id=agent.id,
-        )
-        selected_model_id = routing["selected_model_id"]
-    except Exception:
-        selected_model_id = agent.default_model_id
+    if task.assigned_worker_id:
+        existing_worker = db.query(WorkerSession).filter(WorkerSession.id == task.assigned_worker_id).first()
+        if existing_worker and existing_worker.inherited_from_handoff_id and existing_worker.status == "running":
+            worker = existing_worker
+            resumed_from_handoff = True
 
-    # 4. Check quota
+    routing = None
+    if resumed_from_handoff:
+        selected_model_id = worker.model_id
+        routing = {
+            "selected_model_id": selected_model_id,
+            "routing_reason": {"summary": "沿用 Handoff 已确认的接手模型"},
+            "confidence": 1.0,
+            "backup_model_ids": [],
+            "risk_flags": [],
+            "score_breakdown": [],
+            "is_user_override": False,
+        }
+    else:
+        try:
+            routing = router_service.select_model(
+                db=db,
+                task_id=task.id,
+                task_type=task_type,
+                task_description=task.description or task.title,
+                preferred_agent_id=agent.id,
+            )
+            selected_model_id = routing["selected_model_id"]
+        except Exception:
+            selected_model_id = agent.default_model_id
+
+    # 4. Check quota. A proactive Router fallback keeps a model out of the
+    # candidate list, but an Agent whose configured primary model is blocked
+    # still needs a visible continuity decision rather than a silent swap.
+    # That decision is represented as an automatic Handoff in Workspace.
+    default_intercept = quota_service.check_and_intercept(db, agent.default_model_id)
+    if (
+        not resumed_from_handoff
+        and
+        selected_model_id != agent.default_model_id
+        and default_intercept
+        and default_intercept.get("intercepted")
+    ):
+        return _handle_quota_intercept(db, task, agent, agent.default_model_id, routing)
+
     intercept = quota_service.check_and_intercept(db, selected_model_id)
     if intercept and intercept.get("intercepted"):
         return _handle_quota_intercept(db, task, agent, selected_model_id, routing)
@@ -214,18 +257,19 @@ def _execute_single_task(db: Session, task: Task) -> Dict[str, Any]:
     model_name = model.display_name if model else selected_model_id
 
     # 6. Create WorkerSession
-    worker = WorkerSession(
-        id=str(uuid.uuid4()),
-        agent_id=agent.id,
-        model_id=selected_model_id,
-        goal_id=task.goal_id,
-        task_id=task.id,
-        status="running",
-        current_context=task.description or "",
-    )
-    db.add(worker)
-    db.flush()
-    task.assigned_worker_id = worker.id
+    if not worker:
+        worker = WorkerSession(
+            id=str(uuid.uuid4()),
+            agent_id=agent.id,
+            model_id=selected_model_id,
+            goal_id=task.goal_id,
+            task_id=task.id,
+            status="running",
+            current_context=task.description or "",
+        )
+        db.add(worker)
+        db.flush()
+        task.assigned_worker_id = worker.id
 
     # 7. Transition: assigned -> running
     task.status = "running"
@@ -323,9 +367,16 @@ def _execute_single_task(db: Session, task: Task) -> Dict[str, Any]:
                     "total_tokens": response.total_tokens,
                 },
                 "latency_ms": response.latency_ms,
-                "routing_info": {
-                    "routing_reason": routing.get("routing_reason", {}).get("summary", "") if routing else "",
-                    "confidence": routing.get("confidence", 0) if routing else 0,
+                # Keep the full decision beside the model call so Workspace can explain
+                # the selected model without issuing a second routing request.
+                "routing_info": routing or {
+                    "selected_model_id": selected_model_id,
+                    "routing_reason": {"summary": "使用 Agent 默认模型（路由不可用）"},
+                    "confidence": 0,
+                    "backup_model_ids": [],
+                    "risk_flags": [],
+                    "score_breakdown": [],
+                    "is_user_override": False,
                 },
             })
 
@@ -385,7 +436,7 @@ def _execute_single_task(db: Session, task: Task) -> Dict[str, Any]:
                 final_content = response.content
                 break
     except Exception as e:
-        return _handle_task_failure(db, task, agent, worker, str(e))
+        return _handle_task_failure(db, task, agent, worker, str(e), routing)
 
     # 10. Record quota usage
     total_tokens = total_input_tokens + total_output_tokens
@@ -464,8 +515,44 @@ def _execute_single_task(db: Session, task: Task) -> Dict[str, Any]:
 
 
 def _handle_task_failure(
-    db: Session, task: Task, agent: AgentStation, worker: WorkerSession, error_msg: str
+    db: Session, task: Task, agent: AgentStation, worker: WorkerSession, error_msg: str, routing: Optional[Dict] = None,
 ) -> Dict[str, Any]:
+    backup_model_ids = routing.get("backup_model_ids", []) if routing else []
+    target_agent = db.query(AgentStation).filter(
+        AgentStation.id != agent.id,
+        AgentStation.is_enabled == True,
+    ).first()
+    if backup_model_ids and target_agent:
+        try:
+            handoff_result = handoff_service.trigger_handoff(
+                db=db,
+                task_id=task.id,
+                to_agent_id=target_agent.id,
+                to_model_id=backup_model_ids[0],
+                reason="error",
+                reason_description=f"Provider execution failed: {error_msg}",
+            )
+            worker.status = "failed"
+            worker.error_message = error_msg
+            worker.updated_at = datetime.now(timezone.utc)
+            db.commit()
+            return {
+                "task_id": task.id,
+                "status": "handoff",
+                "output": None,
+                "tokens_used": 0,
+                "duration_ms": 0,
+                "model_name": None,
+                "worker_id": worker.id,
+                "quota_status": None,
+                "is_handoff": True,
+                "handoff_id": handoff_result["handoff_id"],
+            }
+        except handoff_service.HandoffServiceError:
+            # Preserve the original execution error below if automatic recovery
+            # cannot create a valid continuation path.
+            pass
+
     task.status = "failed"
     task.updated_at = datetime.now(timezone.utc)
     agent.status = "idle"
@@ -527,20 +614,6 @@ def _handle_quota_intercept(
             "quota_status": "limited",
             "is_handoff": False,
         }
-
-    # Create mirror HandoffTask for handoff service
-    ht = HandoffTask(
-        id=task.id,
-        goal_id=task.goal_id,
-        title=task.title,
-        description=task.description or "",
-        status="running",
-        assigned_agent_id=agent.id,
-        assigned_model_id=model_id,
-        current_output=task.output or "",
-    )
-    db.add(ht)
-    db.flush()
 
     try:
         result = handoff_service.trigger_handoff(
@@ -662,6 +735,7 @@ def get_runtime_status(db: Session, goal_id: str) -> Dict[str, Any]:
         Task.status == "failed",
     ).first()
     error_message = last_failed.description if last_failed else None
+    final_summary = _build_final_summary(db, goal, tasks, handoff_count)
 
     return {
         "goal_id": goal.id,
@@ -681,4 +755,72 @@ def get_runtime_status(db: Session, goal_id: str) -> Dict[str, Any]:
         "final_output": final_output,
         "error_message": error_message,
         "quota_status": None,
+        "final_summary": final_summary,
+    }
+
+
+def _build_final_summary(
+    db: Session,
+    goal: Goal,
+    tasks: List[Task],
+    handoff_count: int,
+) -> Dict[str, Any]:
+    """Build an honest, inspectable completion report for the Workspace.
+
+    Model records currently expose a relative ``cost_level`` but not provider
+    currency pricing. The report therefore explicitly marks a currency
+    estimate unavailable instead of inventing a monetary value.
+    """
+    from src.services import review_service
+
+    completed = [task for task in tasks if task.status == "completed"]
+    incomplete = [task for task in tasks if task.status != "completed"]
+    review = review_service.get_review(db, goal.id)
+
+    logs = (
+        db.query(ExecutionLog)
+        .filter(ExecutionLog.goal_id == goal.id, ExecutionLog.model_id.isnot(None))
+        .order_by(ExecutionLog.created_at.asc())
+        .all()
+    )
+    model_ids = list(dict.fromkeys(log.model_id for log in logs if log.model_id))
+    models_by_id = {}
+    if model_ids:
+        models_by_id = {
+            model.id: model
+            for model in db.query(Model).filter(Model.id.in_(model_ids)).all()
+        }
+
+    model_usage = [
+        {
+            "id": model_id,
+            "name": models_by_id[model_id].display_name if model_id in models_by_id else model_id,
+            "cost_level": models_by_id[model_id].cost_level if model_id in models_by_id else None,
+        }
+        for model_id in model_ids
+    ]
+    issues = review.get("issues", []) if review else []
+    risks = list(issues)
+    if incomplete:
+        risks.append(f"仍有 {len(incomplete)} 个 Task 未完成")
+    if handoff_count:
+        risks.append(f"执行期间发生 {handoff_count} 次 Handoff")
+
+    return {
+        "completed": [task.title for task in completed],
+        "incomplete": [task.title for task in incomplete],
+        "quality": {
+            "status": review.get("status") if review else "not_available",
+            "passed": review.get("passed") if review else None,
+            "summary": review.get("summary") if review else None,
+            "reviewer_model_id": review.get("reviewer_model_id") if review else None,
+        },
+        "risks": risks,
+        "models": model_usage,
+        "handoff_count": handoff_count,
+        "cost": {
+            "currency_estimate": None,
+            "available": False,
+            "note": "尚未配置 Provider 单价表；当前只展示模型相对 cost_level，不虚构货币成本。",
+        },
     }

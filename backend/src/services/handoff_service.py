@@ -9,6 +9,7 @@ from sqlalchemy.orm import Session
 from src.models.agent import AgentStation
 from src.models.handoff import ExecutionLog, HandoffRecord, HandoffTask, WorkerSession
 from src.models.model import Model
+from src.models.workspace import Goal, Task
 from src.schemas.handoff import HandoffTaskCreate
 
 HANDOFF_STATUS_REQUESTED = "requested"
@@ -116,28 +117,37 @@ def _validate_summary(summary: Dict) -> Dict:
 
 
 def _build_fallback_summary(
-    task: HandoffTask,
+    task: Any,
     from_agent: AgentStation,
     to_agent: AgentStation,
     reason: str,
     reason_description: Optional[str] = None,
 ) -> Dict:
+    current_output = getattr(task, "current_output", None) or getattr(task, "output", None)
+    error_message = getattr(task, "error_message", None)
+    goal = task.goal_id
+    goal_record = None
+    # Workspace tasks carry a real Goal record; legacy HandoffTask records do not.
+    # The caller may attach it to avoid changing the legacy task schema.
+    if hasattr(task, "_workspace_goal"):
+        goal_record = task._workspace_goal
+
     completed_work = []
-    if task.current_output:
-        completed_work.append(task.current_output)
+    if current_output:
+        completed_work.append(current_output)
     else:
         completed_work.append("已保留当前任务上下文，等待接手 Agent 继续推进。")
 
     risks = []
-    if task.error_message:
-        risks.append(task.error_message)
+    if error_message:
+        risks.append(error_message)
     if reason_description:
         risks.append(reason_description)
     if not risks:
         risks.append("当前未记录明确错误，交接原因来自用户或系统判断。")
 
     return _validate_summary({
-        "original_goal": f"Goal {task.goal_id}",
+        "original_goal": goal_record.title if goal_record else f"Goal {goal}",
         "current_task": task.description or task.title,
         "completed_work": completed_work,
         "unfinished_work": [f"由 {to_agent.name} 继续完成：{task.title}"],
@@ -180,11 +190,37 @@ def _create_log(
     return log
 
 
-def _get_task(db: Session, task_id: str) -> HandoffTask:
+def _get_task(db: Session, task_id: str) -> Any:
+    """Resolve a normal Workspace Task first, then retain legacy demo-task support."""
+    task = db.query(Task).filter(Task.id == task_id).first()
+    if task:
+        goal = db.query(Goal).filter(Goal.id == task.goal_id).first()
+        if goal:
+            task._workspace_goal = goal
+        return task
     task = db.query(HandoffTask).filter(HandoffTask.id == task_id).first()
     if not task:
         raise HandoffNotFoundError(f"Task '{task_id}' not found")
     return task
+
+
+def _task_model_id(db: Session, task: Any, agent: AgentStation) -> str:
+    """Use the active worker model for Workspace tasks, with an Agent default fallback."""
+    legacy_model_id = getattr(task, "assigned_model_id", None)
+    if legacy_model_id:
+        return legacy_model_id
+    worker_id = getattr(task, "assigned_worker_id", None)
+    if worker_id:
+        worker = db.query(WorkerSession).filter(WorkerSession.id == worker_id).first()
+        if worker and worker.model_id:
+            return worker.model_id
+    return agent.default_model_id
+
+
+def _set_task_model_id(task: Any, model_id: str) -> None:
+    """The legacy task persists a model id; Workspace tasks derive it from WorkerSession."""
+    if isinstance(task, HandoffTask):
+        task.assigned_model_id = model_id
 
 
 def _get_agent(db: Session, agent_id: str) -> AgentStation:
@@ -259,18 +295,19 @@ def trigger_handoff(
     if active:
         raise HandoffConflictError("Task already has an active handoff")
 
-    if task.status not in {"running", "failed", "handoff"}:
-        raise HandoffValidationError("Task status must be running or failed to trigger handoff")
+    if task.status not in {"assigned", "running", "failed", "handoff"}:
+        raise HandoffValidationError("Task status must be assigned, running, or failed to trigger handoff")
 
     from_agent = _get_agent(db, task.assigned_agent_id)
     to_agent = _get_agent(db, to_agent_id)
+    from_model_id = _task_model_id(db, task, from_agent)
     resolved_to_model_id = _resolve_model_id(db, to_agent, to_model_id)
 
     handoff = HandoffRecord(
         goal_id=task.goal_id,
         task_id=task.id,
         from_agent_id=task.assigned_agent_id,
-        from_model_id=task.assigned_model_id,
+        from_model_id=from_model_id,
         from_worker_id=task.assigned_worker_id,
         to_agent_id=to_agent.id,
         to_model_id=resolved_to_model_id,
@@ -382,7 +419,7 @@ def accept_handoff(db: Session, handoff_id: str, agent_id: Optional[str] = None,
     handoff.to_worker_id = worker.id
     task.status = "running"
     task.assigned_agent_id = accept_agent_id
-    task.assigned_model_id = accept_model_id
+    _set_task_model_id(task, accept_model_id)
     task.assigned_worker_id = worker.id
     agent.status = "running"
 
@@ -435,7 +472,7 @@ def update_handoff_result(
         f"Handoff completed with result: {result_after_handoff}",
     )
 
-    task = db.query(HandoffTask).filter(HandoffTask.id == handoff.task_id).first()
+    task = _get_task(db, handoff.task_id)
     if task and result_after_handoff == "success":
         task.status = "completed"
     elif task and result_after_handoff == "failed":
@@ -460,7 +497,7 @@ def _agent_labels(db: Session, agent_id: str) -> Tuple[Optional[str], Optional[s
 def _serialize_handoff(db: Session, handoff: HandoffRecord) -> Dict:
     data = handoff.to_dict()
     data["handoff_summary"] = _validate_summary(data.get("handoff_summary") or {})
-    task = db.query(HandoffTask).filter(HandoffTask.id == handoff.task_id).first()
+    task = _get_task(db, handoff.task_id)
     worker = db.query(WorkerSession).filter(WorkerSession.id == handoff.to_worker_id).first() if handoff.to_worker_id else None
     from_name, from_role = _agent_labels(db, handoff.from_agent_id)
     to_name, to_role = _agent_labels(db, handoff.to_agent_id)
@@ -476,7 +513,7 @@ def _serialize_handoff(db: Session, handoff: HandoffRecord) -> Dict:
 
 
 def _serialize_handoff_list_item(db: Session, handoff: HandoffRecord) -> Dict:
-    task = db.query(HandoffTask).filter(HandoffTask.id == handoff.task_id).first()
+    task = _get_task(db, handoff.task_id)
     from_name, _ = _agent_labels(db, handoff.from_agent_id)
     to_name, _ = _agent_labels(db, handoff.to_agent_id)
     return {

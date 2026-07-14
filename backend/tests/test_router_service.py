@@ -116,6 +116,20 @@ class TestFilterCandidates:
         ids = [m.id for m in candidates]
         assert len(ids) == 0
 
+    def test_filters_models_with_real_limited_quota(self, db_session, seed_models):
+        from src.models.quota import QuotaRecord
+        db_session.add(QuotaRecord(
+            id="quota-opus", provider="anthropic", model_id="model-claude-opus",
+            model_name="Claude 3 Opus", quota_status="limited", usage_percent=1.0,
+        ))
+        db_session.commit()
+        result = select_model(
+            db=db_session, task_id="task-1", task_type="coding", required_capabilities=["code"],
+            context_length_estimate=8000,
+        )
+        assert result["selected_model_id"] != "model-claude-opus"
+        assert all(item["model_id"] != "model-claude-opus" for item in result["score_breakdown"])
+
 
 class TestScoreModel:
     def test_capability_match_perfect(self, db_session, seed_models):

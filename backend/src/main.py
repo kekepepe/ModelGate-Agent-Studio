@@ -6,6 +6,7 @@ from src.core.database import engine, Base, SessionLocal
 from src.routes import agents, router as router_routes, quota as quota_routes, handoffs as handoff_routes, logs as log_routes, goals as goal_routes, tasks as task_routes, workspace as workspace_routes, runtime as runtime_routes, review as review_routes, knowledge as knowledge_routes, models as model_routes, tools as tool_routes, dashboard as dashboard_routes
 from src.data.models import MODEL_SEEDS
 from src.models.model import Model
+from src.models.agent import AgentStation
 from src.models import handoff as handoff_models
 from src.models import supervisor as supervisor_models
 from src.models import tool as tool_models
@@ -20,7 +21,14 @@ app = FastAPI(
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:5173"],
+    # Permit the documented Vite port and an alternate local QA port. Keeping
+    # this explicit avoids opening browser API access beyond local development.
+    allow_origins=[
+        "http://localhost:5173",
+        "http://127.0.0.1:5173",
+        "http://localhost:5174",
+        "http://127.0.0.1:5174",
+    ],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -79,6 +87,68 @@ def _seed_tools():
 
 
 _seed_tools()
+
+
+def _seed_default_agents():
+    """Create a usable local team for a first-run Workspace experience."""
+    defaults = [
+        {
+            "id": "default-planner", "name": "Planner", "role": "planner",
+            "description": "拆解 Goal 并规划执行顺序", "default_model_id": "model-gpt-4-turbo",
+            "backup_model_ids": ["model-claude-opus"], "allowed_tools": [],
+            "system_prompt": "将用户目标拆成清晰、可执行的任务。", "allow_handoff": False,
+        },
+        {
+            "id": "default-coder", "name": "Coder", "role": "coder",
+            "description": "实现代码与技术方案", "default_model_id": "model-deepseek-coder",
+            "backup_model_ids": ["model-claude-opus", "model-gpt-4-turbo"],
+            "allowed_tools": ["file_read", "file_write", "terminal_execute"],
+            "system_prompt": "根据任务描述产出可执行的实现方案或代码。", "allow_handoff": True,
+        },
+        {
+            "id": "default-reviewer", "name": "Reviewer", "role": "reviewer",
+            "description": "审查输出质量、风险和遗漏", "default_model_id": "model-gpt-4-turbo",
+            "backup_model_ids": ["model-claude-opus"], "allowed_tools": ["file_read", "diff_view"],
+            "system_prompt": "审查任务输出，给出具体质量与风险结论。", "allow_handoff": True,
+        },
+        {
+            "id": "default-researcher", "name": "Researcher", "role": "research",
+            "description": "收集资料并提炼可行动结论", "default_model_id": "model-kimi-long-context",
+            "backup_model_ids": ["model-claude-opus", "model-gpt-4-turbo"], "allowed_tools": ["file_read"],
+            "system_prompt": "整理相关资料、来源与行动建议。", "allow_handoff": True,
+        },
+        {
+            "id": "default-summarizer", "name": "Summarizer", "role": "summarizer",
+            "description": "压缩上下文并生成任务摘要", "default_model_id": "model-claude-3-haiku",
+            "backup_model_ids": ["model-kimi-long-context"], "allowed_tools": [],
+            "system_prompt": "将执行信息压缩为清晰的结构化摘要。", "allow_handoff": False,
+        },
+        {
+            "id": "default-supervisor", "name": "Supervisor", "role": "supervisor",
+            "description": "审查 Goal 是否完成并生成结论", "default_model_id": "model-claude-opus",
+            "backup_model_ids": ["model-gpt-4-turbo"], "allowed_tools": ["file_read"],
+            "system_prompt": "审查全部任务，判断是否达成 Goal 并给出最终结论。", "allow_handoff": False,
+        },
+    ]
+    db = SessionLocal()
+    try:
+        if db.query(AgentStation).count() == 0:
+            for seed in defaults:
+                agent = AgentStation(
+                    id=seed["id"], name=seed["name"], role=seed["role"], description=seed["description"],
+                    default_model_id=seed["default_model_id"], system_prompt=seed["system_prompt"],
+                    allow_handoff=seed["allow_handoff"], status="idle", is_enabled=True,
+                    max_steps_per_task=10, max_tool_calls_per_task=20,
+                )
+                agent.set_backup_model_ids(seed["backup_model_ids"])
+                agent.set_allowed_tools(seed["allowed_tools"])
+                db.add(agent)
+            db.commit()
+    finally:
+        db.close()
+
+
+_seed_default_agents()
 
 
 @app.get("/health")

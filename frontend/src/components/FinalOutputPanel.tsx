@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { Copy, CheckCircle, AlertTriangle, XCircle } from 'lucide-react';
+import type { FinalSummary } from '../types/runtime';
 
 interface FinalOutputPanelProps {
   output?: string | null;
@@ -9,6 +10,7 @@ interface FinalOutputPanelProps {
   tasksHandoff: number;
   totalTokens: number;
   logCount: number;
+  finalSummary?: FinalSummary | null;
 }
 
 export default function FinalOutputPanel({
@@ -19,6 +21,7 @@ export default function FinalOutputPanel({
   tasksHandoff,
   totalTokens,
   logCount,
+  finalSummary,
 }: FinalOutputPanelProps) {
   const [copied, setCopied] = useState(false);
 
@@ -95,6 +98,43 @@ export default function FinalOutputPanel({
           🔄 {tasksHandoff} 个任务已交接
         </div>
       )}
+
+      {finalSummary && (
+        <section className="mt-4 border-t border-stone-200 pt-3" aria-label="运行总结">
+          <div className="mb-2 flex items-center justify-between gap-2">
+            <h4 className="text-xs font-semibold text-stone-700">运行总结</h4>
+            <span className={`rounded-full px-2 py-0.5 text-[10px] ${finalSummary.quality.passed === true ? 'bg-green-100 text-green-700' : finalSummary.quality.passed === false ? 'bg-amber-100 text-amber-800' : 'bg-stone-100 text-stone-600'}`}>
+              {finalSummary.quality.passed === true ? '质量检查通过' : finalSummary.quality.passed === false ? '需要复核' : '尚无质量检查'}
+            </span>
+          </div>
+          <dl className="grid grid-cols-2 gap-2 text-xs">
+            <SummaryItem label="已完成" value={`${finalSummary.completed.length} 项`} />
+            <SummaryItem label="未完成" value={`${finalSummary.incomplete.length} 项`} />
+            <SummaryItem label="使用模型" value={finalSummary.models.map((model) => model.name).join('、') || '暂无'} />
+            <SummaryItem label="交接次数" value={`${finalSummary.handoff_count} 次`} />
+          </dl>
+          {finalSummary.quality.summary && (
+            <p className="mt-3 rounded-md bg-white/70 p-2 text-xs leading-5 text-stone-600">
+              {finalSummary.quality.summary}
+            </p>
+          )}
+          {finalSummary.risks.length > 0 && (
+            <p className="mt-2 text-xs leading-5 text-amber-800">
+              风险：{finalSummary.risks.join('；')}
+            </p>
+          )}
+          <p className="mt-2 text-[11px] leading-4 text-stone-500">成本：{finalSummary.cost.note}</p>
+        </section>
+      )}
+    </div>
+  );
+}
+
+function SummaryItem({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="rounded-md bg-white/60 p-2">
+      <dt className="text-stone-400">{label}</dt>
+      <dd className="mt-0.5 break-words font-medium text-stone-700">{value}</dd>
     </div>
   );
 }

@@ -34,7 +34,7 @@ export async function startGoal(goalId: string): Promise<{ goal_id: string; stat
 
 export async function getWorkspaceState(goalId: string): Promise<WorkspaceState> {
   const resp = await client.get<ApiResponse<WorkspaceState>>(`/workspace/${goalId}/state`);
-  return unwrap(resp, { goal: null, tasks: [], agents: [], workers: [] });
+  return unwrap(resp, { goal: null, tasks: [], agents: [], workers: [], handoffs: [] });
 }
 
 export async function getTask(taskId: string): Promise<WorkspaceTask> {

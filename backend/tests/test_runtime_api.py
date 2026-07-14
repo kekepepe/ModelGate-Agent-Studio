@@ -108,6 +108,9 @@ class TestRuntimeStatusAPI:
         assert data["completed_tasks"] >= 1
         assert data["log_count"] > 0
         assert data["model_call_count"] > 0
+        assert data["final_summary"]["completed"]
+        assert data["final_summary"]["quality"]["status"] in ("completed", "not_available")
+        assert data["final_summary"]["cost"]["available"] is False
 
     def test_status_goal_not_found(self, client: TestClient):
         resp = client.get("/api/v1/runtime/status/nonexistent")

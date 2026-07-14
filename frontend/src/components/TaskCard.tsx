@@ -1,4 +1,5 @@
 import type { TaskStatus } from '../types/workspace';
+import type { WorkspaceHandoff } from '../types/workspace';
 import { TASK_STATUS_ICONS, TASK_STATUS_LABELS, TASK_STATUS_BORDERS, TASK_STATUS_BG } from '../types/workspace';
 
 interface TaskCardProps {
@@ -10,6 +11,14 @@ interface TaskCardProps {
   onSelect?: (taskId: string) => void;
   isSelected?: boolean;
   handoffIndicator?: React.ReactNode;
+  agentName?: string | null;
+  modelName?: string | null;
+  outputSnippet?: string | null;
+  handoff?: WorkspaceHandoff | null;
+  onRequestHandoff?: (taskId: string) => void;
+  onOpenHandoff?: (handoffId: string) => void;
+  quotaStatus?: string | null;
+  quotaUsagePercent?: number | null;
 }
 
 export default function TaskCard({
@@ -21,6 +30,14 @@ export default function TaskCard({
   onSelect,
   isSelected = false,
   handoffIndicator,
+  agentName,
+  modelName,
+  outputSnippet,
+  handoff,
+  onRequestHandoff,
+  onOpenHandoff,
+  quotaStatus,
+  quotaUsagePercent,
 }: TaskCardProps) {
   const icon = TASK_STATUS_ICONS[status] || '•';
   const border = TASK_STATUS_BORDERS[status] || 'border-stone-200';
@@ -54,8 +71,42 @@ export default function TaskCard({
             <span>{TASK_STATUS_LABELS[status]}</span>
             {tokensUsed > 0 && <span>{tokensUsed.toLocaleString()} tokens</span>}
           </div>
+          {(agentName || modelName) && (
+            <div className="mt-2 flex flex-wrap gap-x-2 gap-y-1 text-[11px] text-stone-500">
+              {agentName && <span>{agentName}</span>}
+              {modelName && <span className="font-mono text-stone-400">{modelName}</span>}
+            </div>
+          )}
+          {quotaStatus && quotaStatus !== 'unknown' && (
+            <div className={`mt-2 inline-flex rounded px-1.5 py-0.5 text-[10px] ${quotaStatus === 'limited' || quotaStatus === 'cooldown' ? 'bg-red-50 text-red-700' : quotaStatus === 'warning' || quotaStatus === 'near_limit' ? 'bg-amber-50 text-amber-700' : 'bg-green-50 text-green-700'}`}>
+              额度 {quotaStatus}{quotaUsagePercent != null ? ` · ${Math.round(quotaUsagePercent * 100)}%` : ''}
+            </div>
+          )}
         </div>
       </div>
+      {outputSnippet && (
+        <p className="mt-3 line-clamp-2 text-xs leading-relaxed text-stone-500 border-l-2 border-stone-200 pl-2">
+          {outputSnippet}
+        </p>
+      )}
+      {handoff && (
+        <button
+          type="button"
+          onClick={(event) => { event.stopPropagation(); onOpenHandoff?.(handoff.id); }}
+          className="mt-3 w-full text-left rounded-md border border-purple-200 bg-purple-50 px-2.5 py-2 text-xs text-purple-800 hover:bg-purple-100"
+        >
+          交接 {handoff.from_agent_name || '原 Agent'} → {handoff.to_agent_name || '接手 Agent'} · {handoff.status}
+        </button>
+      )}
+      {!handoff && (status === 'running' || status === 'failed') && onRequestHandoff && (
+        <button
+          type="button"
+          onClick={(event) => { event.stopPropagation(); onRequestHandoff(id); }}
+          className="mt-3 rounded-md border border-stone-300 bg-white px-2.5 py-1.5 text-xs font-medium text-stone-600 hover:border-stone-500 hover:text-stone-900"
+        >
+          交接任务
+        </button>
+      )}
       {handoffIndicator}
     </div>
   );

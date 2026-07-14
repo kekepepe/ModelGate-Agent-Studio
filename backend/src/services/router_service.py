@@ -3,6 +3,7 @@ from sqlalchemy.orm import Session
 
 from src.models.model import Model
 from src.models.agent import AgentStation
+from src.models.quota import QuotaRecord
 from src.data.models import (
     ROLE_MODEL_PREFERENCES,
     TASK_TYPE_CAPABILITIES,
@@ -31,10 +32,18 @@ def _get_required_capabilities(task_type: str, requires_tool_calling: bool) -> L
     return list(caps)
 
 
-def _get_mock_quota_status(model_id: str) -> str:
-    # Mock quota status until Quota Manager is ready.
-    # All models default to "normal" for MVP Phase 1.
-    return "normal"
+def _get_quota_statuses(db: Session) -> Dict[str, str]:
+    """Read Quota Manager state once per routing decision.
+
+    Models without a record remain usable as `normal` for backward compatibility
+    with local and mock providers, while configured LIMITED/COOLDOWN models are
+    excluded before scoring.
+    """
+    return {record.model_id: record.quota_status for record in db.query(QuotaRecord).all()}
+
+
+def _quota_status(model_id: str, quota_statuses: Optional[Dict[str, str]] = None) -> str:
+    return (quota_statuses or {}).get(model_id, "normal")
 
 
 def _filter_candidates(
@@ -42,6 +51,7 @@ def _filter_candidates(
     required_capabilities: List[str],
     context_length_estimate: int,
     preferred_model_id: Optional[str] = None,
+    quota_statuses: Optional[Dict[str, str]] = None,
 ) -> List[Model]:
     """Hard constraint filtering."""
     all_models = db.query(Model).filter(Model.is_enabled == True).all()
@@ -49,8 +59,8 @@ def _filter_candidates(
     excluded_reasons = []
 
     for m in all_models:
-        # 1. Check quota status (mock)
-        quota_status = _get_mock_quota_status(m.id)
+        # 1. Check real quota status when it is configured.
+        quota_status = _quota_status(m.id, quota_statuses)
         if quota_status in ("limited", "cooldown"):
             excluded_reasons.append(f"{m.display_name}: quota {quota_status}")
             continue
@@ -126,8 +136,8 @@ def _compute_speed_fit(model: Model, speed_preference: str) -> float:
     return max(min(base, 1.0), 0.0)
 
 
-def _compute_quota_health(model: Model) -> float:
-    quota_status = _get_mock_quota_status(model.id)
+def _compute_quota_health(model: Model, quota_statuses: Optional[Dict[str, str]] = None) -> float:
+    quota_status = _quota_status(model.id, quota_statuses)
     return QUOTA_HEALTH_SCORES.get(quota_status, 0.8)
 
 
@@ -175,6 +185,7 @@ def _score_model(
     speed_preference: str,
     task_complexity: str,
     default_model_id: Optional[str] = None,
+    quota_statuses: Optional[Dict[str, str]] = None,
 ) -> Dict:
     weights = _get_adjusted_weights(budget_preference, speed_preference, task_complexity)
 
@@ -183,7 +194,7 @@ def _score_model(
     context_fit = _compute_context_fit(model, context_length_estimate)
     cost_fit = _compute_cost_fit(model, budget_preference)
     speed_fit = _compute_speed_fit(model, speed_preference)
-    quota_health = _compute_quota_health(model)
+    quota_health = _compute_quota_health(model, quota_statuses)
 
     # Historical performance mock (MVP-B)
     historical_performance = 0.5
@@ -242,6 +253,7 @@ def _generate_routing_reason(
     agent_role: Optional[str],
     task_type: str,
     backup_models: List[Model],
+    quota_status: str = "normal",
 ) -> Dict:
     primary = []
     secondary = []
@@ -285,7 +297,7 @@ def _generate_routing_reason(
         primary.append(f"{task_type_names.get(task_type, task_type)} 优先选择 {selected_model.display_name}")
 
     secondary.append(f"上下文窗口 {selected_model.max_context_tokens}，充足")
-    secondary.append(f"额度状态正常")
+    secondary.append(f"额度状态：{quota_status}")
 
     if selected_model.cost_level >= 4:
         tradeoffs.append(f"成本较高（等级 {selected_model.cost_level}）")
@@ -305,10 +317,11 @@ def _build_risk_flags(
     all_scores: List[Dict],
     candidates: List[Model],
     agent_default_model_id: Optional[str] = None,
+    quota_statuses: Optional[Dict[str, str]] = None,
 ) -> List[Dict]:
     flags = []
 
-    quota_status = _get_mock_quota_status(selected_model.id)
+    quota_status = _quota_status(selected_model.id, quota_statuses)
     if quota_status == "warning":
         flags.append({
             "type": "quota_warning",
@@ -398,6 +411,7 @@ def select_model(
     budget_preference: str = "medium",
     speed_preference: str = "balanced",
 ) -> Dict:
+    quota_statuses = _get_quota_statuses(db)
     # 1. Resolve required capabilities
     caps = required_capabilities or _get_required_capabilities(task_type, requires_tool_calling)
     if has_vision_input:
@@ -417,7 +431,7 @@ def select_model(
         model = db.query(Model).filter(Model.id == preferred_model_id, Model.is_enabled == True).first()
         if model:
             # Still check hard constraints
-            quota_status = _get_mock_quota_status(model.id)
+            quota_status = _quota_status(model.id, quota_statuses)
             if quota_status in ("limited", "cooldown"):
                 raise InvalidOverrideError(f"模型 {model.display_name} 当前不可用（额度 {quota_status}）")
             if model.max_context_tokens < context_length_estimate * 1.2:
@@ -430,6 +444,7 @@ def select_model(
                 model, caps, agent_role, context_length_estimate,
                 budget_preference, speed_preference, task_complexity,
                 default_model_id=agent_default_model_id,
+                quota_statuses=quota_statuses,
             )
             return {
                 "selected_model_id": model.id,
@@ -456,7 +471,7 @@ def select_model(
             raise InvalidOverrideError(f"模型 {preferred_model_id} 不存在或未启用")
 
     # 4. Filter candidates
-    candidates = _filter_candidates(db, caps, context_length_estimate)
+    candidates = _filter_candidates(db, caps, context_length_estimate, quota_statuses=quota_statuses)
     if not candidates:
         raise NoEligibleModelError("没有可用的模型，请检查模型配置或额度状态")
 
@@ -467,6 +482,7 @@ def select_model(
             model, caps, agent_role, context_length_estimate,
             budget_preference, speed_preference, task_complexity,
             default_model_id=agent_default_model_id,
+            quota_statuses=quota_statuses,
         )
         scored.append({
             "model": model,
@@ -493,8 +509,9 @@ def select_model(
     routing_reason = _generate_routing_reason(
         selected["model"], selected, agent_role, task_type,
         [s["model"] for s in backups],
+        quota_status=_quota_status(selected["model"].id, quota_statuses),
     )
-    risk_flags = _build_risk_flags(selected["model"], scored, candidates, agent_default_model_id)
+    risk_flags = _build_risk_flags(selected["model"], scored, candidates, agent_default_model_id, quota_statuses)
 
     score_breakdown = []
     for s in scored:
@@ -533,7 +550,7 @@ def override_model(
         raise InvalidOverrideError(f"模型 {selected_model_id} 不存在或未启用")
 
     # Check quota
-    quota_status = _get_mock_quota_status(model.id)
+    quota_status = _quota_status(model.id, _get_quota_statuses(db))
     if quota_status in ("limited", "cooldown"):
         raise InvalidOverrideError(f"模型 {model.display_name} 当前不可用（额度 {quota_status}）")
 

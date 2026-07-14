@@ -29,6 +29,7 @@ class TaskResponse(BaseModel):
     tokens_used: int = 0
     duration_ms: Optional[int] = None
     priority: int = 0
+    flow_position: Optional[int] = None
     created_at: Optional[str] = None
     updated_at: Optional[str] = None
     # Enriched fields

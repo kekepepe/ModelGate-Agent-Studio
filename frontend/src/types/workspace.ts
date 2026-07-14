@@ -23,12 +23,83 @@ export interface WorkspaceTask {
   tokens_used: number;
   duration_ms?: number | null;
   priority: number;
+  flow_position?: number;
   created_at?: string | null;
   updated_at?: string | null;
   agent_name?: string | null;
   agent_role?: string | null;
   model_name?: string | null;
   worker_status?: string | null;
+  handoff?: WorkspaceHandoff | null;
+  handoffs?: WorkspaceHandoff[];
+  model_id?: string | null;
+  quota?: WorkspaceQuota | null;
+  routing_decision?: WorkspaceRoutingDecision | null;
+  context?: string | null;
+  recent_logs?: WorkspaceLog[];
+}
+
+export interface WorkspaceQuota {
+  model_id: string;
+  quota_status: string;
+  usage_percent?: number | null;
+  estimated_remaining?: number | null;
+  total_tokens: number;
+  token_limit?: number | null;
+  request_count: number;
+}
+
+export interface WorkspaceRoutingDecision {
+  selected_model_id?: string;
+  backup_model_ids?: string[];
+  confidence?: number;
+  routing_reason?: {
+    summary?: string;
+    primary_factors?: string[];
+    secondary_factors?: string[];
+    tradeoffs?: string[];
+  };
+  risk_flags?: Array<{ type: string; severity: string; message: string; suggestion?: string }>;
+  score_breakdown?: Array<{
+    model_id: string;
+    model_name: string;
+    total_score: number;
+    dimension_scores: Array<{ dimension: string; score: number; weight: number; weighted_score: number; reason: string }>;
+  }>;
+  is_user_override?: boolean;
+}
+
+export interface WorkspaceLog {
+  id: string;
+  event_type: string;
+  event_status: string;
+  output_summary?: string | null;
+  input_summary?: string | null;
+  error_message?: string | null;
+  quota_status?: string | null;
+  model_id?: string | null;
+  model_name?: string | null;
+  agent_id?: string | null;
+  agent_name?: string | null;
+  created_at?: string | null;
+}
+
+export interface WorkspaceHandoff {
+  id: string;
+  task_id: string;
+  status: string;
+  reason: string;
+  reason_description?: string | null;
+  from_agent_id: string;
+  from_agent_name?: string | null;
+  from_model_id: string;
+  to_agent_id: string;
+  to_agent_name?: string | null;
+  to_model_id: string;
+  result_after_handoff?: string | null;
+  created_at?: string | null;
+  accepted_at?: string | null;
+  completed_at?: string | null;
 }
 
 export interface WorkspaceAgent {
@@ -58,6 +129,7 @@ export interface WorkspaceState {
   tasks: WorkspaceTask[];
   agents: WorkspaceAgent[];
   workers: WorkspaceWorker[];
+  handoffs: WorkspaceHandoff[];
 }
 
 export const GOAL_STATUS_LABELS: Record<string, string> = {

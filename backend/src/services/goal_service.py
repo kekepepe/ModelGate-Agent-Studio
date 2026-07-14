@@ -16,6 +16,16 @@ class GoalValidationError(Exception):
     pass
 
 
+# The MVP has a deliberately explicit serial plan. It gives a newly created
+# Goal a truthful, inspectable collaboration flow without pretending that the
+# Runtime already supports arbitrary DAG scheduling.
+DEFAULT_GOAL_PLAN = (
+    ("planner", "Plan", "明确交付物、约束和执行顺序", 30),
+    ("coder", "Build", "实现主要方案或产出", 20),
+    ("reviewer", "Review", "审查质量、遗漏和风险", 10),
+)
+
+
 def create_goal(db: Session, title: str, description: Optional[str] = None) -> Goal:
     goal = Goal(
         id=str(uuid.uuid4()),
@@ -44,21 +54,37 @@ def start_goal(db: Session, goal_id: str) -> Dict[str, str]:
     goal.status = "planning"
     goal.updated_at = datetime.now(timezone.utc)
 
-    # MVP: Create 1 initial Task assigned to the first available Planner Agent
-    planner = db.query(AgentStation).filter(
-        AgentStation.role == "planner",
-        AgentStation.is_enabled == True,
-    ).first()
-
-    task = Task(
-        id=str(uuid.uuid4()),
-        goal_id=goal.id,
-        title=f"Plan: {goal.title}",
-        description=f"Planner Agent 拆解任务：{goal.title}",
-        status="pending",
-        assigned_agent_id=planner.id if planner else None,
+    enabled_agents = (
+        db.query(AgentStation)
+        .filter(AgentStation.is_enabled == True)
+        .order_by(AgentStation.created_at.asc(), AgentStation.id.asc())
+        .all()
     )
-    db.add(task)
+    agents_by_role = {}
+    for agent in enabled_agents:
+        agents_by_role.setdefault(agent.role, agent)
+
+    planner = agents_by_role.get("planner")
+    if not planner:
+        raise GoalValidationError("No enabled Planner Agent is available; configure an Agent Station before starting a Goal")
+
+    goal_context = goal.description or goal.title
+    for role, action, instruction, priority in DEFAULT_GOAL_PLAN:
+        agent = agents_by_role.get(role)
+        # Planner is required above; optional roles keep minimal deployments
+        # executable while a fully seeded install receives the three-step flow.
+        if not agent:
+            continue
+        task = Task(
+            id=str(uuid.uuid4()),
+            goal_id=goal.id,
+            title=f"{action}: {goal.title}",
+            description=f"{instruction}。Goal: {goal_context}",
+            status="pending",
+            assigned_agent_id=agent.id,
+            priority=priority,
+        )
+        db.add(task)
     db.commit()
     db.refresh(goal)
 

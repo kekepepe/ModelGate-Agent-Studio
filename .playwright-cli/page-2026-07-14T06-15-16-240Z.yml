@@ -1,0 +1,71 @@
+- generic [ref=e3]:
+  - navigation [ref=e4]:
+    - generic [ref=e5]:
+      - link "ModelGate" [ref=e6] [cursor=pointer]:
+        - /url: /
+      - generic [ref=e7]:
+        - link "Dashboard" [ref=e8] [cursor=pointer]:
+          - /url: /dashboard
+        - link "Agent Registry" [ref=e9] [cursor=pointer]:
+          - /url: /agents
+        - link "Model Manager" [ref=e10] [cursor=pointer]:
+          - /url: /models
+        - link "Tools" [ref=e11] [cursor=pointer]:
+          - /url: /tools
+        - link "Logs" [ref=e12] [cursor=pointer]:
+          - /url: /logs
+        - link "Workspace" [ref=e13] [cursor=pointer]:
+          - /url: /workspace
+        - link "Evolution" [ref=e14] [cursor=pointer]:
+          - /url: /evolution
+  - main [ref=e15]:
+    - generic [ref=e16]:
+      - generic [ref=e35]:
+        - generic [ref=e36]:
+          - 'heading "Goal: Create a concise React Todo interface with filtering and tests." [level=1] [ref=e37]'
+          - generic [ref=e38]: 运行中
+        - generic [ref=e39]:
+          - generic [ref=e40]: "进度: 0/1 Tasks"
+          - generic [ref=e41]: "Token: 0"
+      - generic [ref=e17]:
+        - complementary [ref=e18]:
+          - generic [ref=e19]:
+            - heading "当前 Goal" [level=3] [ref=e42]
+            - paragraph [ref=e43]: Create a concise React Todo interface with filtering and tests.
+            - paragraph [ref=e44]: 475208b4-1270-46be-b8d7-b92b6afa5d69
+          - generic [ref=e24]:
+            - heading "任务列表" [level=3] [ref=e25]
+            - 'button "📋 Plan: Create a concise React Todo interface with filtering and tests." [ref=e84]':
+              - generic [ref=e47]: 📋
+              - generic [ref=e48]: "Plan: Create a concise React Todo interface with filtering and tests."
+            - generic [ref=e27]: 1 个 Task · 0 个进行中 · 0 个已完成
+        - main [ref=e28]:
+          - generic [ref=e49]:
+            - generic [ref=e50]:
+              - generic [ref=e51]:
+                - generic [ref=e52]:
+                  - generic [ref=e53]: 总 Task
+                  - generic [ref=e54]: "1"
+                - generic [ref=e55]:
+                  - generic [ref=e56]: 运行中
+                  - generic [ref=e57]: "0"
+                - generic [ref=e58]:
+                  - generic [ref=e59]: 已完成
+                  - generic [ref=e60]: "0"
+                - generic [ref=e61]:
+                  - generic [ref=e62]: 交接中
+                  - generic [ref=e63]: "0"
+              - button "▶ 执行" [ref=e64]
+            - generic [ref=e65]:
+              - generic [ref=e66]:
+                - generic [ref=e67]:
+                  - heading "Collaboration Flow" [level=3] [ref=e68]
+                  - paragraph [ref=e69]: 每张任务卡显示执行者、模型、状态与交接决策。
+                - generic [ref=e70]: 0 次交接
+              - 'button "📋 Plan: Create a concise React Todo interface with filtering and tests. 已分配" [ref=e85] [cursor=pointer]':
+                - generic [ref=e73]:
+                  - generic [ref=e74]: 📋
+                  - generic [ref=e75]:
+                    - paragraph [ref=e77]: "Plan: Create a concise React Todo interface with filtering and tests."
+                    - generic [ref=e78]: 已分配
+      - button "执行日志 · 加载中..." [ref=e80]

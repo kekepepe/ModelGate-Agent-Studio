@@ -176,6 +176,44 @@ class TestE2EQuotaHandoff:
         assert len(handoff_logs) >= 1
 
 
+class TestE2EProviderFailureHandoff:
+    """E2E 3: provider errors produce a resumable Handoff rather than a dead task."""
+
+    def test_provider_error_handoff_can_be_accepted_and_resumed(self, client: TestClient, db_session):
+        from src.models.handoff import HandoffRecord
+        from src.services import router_service
+        from src.services.providers.mock_provider import MockModelProvider
+        from src.services.providers.provider_factory import create_provider, set_provider
+
+        goal, tasks, agents = _seed_e2e_data(db_session)
+        task = [item for item in tasks if item.assigned_agent_id == agents[1].id][0]
+        routing = router_service.select_model(
+            db=db_session, task_id=task.id, task_type="coding", preferred_agent_id=agents[1].id,
+        )
+        assert routing["backup_model_ids"]
+
+        failing_provider = MockModelProvider(default_latency_ms=0)
+        failing_provider.configure_model(routing["selected_model_id"], raise_error="Provider timeout")
+        set_provider(failing_provider)
+        try:
+            failed_run = client.post(f"/api/v1/runtime/execute-step/{task.id}")
+            assert failed_run.status_code == 200
+            assert failed_run.json()["data"]["status"] == "handoff"
+            assert failed_run.json()["data"]["is_handoff"] is True
+
+            handoff = db_session.query(HandoffRecord).filter(HandoffRecord.task_id == task.id).one()
+            assert handoff.reason == "error"
+            accepted = client.post(f"/api/v1/handoffs/{handoff.id}/accept", json={})
+            assert accepted.status_code == 200
+
+            resumed_run = client.post(f"/api/v1/runtime/execute-step/{task.id}")
+            assert resumed_run.status_code == 200, resumed_run.text
+            assert resumed_run.json()["data"]["status"] == "completed"
+            assert resumed_run.json()["data"]["is_handoff"] is False
+        finally:
+            set_provider(create_provider("mock"))
+
+
 class TestE2ESingleStep:
     """E2E 3: execute-step only affects single task."""
 

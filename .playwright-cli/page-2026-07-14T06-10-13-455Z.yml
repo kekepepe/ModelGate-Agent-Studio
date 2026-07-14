@@ -1,0 +1,36 @@
+- generic [ref=f1e3]:
+  - navigation [ref=f1e4]:
+    - generic [ref=f1e5]:
+      - link "ModelGate" [ref=f1e6] [cursor=pointer]:
+        - /url: /
+      - generic [ref=f1e7]:
+        - link "Dashboard" [ref=f1e8] [cursor=pointer]:
+          - /url: /dashboard
+        - link "Agent Registry" [ref=f1e9] [cursor=pointer]:
+          - /url: /agents
+        - link "Model Manager" [ref=f1e10] [cursor=pointer]:
+          - /url: /models
+        - link "Tools" [ref=f1e11] [cursor=pointer]:
+          - /url: /tools
+        - link "Logs" [ref=f1e12] [cursor=pointer]:
+          - /url: /logs
+        - link "Workspace" [ref=f1e13] [cursor=pointer]:
+          - /url: /workspace
+        - link "Evolution" [ref=f1e14] [cursor=pointer]:
+          - /url: /evolution
+  - main [ref=f1e15]:
+    - generic [ref=f1e16]:
+      - generic [ref=f1e17]:
+        - complementary [ref=f1e18]:
+          - generic [ref=f1e19]:
+            - heading "新任务" [level=3] [ref=f1e20]
+            - textbox "描述你的目标..." [disabled] [ref=f1e21]: Create a concise React Todo interface with filtering and tests.
+            - textbox "补充说明（可选）" [disabled] [ref=f1e22]
+            - button "创建中..." [disabled] [ref=f1e34]
+          - generic [ref=f1e24]:
+            - heading "任务列表" [level=3] [ref=f1e25]
+            - paragraph [ref=f1e26]: 暂无任务
+            - generic [ref=f1e27]: 0 个 Task · 0 个进行中 · 0 个已完成
+        - main [ref=f1e28]:
+          - generic [ref=f1e29]: 在左侧输入 Goal 并点击 [开始] 以启动工作区
+      - generic [ref=f1e31]: 启动 Goal 后此处将显示实时执行日志
