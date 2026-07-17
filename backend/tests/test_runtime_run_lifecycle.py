@@ -53,3 +53,24 @@ def test_pipeline_keeps_pause_state_after_current_task_returns(db_session, monke
     assert result["status"] == "paused"
     assert goal.status == "paused"
     assert run.status == "paused"
+
+
+def test_stop_cancels_run_and_unfinished_tasks(db_session):
+    goal = Goal(id=str(uuid.uuid4()), title="Stop me", status="running", execution_mode="mock")
+    pending = Task(id=str(uuid.uuid4()), goal_id=goal.id, title="Pending", status="pending")
+    completed = Task(id=str(uuid.uuid4()), goal_id=goal.id, title="Done", status="completed")
+    db_session.add_all([goal, pending, completed])
+    db_session.commit()
+    run = runtime_service._get_or_start_run(db_session, goal)
+
+    result = runtime_service.stop_goal_run(db_session, goal.id)
+    db_session.refresh(goal)
+    db_session.refresh(run)
+    db_session.refresh(pending)
+    db_session.refresh(completed)
+
+    assert result["status"] == "cancelled"
+    assert goal.status == "cancelled"
+    assert run.status == "cancelled"
+    assert pending.status == "cancelled"
+    assert completed.status == "completed"

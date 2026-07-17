@@ -50,6 +50,16 @@ body {
   flex-direction: column;
 }
 
+.pixel-office-room {
+  background-color: #dfe7ef;
+  background-image:
+    linear-gradient(rgba(148, 163, 184, 0.2) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(148, 163, 184, 0.2) 1px, transparent 1px),
+    linear-gradient(to bottom, #eef3f7 0, #eef3f7 34%, #dbe4ec 34%, #dbe4ec 100%);
+  background-size: 32px 32px, 32px 32px, 100% 100%;
+  image-rendering: pixelated;
+}
+
 @keyframes newLogHighlight {
   0% {
     background-color: var(--color-lavender-100);

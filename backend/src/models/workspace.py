@@ -12,6 +12,7 @@ class Goal(Base):
     id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
     title = Column(String(255), nullable=False)
     description = Column(Text, nullable=True)
+    team_preset = Column(String(100), nullable=True, index=True)
     status = Column(String(50), nullable=False, default="idle", index=True)
     execution_mode = Column(String(20), nullable=False, default="live")
     workspace_root = Column(Text, nullable=True)
@@ -28,6 +29,7 @@ class Goal(Base):
             "id": self.id,
             "title": self.title,
             "description": self.description,
+            "team_preset": self.team_preset,
             "status": self.status,
             "execution_mode": self.execution_mode,
             "workspace_root": self.workspace_root,

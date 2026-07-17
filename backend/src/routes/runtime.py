@@ -109,6 +109,16 @@ def resume_goal(goal_id: str, db: Session = Depends(get_db)):
         _error("BAD_REQUEST", str(e), 400)
 
 
+@router.post("/runtime/stop/{goal_id}")
+def stop_goal(goal_id: str, db: Session = Depends(get_db)):
+    try:
+        return _success(runtime_service.stop_goal_run(db, goal_id))
+    except goal_service.GoalNotFoundError as e:
+        _error("NOT_FOUND", str(e), 404)
+    except runtime_service.GoalNotReadyError as e:
+        _error("BAD_REQUEST", str(e), 400)
+
+
 @router.get("/runtime/status/{goal_id}")
 def get_runtime_status(goal_id: str, db: Session = Depends(get_db)):
     try:
@@ -163,7 +173,7 @@ def stream_runtime_events(
                 }
                 yield "event: runtime\ndata: " + json.dumps(payload, ensure_ascii=False) + "\n\n"
             goal = db.query(Goal).filter(Goal.id == goal_id).first()
-            if not goal or goal.status in {"completed", "failed", "paused"}:
+            if not goal or goal.status in {"completed", "failed", "paused", "cancelled"}:
                 yield "event: end\ndata: {}\n\n"
                 break
             yield ": keepalive\n\n"

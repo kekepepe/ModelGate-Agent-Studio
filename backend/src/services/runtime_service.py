@@ -71,6 +71,7 @@ def execute_goal_pipeline(db: Session, goal_id: str) -> Dict[str, Any]:
     tasks_handoff = 0
     execution_log: List[Dict[str, Any]] = []
     paused = False
+    cancelled = False
     resource_limited = False
 
     if goal.status == "planning":
@@ -82,6 +83,9 @@ def execute_goal_pipeline(db: Session, goal_id: str) -> Dict[str, Any]:
     # replaces the former hard-coded Planner -> Coder -> Reviewer chain.
     while True:
         db.refresh(goal)
+        if goal.status == "cancelled":
+            cancelled = True
+            break
         if goal.status == "paused":
             paused = True
             break
@@ -129,7 +133,11 @@ def execute_goal_pipeline(db: Session, goal_id: str) -> Dict[str, Any]:
 
     # Phase 3: Determine initial goal status
     db.refresh(goal)
-    if paused:
+    if cancelled:
+        # A user stop is terminal. Never let the pipeline's normal completion
+        # bookkeeping overwrite an explicitly cancelled run.
+        goal.status = "cancelled"
+    elif paused:
         # The request that paused a run has already persisted the Goal and Run
         # states. Do not overwrite it with a terminal status after the current
         # tool/model step has safely returned.
@@ -254,6 +262,41 @@ def resume_goal_run(db: Session, goal_id: str) -> Dict[str, Any]:
     log_service.create_log(db, {"goal_id": goal.id, "event_type": "run.resumed", "event_status": "completed", "output_summary": f"Run {run.id} resumed"})
     db.commit()
     return {"goal_id": goal.id, "run_id": run.id, "status": "running"}
+
+
+def stop_goal_run(db: Session, goal_id: str) -> Dict[str, Any]:
+    """Cancel a Goal and every unfinished unit of work in its active run."""
+    goal = goal_service.get_goal(db, goal_id)
+    if goal.status in {"completed", "failed", "cancelled"}:
+        raise GoalNotReadyError(f"Goal cannot be stopped from status: {goal.status}")
+
+    run = db.query(RuntimeRun).filter(RuntimeRun.id == goal.run_id).first() if goal.run_id else None
+    now = datetime.now(timezone.utc)
+    goal.status = "cancelled"
+    goal.updated_at = now
+    if run:
+        run.status = "cancelled"
+        run.ended_at = now
+
+    terminal_task_statuses = {"completed", "completed_verified", "completed_unverified", "failed", "cancelled"}
+    for task in db.query(Task).filter(Task.goal_id == goal.id).all():
+        if task.status not in terminal_task_statuses:
+            task.status = "cancelled"
+            task.blocked_reason = "Run stopped by user"
+            task.updated_at = now
+    db.query(WorkerSession).filter(
+        WorkerSession.goal_id == goal.id,
+        WorkerSession.status.notin_(["completed", "failed", "cancelled"]),
+    ).update({"status": "cancelled"}, synchronize_session=False)
+    db.commit()
+    log_service.create_log(db, {
+        "goal_id": goal.id,
+        "event_type": "run.cancelled",
+        "event_status": "cancelled",
+        "output_summary": f"Run {run.id if run else 'not-started'} stopped by user",
+    })
+    db.commit()
+    return {"goal_id": goal.id, "run_id": run.id if run else None, "status": "cancelled"}
 
 
 def _execute_parallel_tasks(db: Session, task_ids: List[str]) -> List[tuple[str, Dict[str, Any]]]:

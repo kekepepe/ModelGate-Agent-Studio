@@ -29,11 +29,13 @@ DEFAULT_GOAL_PLAN = (
 
 def create_goal(db: Session, title: str, description: Optional[str] = None, execution_mode: Optional[str] = None,
                 workspace_root: Optional[str] = None, budget_tokens: int = 100000,
-                budget_cost_usd: Optional[float] = None, max_duration_seconds: int = 3600) -> Goal:
+                budget_cost_usd: Optional[float] = None, max_duration_seconds: int = 3600,
+                team_preset: Optional[str] = None) -> Goal:
     goal = Goal(
         id=str(uuid.uuid4()),
         title=title,
         description=description,
+        team_preset=team_preset,
         status="idle",
         execution_mode=execution_mode or settings.execution_mode,
         workspace_root=workspace_root or settings.workspace_root,

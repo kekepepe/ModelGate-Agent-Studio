@@ -6,6 +6,7 @@ from pydantic import BaseModel, Field
 class GoalCreate(BaseModel):
     title: str = Field(..., min_length=1, max_length=255)
     description: Optional[str] = None
+    team_preset: Optional[str] = Field(None, pattern="^(code-delivery|deep-research|document-production|custom-team)$")
     execution_mode: Optional[str] = Field(None, pattern="^(live|sandbox|dry_run|mock)$")
     workspace_root: Optional[str] = None
     budget_tokens: int = Field(100000, gt=0, le=10_000_000)
@@ -17,6 +18,7 @@ class GoalResponse(BaseModel):
     id: str
     title: str
     description: Optional[str] = None
+    team_preset: Optional[str] = None
     status: str
     execution_mode: str = "live"
     workspace_root: Optional[str] = None

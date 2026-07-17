@@ -25,6 +25,7 @@ def create_goal(data: GoalCreate, db: Session = Depends(get_db)):
         goal = goal_service.create_goal(
             db, data.title, data.description, data.execution_mode, data.workspace_root,
             data.budget_tokens, data.budget_cost_usd, data.max_duration_seconds,
+            data.team_preset,
         )
         return _success({"goal_id": goal.id, "status": goal.status}, 201)
     except Exception as e:

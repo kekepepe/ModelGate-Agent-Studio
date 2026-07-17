@@ -21,6 +21,7 @@ def ensure_runtime_v2_schema() -> None:
         "goals": {
             "execution_mode": "VARCHAR(20) NOT NULL DEFAULT 'live'", "workspace_root": "TEXT",
             "run_id": "VARCHAR(36)", "final_verification_status": "VARCHAR(50)",
+            "team_preset": "VARCHAR(100)",
             "budget_tokens": "INTEGER NOT NULL DEFAULT 100000", "budget_cost_usd": "FLOAT",
             "max_duration_seconds": "INTEGER NOT NULL DEFAULT 3600",
         },

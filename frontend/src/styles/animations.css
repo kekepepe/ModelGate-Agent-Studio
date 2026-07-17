@@ -102,6 +102,11 @@
   }
 }
 
+@keyframes pixel-work {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-2px); }
+}
+
 .animate-breathe {
   animation: breathe 2s infinite;
 }
@@ -136,6 +141,21 @@
 
 .animate-border-flash {
   animation: border-flash 1s ease-out forwards;
+}
+
+.animate-pixel-work {
+  animation: pixel-work 1.2s steps(2, end) infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .animate-breathe,
+  .animate-breathe-purple,
+  .animate-breathe-dot,
+  .animate-dot-pulse,
+  .animate-pixel-work,
+  .animate-rotate-border {
+    animation: none;
+  }
 }
 
 .task-card-enter {

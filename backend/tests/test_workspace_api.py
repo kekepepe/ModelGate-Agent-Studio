@@ -23,6 +23,14 @@ class TestCreateGoal:
         assert resp.status_code == 201
         assert resp.json()["data"]["status"] == "idle"
 
+    def test_create_goal_accepts_team_preset(self, client: TestClient, db_session):
+        from src.models.workspace import Goal
+
+        response = client.post("/api/v1/goals", json={"title": "Ship feature", "team_preset": "code-delivery"})
+        assert response.status_code == 201
+        goal = db_session.query(Goal).filter(Goal.id == response.json()["data"]["goal_id"]).one()
+        assert goal.team_preset == "code-delivery"
+
 
 class TestStartGoal:
     def test_start_goal_success(self, client: TestClient, db_session):
@@ -71,6 +79,30 @@ class TestStartGoal:
         tasks = db_session.query(Task).filter(Task.goal_id == goal_id).order_by(Task.priority.desc()).all()
         assert [task.title.split(":", 1)[0] for task in tasks] == ["Plan", "Build", "Review"]
         assert [task.assigned_agent_id for task in tasks] == [agent.id for agent in agents]
+
+    @pytest.mark.parametrize(
+        ("preset", "roles"),
+        [
+            ("code-delivery", ["planner", "coder", "reviewer"]),
+            ("deep-research", ["planner", "research", "summarizer", "reviewer"]),
+            ("document-production", ["planner", "research", "summarizer", "reviewer"]),
+        ],
+    )
+    def test_team_preset_generates_matching_agent_flow(self, client: TestClient, db_session, preset, roles):
+        from src.models.agent import AgentStation
+        from src.models.workspace import Task
+        import uuid
+
+        agents = [AgentStation(id=str(uuid.uuid4()), name=role.title(), role=role, default_model_id=f"{role}-model", is_enabled=True) for role in roles]
+        db_session.add_all(agents)
+        db_session.commit()
+
+        goal_id = client.post("/api/v1/goals", json={"title": "Preset goal", "team_preset": preset}).json()["data"]["goal_id"]
+        response = client.post(f"/api/v1/goals/{goal_id}/start")
+        assert response.status_code == 200, response.text
+        tasks = db_session.query(Task).filter(Task.goal_id == goal_id).order_by(Task.priority.desc()).all()
+        assigned_roles = [db_session.query(AgentStation).filter(AgentStation.id == task.assigned_agent_id).one().role for task in tasks]
+        assert assigned_roles == roles
 
     def test_generated_serial_plan_executes_to_completion(self, client: TestClient, db_session):
         """The visible Workspace flow is backed by a runnable Runtime sequence."""

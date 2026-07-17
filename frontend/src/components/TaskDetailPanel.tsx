@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Copy, X, Wrench } from 'lucide-react';
+import { Copy, GitBranch, Pause, RotateCcw, X, Wrench } from 'lucide-react';
 import type { WorkspaceHandoff, WorkspaceTask } from '../types/workspace';
 import { TASK_STATUS_LABELS } from '../types/workspace';
 import { useToolCalls } from '../hooks/useTools';
@@ -10,22 +10,29 @@ interface TaskDetailPanelProps {
   onClose: () => void;
   handoffs?: WorkspaceHandoff[];
   onOpenHandoff?: (handoffId: string) => void;
+  variant?: 'panel' | 'modal';
+  onPause?: () => void;
+  onRetry?: () => void;
+  onHandoff?: () => void;
 }
 
-type TabKey = 'overview' | 'output' | 'router' | 'context' | 'handoff' | 'logs';
+type TabKey = 'overview' | 'task' | 'context' | 'tools' | 'history';
 
-export default function TaskDetailPanel({ task, isLoading, onClose, handoffs = [], onOpenHandoff }: TaskDetailPanelProps) {
+export default function TaskDetailPanel({ task, isLoading, onClose, handoffs = [], onOpenHandoff, variant = 'panel', onPause, onRetry, onHandoff }: TaskDetailPanelProps) {
   const [activeTab, setActiveTab] = useState<TabKey>('overview');
   const [copied, setCopied] = useState(false);
   const { data: toolCallsData } = useToolCalls(
     task ? { task_id: task.id } : {}
   );
+  const taskId = task?.id;
+  const taskStatus = task?.status;
+  const taskOutput = task?.output;
 
   useEffect(() => {
-    if (task) {
-      setActiveTab(['completed', 'completed_verified', 'completed_unverified'].includes(task.status) && task.output ? 'output' : 'overview');
+    if (taskId) {
+      setActiveTab(['completed', 'completed_verified', 'completed_unverified'].includes(taskStatus || '') && taskOutput ? 'task' : 'overview');
     }
-  }, [task?.id]);
+  }, [taskId, taskOutput, taskStatus]);
 
   if (!task) return null;
 
@@ -40,20 +47,22 @@ export default function TaskDetailPanel({ task, isLoading, onClose, handoffs = [
 
   const tabs: { key: TabKey; label: string }[] = [
     { key: 'overview', label: 'Overview' },
-    { key: 'output', label: '输出' },
-    { key: 'router', label: 'Router' },
+    { key: 'task', label: 'Task' },
     { key: 'context', label: 'Context' },
-    { key: 'handoff', label: 'Handoff' },
-    { key: 'logs', label: 'Logs' },
+    { key: 'tools', label: 'Tools' },
+    { key: 'history', label: 'History' },
   ];
 
   return (
-    <aside className="h-full bg-white border-l border-stone-200 flex flex-col">
-      <div className="px-4 py-3 border-b border-stone-200 flex items-center justify-between">
+    <aside className={`h-full bg-white flex flex-col ${variant === 'panel' ? 'border-l border-stone-200' : ''}`}>
+      <div className="px-4 py-3 border-b border-stone-200 flex items-center justify-between gap-3">
         <h2 className="text-sm font-semibold text-stone-800 truncate">{task.title}</h2>
-        <button onClick={onClose} className="text-stone-400 hover:text-stone-700">
-          <X size={18} />
-        </button>
+        <div className="flex shrink-0 items-center gap-1.5">
+          {onPause && <HeaderAction label="Pause run" onClick={onPause}><Pause size={12} /></HeaderAction>}
+          {onRetry && <HeaderAction label="Retry" onClick={onRetry}><RotateCcw size={12} /></HeaderAction>}
+          {onHandoff && <HeaderAction label="Handoff" onClick={onHandoff} accent><GitBranch size={12} /></HeaderAction>}
+          <button aria-label="关闭详情" onClick={onClose} className="rounded p-1.5 text-stone-400 hover:bg-stone-100 hover:text-stone-700"><X size={18} /></button>
+        </div>
       </div>
 
       <div className="flex border-b border-stone-200">
@@ -180,7 +189,7 @@ export default function TaskDetailPanel({ task, isLoading, onClose, handoffs = [
           </div>
         )}
 
-        {activeTab === 'output' && (
+        {activeTab === 'task' && (
           <div className="space-y-3">
             {task.description && (
               <div>
@@ -205,37 +214,32 @@ export default function TaskDetailPanel({ task, isLoading, onClose, handoffs = [
               <p className="text-sm text-stone-400">尚未产出输出</p>
             )}
 
-            {/* Tool Call Records */}
-            {toolCalls.length > 0 && (
-              <div>
-                <h4 className="text-xs font-semibold text-stone-400 mb-2 uppercase flex items-center gap-1">
-                  <Wrench size={12} /> 工具调用记录 ({toolCalls.length})
-                </h4>
-                <div className="space-y-2">
-                  {toolCalls.map((tc) => (
-                    <div key={tc.id} className="bg-stone-50 border border-stone-200 rounded-lg p-2 text-sm">
-                      <div className="flex items-center justify-between mb-1">
-                        <span className="font-mono text-xs text-stone-700">{tc.tool_name}</span>
-                        <span className={`text-xs ${tc.status === 'completed' ? 'text-green-600' : 'text-red-600'}`}>
-                          {tc.status === 'completed' ? '✅' : '❌'} {tc.latency_ms}ms
-                        </span>
-                      </div>
-                      <p className="text-xs text-stone-500 truncate">
-                        输入: {JSON.stringify(tc.tool_input).substring(0, 80)}
-                      </p>
-                      {tc.tool_output && (
-                        <p className="text-xs text-stone-600 mt-1 line-clamp-2">
-                          {tc.tool_output.substring(0, 200)}
-                        </p>
-                      )}
-                      {tc.error_message && (
-                        <p className="text-xs text-red-600 mt-1">{tc.error_message}</p>
-                      )}
+          </div>
+        )}
+
+        {activeTab === 'tools' && (
+          <div className="space-y-3">
+            <div className="rounded-lg border border-stone-200 bg-stone-50 p-3">
+              <h4 className="flex items-center gap-1 text-xs font-semibold uppercase text-stone-500"><Wrench size={12} /> Tool access</h4>
+              <p className="mt-1 text-xs leading-5 text-stone-500">仅展示 Runtime 已记录的真实工具调用；未调用的工具不会伪装为正在执行。</p>
+            </div>
+            {toolCalls.length > 0 ? (
+              <div className="space-y-2">
+                {toolCalls.map((tc) => (
+                  <div key={tc.id} className="rounded-lg border border-stone-200 bg-white p-3 text-sm">
+                    <div className="mb-1 flex items-center justify-between">
+                      <span className="font-mono text-xs text-stone-700">{tc.tool_name}</span>
+                      <span className={`text-xs ${tc.status === 'completed' ? 'text-green-600' : 'text-red-600'}`}>
+                        {tc.status === 'completed' ? 'Completed' : tc.status} · {tc.latency_ms}ms
+                      </span>
                     </div>
-                  ))}
-                </div>
+                    <p className="truncate text-xs text-stone-500">输入: {JSON.stringify(tc.tool_input).substring(0, 120)}</p>
+                    {tc.tool_output && <p className="mt-1 line-clamp-3 text-xs text-stone-600">{tc.tool_output.substring(0, 300)}</p>}
+                    {tc.error_message && <p className="mt-1 text-xs text-red-600">{tc.error_message}</p>}
+                  </div>
+                ))}
               </div>
-            )}
+            ) : <p className="text-sm text-stone-400">当前 Task 尚无工具调用记录。</p>}
           </div>
         )}
 
@@ -250,7 +254,7 @@ export default function TaskDetailPanel({ task, isLoading, onClose, handoffs = [
           )
         )}
 
-        {activeTab === 'router' && (
+        {activeTab === 'history' && (
           task.routing_decision ? (
             <div className="space-y-4">
               <section>
@@ -279,7 +283,7 @@ export default function TaskDetailPanel({ task, isLoading, onClose, handoffs = [
           )
         )}
 
-        {activeTab === 'handoff' && (
+        {activeTab === 'history' && (
           handoffs.length > 0 ? (
             <div className="space-y-3">
               <p className="text-xs text-stone-400">交接按发生顺序保留在当前任务中。</p>
@@ -305,7 +309,7 @@ export default function TaskDetailPanel({ task, isLoading, onClose, handoffs = [
           )
         )}
 
-        {activeTab === 'logs' && (
+        {activeTab === 'history' && (
           task.recent_logs && task.recent_logs.length > 0 ? (
             <div className="space-y-2">
               <p className="text-xs text-stone-400">展示当前 Task 最近 10 条运行事件。</p>
@@ -326,6 +330,10 @@ export default function TaskDetailPanel({ task, isLoading, onClose, handoffs = [
       </div>
     </aside>
   );
+}
+
+function HeaderAction({ label, onClick, children, accent = false }: { label: string; onClick: () => void; children: React.ReactNode; accent?: boolean }) {
+  return <button type="button" onClick={onClick} className={`inline-flex items-center gap-1 rounded-md border px-2 py-1.5 text-[11px] font-medium ${accent ? 'border-purple-200 text-purple-700 hover:bg-purple-50' : 'border-stone-200 text-stone-600 hover:bg-stone-50'}`}>{children}{label}</button>;
 }
 
 function formatDuration(ms: number): string {

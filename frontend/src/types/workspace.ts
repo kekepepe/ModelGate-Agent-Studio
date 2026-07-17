@@ -1,11 +1,12 @@
-export type GoalStatus = 'idle' | 'planning' | 'running' | 'paused' | 'waiting' | 'handoff' | 'reviewing' | 'completed' | 'failed';
+export type GoalStatus = 'idle' | 'planning' | 'running' | 'paused' | 'waiting' | 'handoff' | 'reviewing' | 'completed' | 'failed' | 'cancelled';
 export type TaskStatus = 'pending' | 'ready' | 'assigned' | 'running' | 'waiting_tool' | 'waiting_approval' | 'verifying' | 'revision_required' | 'blocked' | 'completed' | 'completed_verified' | 'completed_unverified' | 'failed' | 'handoff' | 'cancelled';
-export type WorkerStatus = 'idle' | 'running' | 'handoff_required' | 'completed' | 'failed';
+export type WorkerStatus = 'idle' | 'running' | 'handoff_required' | 'completed' | 'failed' | 'cancelled';
 
 export interface Goal {
   id: string;
   title: string;
   description?: string | null;
+  team_preset?: string | null;
   status: GoalStatus;
   execution_mode?: 'live' | 'sandbox' | 'dry_run' | 'mock';
   workspace_root?: string | null;
@@ -171,6 +172,7 @@ export const GOAL_STATUS_LABELS: Record<string, string> = {
   revision_required: '需要修订',
   blocked: '已阻塞',
   failed: '失败',
+  cancelled: '已停止',
 };
 
 export const GOAL_STATUS_COLORS: Record<string, string> = {
@@ -183,6 +185,7 @@ export const GOAL_STATUS_COLORS: Record<string, string> = {
   reviewing: 'bg-orange-100 text-orange-700 border-orange-200',
   completed: 'bg-green-100 text-green-700 border-green-200',
   failed: 'bg-red-100 text-red-700 border-red-200',
+  cancelled: 'bg-stone-100 text-stone-600 border-stone-300',
 };
 
 export const TASK_STATUS_LABELS: Record<string, string> = {

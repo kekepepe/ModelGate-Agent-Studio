@@ -53,11 +53,11 @@ describe('TaskDetailPanel', () => {
     expect(screen.getByText('1,500')).toBeInTheDocument()
   })
 
-  it('switches to output tab and shows output', () => {
+  it('switches to task tab and shows output', () => {
     renderWithProviders(
       <TaskDetailPanel task={mockTask} onClose={vi.fn()} />
     )
-    fireEvent.click(screen.getByText('输出'))
+    fireEvent.click(screen.getByText('Task'))
     expect(screen.getByText('Create a login form')).toBeInTheDocument()
     expect(screen.getByText(/import React/)).toBeInTheDocument()
   })
@@ -70,7 +70,7 @@ describe('TaskDetailPanel', () => {
     expect(screen.getByText('当前 Task 尚未建立可继承上下文。')).toBeInTheDocument()
   })
 
-  it('shows the recorded router decision and recent logs', () => {
+  it('shows the recorded router decision and recent logs in history', () => {
     renderWithProviders(
       <TaskDetailPanel
         task={{
@@ -87,10 +87,9 @@ describe('TaskDetailPanel', () => {
         onClose={vi.fn()}
       />
     )
-    fireEvent.click(screen.getByText('Router'))
+    fireEvent.click(screen.getByText('History'))
     expect(screen.getByText('GPT-4o matches the coding task.')).toBeInTheDocument()
     expect(screen.getByText(/Code capability/)).toBeInTheDocument()
-    fireEvent.click(screen.getByText('Logs'))
     expect(screen.getByText('Model completed a step.')).toBeInTheDocument()
     fireEvent.click(screen.getByText('Context'))
     expect(screen.getByText(/"handoff": "context"/)).toBeInTheDocument()
@@ -111,7 +110,7 @@ describe('TaskDetailPanel', () => {
         }]}
       />
     )
-    fireEvent.click(screen.getByText('Handoff'))
+    fireEvent.click(screen.getByText('History'))
     expect(screen.getByText('Coder #1 → Reviewer #1')).toBeInTheDocument()
     fireEvent.click(screen.getByText('Need a review'))
     expect(onOpenHandoff).toHaveBeenCalledWith('h-1')

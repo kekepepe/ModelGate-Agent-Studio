@@ -14,6 +14,7 @@ interface FinalOutputPanelProps {
   tasksCompleted: number;
   tasksFailed: number;
   tasksHandoff: number;
+  tasksTotal?: number;
   totalTokens: number;
   logCount: number;
   finalSummary?: FinalSummary | null;
@@ -27,6 +28,7 @@ export default function FinalOutputPanel({
   tasksCompleted,
   tasksFailed,
   tasksHandoff,
+  tasksTotal,
   totalTokens,
   logCount,
   finalSummary,
@@ -43,15 +45,17 @@ export default function FinalOutputPanel({
   };
 
   const StatusIcon = status === 'completed' ? CheckCircle
-    : status === 'failed' ? XCircle
+    : status === 'failed' || status === 'cancelled' ? XCircle
     : AlertTriangle;
 
   const statusColor = status === 'completed' ? 'text-green-600'
     : status === 'failed' ? 'text-red-600'
+    : status === 'cancelled' ? 'text-stone-500'
     : 'text-amber-600';
 
   const bgColor = status === 'completed' ? 'bg-green-50 border-green-200'
     : status === 'failed' ? 'bg-red-50 border-red-200'
+    : status === 'cancelled' ? 'bg-stone-100 border-stone-300'
     : 'bg-amber-50 border-amber-200';
 
   return (
@@ -59,7 +63,7 @@ export default function FinalOutputPanel({
       <div className="flex items-center gap-2 mb-3">
         <StatusIcon size={18} className={statusColor} />
         <h3 className="text-sm font-semibold text-stone-800">
-          {status === 'completed' ? '执行完成，交付内容如下' : status === 'failed' ? '执行失败，可查看已产出内容' : '任务执行中'}
+          {status === 'completed' ? '执行完成，交付内容如下' : status === 'failed' ? '执行失败，可查看已产出内容' : status === 'cancelled' ? '运行已停止，保留当前状态与未完成项' : '任务执行中'}
         </h3>
       </div>
 
@@ -67,7 +71,7 @@ export default function FinalOutputPanel({
         <div className="bg-white/60 rounded-lg p-2 text-center">
           <div className="text-stone-400">Tasks</div>
           <div className="font-semibold text-stone-800">
-            {tasksCompleted}/{tasksCompleted + tasksFailed + tasksHandoff}
+            {tasksCompleted}/{tasksTotal ?? tasksCompleted + tasksFailed + tasksHandoff}
           </div>
         </div>
         <div className="bg-white/60 rounded-lg p-2 text-center">
@@ -113,7 +117,7 @@ export default function FinalOutputPanel({
               </button>
             ))}
           </div>
-          <p className="mt-2 text-[11px] text-stone-400">点击任一项可在右侧查看和复制完整内容。</p>
+          <p className="mt-2 text-[11px] text-stone-400">点击任一项可在 Agent Detail Modal 中查看和复制完整内容。</p>
         </section>
       )}
 

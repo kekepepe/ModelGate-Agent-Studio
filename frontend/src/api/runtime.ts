@@ -52,3 +52,9 @@ export async function resumeGoal(goalId: string): Promise<{ goal_id: string; run
   if (!resp.data.success || !resp.data.data) throw new Error(resp.data.error?.message || '恢复失败');
   return resp.data.data;
 }
+
+export async function stopGoal(goalId: string): Promise<{ goal_id: string; run_id?: string | null; status: string }> {
+  const resp = await client.post<ApiResponse<{ goal_id: string; run_id?: string | null; status: string }>>(`/runtime/stop/${goalId}`);
+  if (!resp.data.success || !resp.data.data) throw new Error(resp.data.error?.message || '停止失败');
+  return resp.data.data;
+}

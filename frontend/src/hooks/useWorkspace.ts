@@ -1,7 +1,7 @@
 import { useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { createGoal, getTask, getWorkspaceState, startGoal } from '../api/workspace';
-import { executeStep as apiExecuteStep, getRuntimeStatus, pauseGoal as apiPauseGoal, resumeGoal as apiResumeGoal, startGoalExecution } from '../api/runtime';
+import { createGoal, getTask, getWorkspaceState, retryTask as apiRetryTask, startGoal } from '../api/workspace';
+import { executeStep as apiExecuteStep, getRuntimeStatus, pauseGoal as apiPauseGoal, resumeGoal as apiResumeGoal, startGoalExecution, stopGoal as apiStopGoal } from '../api/runtime';
 
 const WORKSPACE_QUERY_KEY = 'workspace-state';
 const TASK_DETAIL_KEY = 'task-detail';
@@ -28,10 +28,10 @@ export function useTaskDetail(taskId: string | null) {
 
 export function useCreateGoal() {
   return useMutation({
-    mutationFn: ({ title, description, executionMode, budgetTokens, budgetCostUsd, maxDurationSeconds }: {
+    mutationFn: ({ title, description, executionMode, budgetTokens, budgetCostUsd, maxDurationSeconds, teamPreset }: {
       title: string; description?: string; executionMode?: 'live' | 'sandbox' | 'dry_run' | 'mock';
-      budgetTokens?: number; budgetCostUsd?: number; maxDurationSeconds?: number;
-    }) => createGoal(title, description, executionMode, budgetTokens, budgetCostUsd, maxDurationSeconds),
+      budgetTokens?: number; budgetCostUsd?: number; maxDurationSeconds?: number; teamPreset?: string;
+    }) => createGoal(title, description, executionMode, budgetTokens, budgetCostUsd, maxDurationSeconds, teamPreset),
   });
 }
 
@@ -105,5 +105,27 @@ export function useResumeGoal() {
   return useMutation({
     mutationFn: apiResumeGoal,
     onSuccess: (_, goalId) => queryClient.invalidateQueries({ queryKey: [WORKSPACE_QUERY_KEY, goalId] }),
+  });
+}
+
+export function useStopGoal() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: apiStopGoal,
+    onSuccess: (_, goalId) => {
+      queryClient.invalidateQueries({ queryKey: [WORKSPACE_QUERY_KEY, goalId] });
+      queryClient.invalidateQueries({ queryKey: [RUNTIME_STATUS_KEY, goalId] });
+    },
+  });
+}
+
+export function useRetryTask() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: apiRetryTask,
+    onSuccess: (task) => {
+      queryClient.invalidateQueries({ queryKey: [TASK_DETAIL_KEY, task.id] });
+      queryClient.invalidateQueries({ queryKey: [WORKSPACE_QUERY_KEY, task.goal_id] });
+    },
   });
 }
