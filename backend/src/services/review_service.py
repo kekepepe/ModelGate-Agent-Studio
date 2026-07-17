@@ -19,6 +19,7 @@ from src.models.agent import AgentStation
 from src.models.handoff import ExecutionLog
 from src.models.supervisor import SupervisorReview
 from src.models.workspace import Goal, Task
+from src.models.model import Model
 from src.services import log_service
 from src.services.providers import get_provider
 from src.services.providers.base import ModelRequest
@@ -41,7 +42,7 @@ def generate_review(db: Session, goal_id: str, run_id: Optional[str] = None) -> 
         raise ReviewError(f"Goal '{goal_id}' not found")
 
     tasks = db.query(Task).filter(Task.goal_id == goal_id).all()
-    completed = [t for t in tasks if t.status == "completed"]
+    completed = [t for t in tasks if t.status in ("completed", "completed_verified", "completed_unverified")]
     failed = [t for t in tasks if t.status == "failed"]
 
     # Find a supervisor or reviewer agent, or fall back to planner
@@ -85,15 +86,17 @@ def generate_review(db: Session, goal_id: str, run_id: Optional[str] = None) -> 
 
     try:
         import asyncio
-        provider = get_provider()
         model_id = supervisor.default_model_id if supervisor else "model-gpt-4-turbo"
+        model = db.query(Model).filter(Model.id == model_id).first()
+        provider = get_provider(model=model, execution_mode=goal.execution_mode)
         req = ModelRequest(
-            provider="mock",
+            provider=model.provider if model else "unknown",
             model=model_id,
             messages=[
                 {"role": "system", "content": "You are a Supervisor Agent reviewing task execution results."},
                 {"role": "user", "content": review_prompt},
             ],
+            metadata={"provider_model_name": model.model_name if model else model_id},
         )
         loop = asyncio.new_event_loop()
         response = loop.run_until_complete(provider.generate(req))
@@ -113,13 +116,15 @@ def generate_review(db: Session, goal_id: str, run_id: Optional[str] = None) -> 
         response_latency = response.latency_ms
 
     # Parse structured result from response
-    all_completed = len(failed) == 0 and len(completed) > 0
+    verification_failures = [task for task in tasks if task.task_type in {"coding", "verification"} and task.status != "completed_verified"]
+    all_completed = len(failed) == 0 and len(completed) > 0 and not verification_failures
     has_errors = len(errors) > 0 or len(failed) > 0
     review_passed = all_completed and not has_errors
 
     # Extract issues from response
     issues = _extract_issues(response_content, errors, failed, handoffs)
     suggested = [] if review_passed else _build_suggested_tasks(response_content, goal, tasks)
+    created_replans = _create_replan_tasks(db, goal, verification_failures, response_content)
 
     # Write review
     review = SupervisorReview(
@@ -148,7 +153,7 @@ def generate_review(db: Session, goal_id: str, run_id: Optional[str] = None) -> 
         "metadata": {
             "passed": review_passed,
             "issues_count": len(issues),
-            "suggested_tasks": len(suggested),
+            "suggested_tasks": len(suggested), "created_replans": len(created_replans),
             "completed_count": len(completed),
             "failed_count": len(failed),
             "latency_ms": response_latency,
@@ -160,6 +165,10 @@ def generate_review(db: Session, goal_id: str, run_id: Optional[str] = None) -> 
     # Update goal status based on review
     if review_passed:
         goal.status = "completed"
+    elif created_replans:
+        # The new tasks are runnable on the next Runtime invocation; keep the
+        # Workspace action enabled instead of leaving a dead review state.
+        goal.status = "running"
     elif suggested:
         goal.status = "reviewing"
     else:
@@ -168,6 +177,31 @@ def generate_review(db: Session, goal_id: str, run_id: Optional[str] = None) -> 
     db.commit()
 
     return review.to_dict()
+
+
+def _create_replan_tasks(db: Session, goal: Goal, failed_tasks: List[Task], review_text: str) -> List[Task]:
+    """Materialize Supervisor feedback as executable child tasks once."""
+    created = []
+    for original in failed_tasks:
+        already_replanned = db.query(Task).filter(Task.parent_task_id == original.id).first()
+        if already_replanned:
+            continue
+        child = Task(
+            id=str(uuid.uuid4()), goal_id=goal.id, parent_task_id=original.id,
+            title=f"Replan: {original.title}",
+            description=(f"Repair the verification failure for: {original.description or original.title}\n"
+                         f"Supervisor context: {(review_text or '')[:500]}"),
+            status="pending", assigned_agent_id=original.assigned_agent_id,
+            priority=original.priority + 1, task_type=original.task_type,
+            risk_level=original.risk_level, max_retries=original.max_retries,
+        )
+        child.set_json("required_tools", original._get_json("required_tools"))
+        child.set_json("required_capabilities", original._get_json("required_capabilities"))
+        child.set_json("dependencies", [])
+        child.set_json("acceptance_criteria", original._get_json("acceptance_criteria"))
+        db.add(child)
+        created.append(child)
+    return created
 
 
 def get_review(db: Session, goal_id: str) -> Optional[Dict[str, Any]]:
@@ -204,7 +238,7 @@ def _build_suggested_tasks(
     goal: Goal,
     tasks: List,
 ) -> List[Dict[str, str]]:
-    incomplete = [t for t in tasks if t.status != "completed"]
+    incomplete = [t for t in tasks if t.status not in ("completed", "completed_verified", "completed_unverified")]
     suggested = []
     for t in incomplete:
         suggested.append({

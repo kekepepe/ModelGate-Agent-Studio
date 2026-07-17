@@ -17,6 +17,14 @@ export async function executeGoal(goalId: string): Promise<GoalExecutionResult> 
   return resp.data.data;
 }
 
+export async function startGoalExecution(goalId: string): Promise<{ goal_id: string; status: string }> {
+  const resp = await client.post<ApiResponse<{ goal_id: string; status: string }>>(`/runtime/start/${goalId}`);
+  if (!resp.data.success || !resp.data.data) {
+    throw new Error(resp.data.error?.message || '启动执行失败');
+  }
+  return resp.data.data;
+}
+
 export async function executeStep(taskId: string): Promise<ExecutionStep> {
   const resp = await client.post<ApiResponse<ExecutionStep>>(`/runtime/execute-step/${taskId}`);
   if (!resp.data.success || !resp.data.data) {
@@ -30,5 +38,17 @@ export async function getRuntimeStatus(goalId: string): Promise<RuntimeStatusRes
   if (!resp.data.success || !resp.data.data) {
     throw new Error(resp.data.error?.message || '获取状态失败');
   }
+  return resp.data.data;
+}
+
+export async function pauseGoal(goalId: string): Promise<{ goal_id: string; run_id: string; status: string }> {
+  const resp = await client.post<ApiResponse<{ goal_id: string; run_id: string; status: string }>>(`/runtime/pause/${goalId}`);
+  if (!resp.data.success || !resp.data.data) throw new Error(resp.data.error?.message || '暂停失败');
+  return resp.data.data;
+}
+
+export async function resumeGoal(goalId: string): Promise<{ goal_id: string; run_id: string; status: string }> {
+  const resp = await client.post<ApiResponse<{ goal_id: string; run_id: string; status: string }>>(`/runtime/resume/${goalId}`);
+  if (!resp.data.success || !resp.data.data) throw new Error(resp.data.error?.message || '恢复失败');
   return resp.data.data;
 }

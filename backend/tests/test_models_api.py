@@ -190,3 +190,27 @@ class TestToggleModel:
     def test_toggle_model_not_found(self, client):
         resp = client.patch("/api/v1/models/nonexistent-id/toggle")
         assert resp.status_code == 404
+
+
+class TestModelHealth:
+    def test_mock_health_is_explicit_and_healthy(self, client):
+        created = client.post("/api/v1/models", json={"provider": "mock", "model_name": "demo", "display_name": "Demo"})
+        model_id = created.json()["data"]["id"]
+        response = client.post(f"/api/v1/models/{model_id}/health?execution_mode=mock")
+        assert response.status_code == 200
+        assert response.json()["data"]["healthy"] is True
+        assert response.json()["data"]["execution_mode"] == "mock"
+
+    def test_live_health_reports_missing_key_without_mock_fallback(self, client):
+        from src.services.providers.provider_factory import create_provider, set_provider
+        created = client.post("/api/v1/models", json={"provider": "openai", "model_name": "gpt-test", "display_name": "GPT Test"})
+        model_id = created.json()["data"]["id"]
+        set_provider(None)
+        try:
+            response = client.post(f"/api/v1/models/{model_id}/health?execution_mode=live")
+        finally:
+            set_provider(create_provider("mock"))
+        assert response.status_code == 200
+        data = response.json()["data"]
+        assert data["healthy"] is False
+        assert "API key" in data["message"]

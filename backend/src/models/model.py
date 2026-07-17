@@ -44,7 +44,7 @@ class Model(Base):
             "speed_level": self.speed_level,
             "is_enabled": self.is_enabled,
             "is_default": self.is_default,
-            "api_key": self.api_key,
+            "has_api_key": bool(self.api_key),
             "api_base_url": self.api_base_url,
             "created_at": self.created_at.isoformat() if self.created_at else None,
             "updated_at": self.updated_at.isoformat() if self.updated_at else None,

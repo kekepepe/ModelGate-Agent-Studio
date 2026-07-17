@@ -2,6 +2,8 @@ from datetime import datetime, timezone
 from math import ceil
 from typing import Any, Dict, List, Optional, Tuple
 import uuid
+import hashlib
+import os
 
 from sqlalchemy import or_
 from sqlalchemy.orm import Session
@@ -10,6 +12,8 @@ from src.models.agent import AgentStation
 from src.models.handoff import ExecutionLog, HandoffRecord, HandoffTask, WorkerSession
 from src.models.model import Model
 from src.models.workspace import Goal, Task
+from src.models.workspace import Artifact, VerificationResult, WorkspaceCheckpoint
+from src.models.tool import ToolCallRecord
 from src.schemas.handoff import HandoffTaskCreate
 
 HANDOFF_STATUS_REQUESTED = "requested"
@@ -45,6 +49,11 @@ REQUIRED_SUMMARY_FIELDS = [
     "errors_and_risks",
     "next_suggested_steps",
     "context_needed",
+    "changed_files",
+    "tool_results",
+    "verification_state",
+    "workspace_checkpoint",
+    "recommended_next_action",
 ]
 
 STATUS_EVENT_MAP = {
@@ -109,7 +118,7 @@ def _validate_summary(summary: Dict) -> Dict:
     normalized = {}
     for field in REQUIRED_SUMMARY_FIELDS:
         value = summary.get(field)
-        if field in {"original_goal", "current_task"}:
+        if field in {"original_goal", "current_task", "workspace_checkpoint", "recommended_next_action"}:
             normalized[field] = value if isinstance(value, str) and value else "—"
         else:
             normalized[field] = value if isinstance(value, list) else []
@@ -117,6 +126,7 @@ def _validate_summary(summary: Dict) -> Dict:
 
 
 def _build_fallback_summary(
+    db: Session,
     task: Any,
     from_agent: AgentStation,
     to_agent: AgentStation,
@@ -146,6 +156,10 @@ def _build_fallback_summary(
     if not risks:
         risks.append("当前未记录明确错误，交接原因来自用户或系统判断。")
 
+    artifacts = db.query(Artifact).filter(Artifact.task_id == task.id).all() if isinstance(task, Task) else []
+    tool_calls = db.query(ToolCallRecord).filter(ToolCallRecord.task_id == task.id).order_by(ToolCallRecord.created_at.desc()).limit(10).all() if isinstance(task, Task) else []
+    verifications = db.query(VerificationResult).filter(VerificationResult.task_id == task.id).all() if isinstance(task, Task) else []
+    checkpoint = db.query(WorkspaceCheckpoint).filter(WorkspaceCheckpoint.task_id == task.id).order_by(WorkspaceCheckpoint.created_at.desc()).first() if isinstance(task, Task) else None
     return _validate_summary({
         "original_goal": goal_record.title if goal_record else f"Goal {goal}",
         "current_task": task.description or task.title,
@@ -159,6 +173,11 @@ def _build_fallback_summary(
             "确认当前任务目标后继续执行。",
         ],
         "context_needed": ["原始 Goal", "当前 Task 描述", "交接原因", "最近输出或错误信息"],
+        "changed_files": [{"path": item.path, "checksum": item.checksum} for item in artifacts],
+        "tool_results": [{"tool": item.tool_name, "status": item.status, "output": (item.tool_output or "")[:500]} for item in tool_calls],
+        "verification_state": [{"criterion": item.criterion_type, "status": item.status, "evidence": item.evidence} for item in verifications],
+        "workspace_checkpoint": checkpoint.id if checkpoint else "",
+        "recommended_next_action": "Inspect the current workspace, then continue the unfinished verification.",
     })
 
 
@@ -335,7 +354,7 @@ def trigger_handoff(
     )
 
     _set_status(db, handoff, HANDOFF_STATUS_GENERATING, "Generating handoff summary")
-    summary = _build_fallback_summary(task, from_agent, to_agent, reason, reason_description)
+    summary = _build_fallback_summary(db, task, from_agent, to_agent, reason, reason_description)
     handoff.set_handoff_summary(summary)
     _set_status(db, handoff, HANDOFF_STATUS_READY, "Handoff summary ready")
 
@@ -401,6 +420,7 @@ def accept_handoff(db: Session, handoff_id: str, agent_id: Optional[str] = None,
     agent = _get_agent(db, accept_agent_id)
     _resolve_model_id(db, agent, accept_model_id)
     task = _get_task(db, handoff.task_id)
+    _validate_workspace_consistency(db, task, handoff.get_handoff_summary())
 
     worker = WorkerSession(
         agent_id=accept_agent_id,
@@ -451,6 +471,25 @@ def accept_handoff(db: Session, handoff_id: str, agent_id: Optional[str] = None,
         "task_id": handoff.task_id,
         "status": handoff.status,
     }
+
+
+def _validate_workspace_consistency(db: Session, task: Any, summary: Dict) -> None:
+    """A receiving worker must inspect files, not trust an old text summary."""
+    if not isinstance(task, Task):
+        return
+    goal = db.query(Goal).filter(Goal.id == task.goal_id).first()
+    root = os.path.realpath(goal.workspace_root or ".") if goal else None
+    for item in summary.get("changed_files", []):
+        path, expected = item.get("path"), item.get("checksum")
+        if not path or not expected:
+            continue
+        resolved = os.path.realpath(path)
+        if not root or os.path.commonpath([root, resolved]) != root or not os.path.isfile(resolved):
+            raise HandoffConflictError("Workspace changed since handoff; receiving agent must replan")
+        with open(resolved, "rb") as handle:
+            actual = hashlib.sha256(handle.read()).hexdigest()
+        if actual != expected:
+            raise HandoffConflictError("Workspace file checksum differs from the handoff package")
 
 
 def update_handoff_result(

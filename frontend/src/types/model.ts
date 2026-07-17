@@ -9,7 +9,7 @@ export interface Model {
   speed_level: number;
   is_enabled: boolean;
   is_default: boolean;
-  api_key?: string | null;
+  has_api_key?: boolean;
   api_base_url?: string | null;
   created_at?: string;
   updated_at?: string;

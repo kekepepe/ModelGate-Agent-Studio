@@ -93,17 +93,22 @@ class TestStartGoal:
         db_session.add_all([*agents, *models])
         db_session.commit()
 
-        goal_id = client.post("/api/v1/goals", json={"title": "运行串行协作计划"}).json()["data"]["goal_id"]
+        goal_id = client.post("/api/v1/goals", json={"title": "运行串行协作计划", "execution_mode": "mock"}).json()["data"]["goal_id"]
         assert client.post(f"/api/v1/goals/{goal_id}/start").status_code == 200
 
         execution = client.post(f"/api/v1/runtime/execute/{goal_id}")
         assert execution.status_code == 200, execution.text
-        assert execution.json()["data"]["tasks_completed"] == 3
-        assert execution.json()["data"]["status"] == "completed"
+        assert execution.json()["data"]["tasks_completed"] == 3, execution.json()
+        # Mock output performed no file/test actions, so Runtime v2 creates a
+        # real replan instead of declaring the code goal complete.
+        assert execution.json()["data"]["status"] == "running"
 
         workspace = client.get(f"/api/v1/workspace/{goal_id}/state").json()["data"]
-        assert [task["status"] for task in workspace["tasks"]] == ["completed", "completed", "completed"]
-        assert [task["flow_position"] for task in workspace["tasks"]] == [1, 2, 3]
+        # Mock-only execution has no file/tool evidence, so Runtime v2 must
+        # never present it as verified completion.
+        assert [task["status"] for task in workspace["tasks"][:3]] == ["completed_unverified", "completed_unverified", "completed_unverified"]
+        assert all(task["title"].startswith("Replan:") for task in workspace["tasks"][3:])
+        assert [task["flow_position"] for task in workspace["tasks"]] == list(range(1, len(workspace["tasks"]) + 1))
 
     def test_start_goal_not_found(self, client: TestClient):
         resp = client.post("/api/v1/goals/nonexistent/start")

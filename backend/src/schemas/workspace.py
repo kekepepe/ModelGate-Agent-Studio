@@ -6,6 +6,11 @@ from pydantic import BaseModel, Field
 class GoalCreate(BaseModel):
     title: str = Field(..., min_length=1, max_length=255)
     description: Optional[str] = None
+    execution_mode: Optional[str] = Field(None, pattern="^(live|sandbox|dry_run|mock)$")
+    workspace_root: Optional[str] = None
+    budget_tokens: int = Field(100000, gt=0, le=10_000_000)
+    budget_cost_usd: Optional[float] = Field(None, gt=0)
+    max_duration_seconds: int = Field(3600, gt=0, le=86_400)
 
 
 class GoalResponse(BaseModel):
@@ -13,6 +18,12 @@ class GoalResponse(BaseModel):
     title: str
     description: Optional[str] = None
     status: str
+    execution_mode: str = "live"
+    workspace_root: Optional[str] = None
+    final_verification_status: Optional[str] = None
+    budget_tokens: int = 100000
+    budget_cost_usd: Optional[float] = None
+    max_duration_seconds: int = 3600
     created_at: Optional[str] = None
     updated_at: Optional[str] = None
 
@@ -37,6 +48,16 @@ class TaskResponse(BaseModel):
     agent_role: Optional[str] = None
     model_name: Optional[str] = None
     worker_status: Optional[str] = None
+    workspace_scope: Optional[str] = None
+    step_count: int = 0
+    failure_count: int = 0
+    last_observation: Optional[str] = None
+    next_action: Optional[str] = None
+    dependencies: List[str] = Field(default_factory=list)
+    acceptance_criteria: List[Dict[str, Any]] = Field(default_factory=list)
+    verification_status: Optional[str] = None
+    artifacts: List[Dict[str, Any]] = Field(default_factory=list)
+    verification_results: List[Dict[str, Any]] = Field(default_factory=list)
 
 
 class AgentState(BaseModel):
@@ -59,6 +80,7 @@ class WorkerState(BaseModel):
     total_tokens_used: int = 0
     model_name: Optional[str] = None
     quota_status: Optional[str] = None
+    workspace_scope: Optional[str] = None
 
 
 class WorkspaceState(BaseModel):
@@ -71,3 +93,11 @@ class WorkspaceState(BaseModel):
 class StartResponse(BaseModel):
     goal_id: str
     status: str
+
+
+class TaskCancelRequest(BaseModel):
+    reason: str = Field("Cancelled by user", min_length=1, max_length=1000)
+
+
+class TaskSplitRequest(BaseModel):
+    titles: List[str] = Field(..., min_length=2, max_length=20)

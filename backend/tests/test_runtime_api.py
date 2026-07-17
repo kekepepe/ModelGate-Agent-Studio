@@ -1,5 +1,8 @@
 import uuid
+from unittest.mock import patch
 from fastapi.testclient import TestClient
+
+from src.models.workspace import Goal
 
 
 def _seed_runtime_data(db_session):
@@ -75,6 +78,27 @@ class TestExecuteGoalAPI:
         resp = client.post(f"/api/v1/runtime/execute/{goal.id}")
         assert resp.status_code == 400
 
+    def test_start_goal_returns_immediately_and_queues_worker(self, client: TestClient, db_session):
+        goal, _ = _seed_runtime_data(db_session)
+        with patch("src.routes.runtime.threading.Thread") as thread:
+            resp = client.post(f"/api/v1/runtime/start/{goal.id}")
+        assert resp.status_code == 202
+        assert resp.json()["data"] == {"goal_id": goal.id, "status": "running"}
+        thread.return_value.start.assert_called_once()
+
+    def test_resume_queues_a_new_background_worker(self, client: TestClient, db_session):
+        from src.models.workspace import RuntimeRun
+        goal = Goal(id=str(uuid.uuid4()), title="Paused", status="paused", execution_mode="mock")
+        run = RuntimeRun(id=str(uuid.uuid4()), goal_id=goal.id, execution_mode="mock", status="paused")
+        goal.run_id = run.id
+        db_session.add_all([goal, run])
+        db_session.commit()
+        with patch("src.routes.runtime.threading.Thread") as thread:
+            resp = client.post(f"/api/v1/runtime/resume/{goal.id}")
+        assert resp.status_code == 200
+        assert resp.json()["data"]["status"] == "running"
+        thread.return_value.start.assert_called_once()
+
 
 class TestExecuteStepAPI:
     def test_execute_step_success(self, client: TestClient, db_session):
@@ -93,6 +117,18 @@ class TestExecuteStepAPI:
 
 
 class TestRuntimeStatusAPI:
+    def test_verified_task_is_not_reported_as_incomplete_risk(self, db_session):
+        from src.models.workspace import Task
+        from src.services.runtime_service import _build_final_summary
+        goal = Goal(id=str(uuid.uuid4()), title="Verified", status="completed")
+        task = Task(id=str(uuid.uuid4()), goal_id=goal.id, title="Checked fix", status="completed_verified")
+        db_session.add_all([goal, task])
+        db_session.commit()
+        summary = _build_final_summary(db_session, goal, [task], handoff_count=0)
+        assert summary["completed"] == ["Checked fix"]
+        assert summary["incomplete"] == []
+        assert not any("未完成" in risk for risk in summary["risks"])
+
     def test_status_after_execute(self, client: TestClient, db_session):
         goal, _ = _seed_runtime_data(db_session)
         # Execute first to generate data
@@ -127,3 +163,19 @@ class TestRuntimeStatusAPI:
         assert data["total_tasks"] == 0
         assert data["completed_tasks"] == 0
         assert data["log_count"] == 0
+
+
+class TestRuntimeEventsAPI:
+    def test_completed_goal_exposes_persisted_events_as_sse(self, client: TestClient, db_session):
+        goal, _ = _seed_runtime_data(db_session)
+        client.post(f"/api/v1/runtime/execute/{goal.id}")
+        response = client.get(f"/api/v1/runtime/events/{goal.id}")
+        assert response.status_code == 200
+        assert response.headers["content-type"].startswith("text/event-stream")
+        assert "event: runtime" in response.text
+        assert "model_call" in response.text
+        assert "event: end" in response.text
+
+    def test_events_goal_not_found(self, client: TestClient):
+        response = client.get("/api/v1/runtime/events/nonexistent")
+        assert response.status_code == 404

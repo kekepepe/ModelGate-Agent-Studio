@@ -5,6 +5,7 @@ from sqlalchemy.orm import sessionmaker
 from src.core.database import Base, get_db
 from src.main import app
 from fastapi.testclient import TestClient
+from src.services.providers.provider_factory import create_provider, set_provider
 
 SQLALCHEMY_DATABASE_URL = "sqlite:///./test.db"
 
@@ -27,6 +28,8 @@ app.dependency_overrides[get_db] = override_get_db
 
 @pytest.fixture(autouse=True)
 def clean_database():
+    # Tests opt in to Mock explicitly; production runtime never does this.
+    set_provider(create_provider("mock"))
     Base.metadata.drop_all(bind=engine)
     Base.metadata.create_all(bind=engine)
     yield
@@ -34,6 +37,7 @@ def clean_database():
         for table in reversed(Base.metadata.sorted_tables):
             conn.execute(table.delete())
     Base.metadata.drop_all(bind=engine)
+    set_provider(create_provider("mock"))
 
 
 @pytest.fixture

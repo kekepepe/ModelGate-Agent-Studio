@@ -8,9 +8,13 @@ services:
     container_name: modelgate-backend
     volumes:
       - modelgate-data:/app/data
+      - ./:/workspace:rw
     environment:
       - DATABASE_URL=sqlite:///./data/modelgate.db
-      - MODEL_PROVIDER=${MODEL_PROVIDER:-mock}
+      - EXECUTION_MODE=${EXECUTION_MODE:-live}
+      - WORKSPACE_ROOT=/workspace
+      - SANDBOX_BACKEND=${SANDBOX_BACKEND:-local}
+      - SANDBOX_IMAGE=${SANDBOX_IMAGE:-python:3.12-slim}
       - OPENAI_BASE_URL=${OPENAI_BASE_URL:-https://api.openai.com/v1}
       - OPENAI_API_KEY=${OPENAI_API_KEY:-}
       - OPENAI_TIMEOUT=${OPENAI_TIMEOUT:-60}

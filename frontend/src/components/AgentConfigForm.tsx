@@ -24,6 +24,9 @@ const defaultForm: AgentCreateData = {
   system_prompt: '',
   output_format: 'markdown',
   max_steps_per_task: 10,
+  max_tokens_per_task: 32000,
+  max_duration_seconds: 900,
+  max_consecutive_failures: 3,
   allow_handoff: false,
   handoff_threshold_tokens: undefined,
 };
@@ -51,6 +54,9 @@ export default function AgentConfigForm({ agent, initialData, onSave, onCancel, 
         system_prompt: agent.system_prompt || '',
         output_format: agent.output_format || 'markdown',
         max_steps_per_task: agent.max_steps_per_task,
+        max_tokens_per_task: agent.max_tokens_per_task,
+        max_duration_seconds: agent.max_duration_seconds,
+        max_consecutive_failures: agent.max_consecutive_failures,
         allow_handoff: agent.allow_handoff,
         handoff_threshold_tokens: agent.handoff_threshold_tokens,
       });
@@ -401,6 +407,27 @@ export default function AgentConfigForm({ agent, initialData, onSave, onCancel, 
                     onChange={(e) => handleChange('max_steps_per_task', parseInt(e.target.value) || 1)}
                     className="w-full px-3 py-2 text-sm border border-stone-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-stone-300"
                   />
+                </div>
+
+                <div className="grid grid-cols-3 gap-2">
+                  <div>
+                    <label className="block text-xs font-medium text-stone-600 mb-1">Token 上限</label>
+                    <input type="number" min={1} value={form.max_tokens_per_task}
+                      onChange={(e) => handleChange('max_tokens_per_task', parseInt(e.target.value) || 1)}
+                      className="w-full px-3 py-2 text-sm border border-stone-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-stone-300" />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium text-stone-600 mb-1">时长（秒）</label>
+                    <input type="number" min={1} value={form.max_duration_seconds}
+                      onChange={(e) => handleChange('max_duration_seconds', parseInt(e.target.value) || 1)}
+                      className="w-full px-3 py-2 text-sm border border-stone-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-stone-300" />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium text-stone-600 mb-1">连续失败</label>
+                    <input type="number" min={1} value={form.max_consecutive_failures}
+                      onChange={(e) => handleChange('max_consecutive_failures', parseInt(e.target.value) || 1)}
+                      className="w-full px-3 py-2 text-sm border border-stone-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-stone-300" />
+                  </div>
                 </div>
 
                 <div className="flex items-center justify-between">

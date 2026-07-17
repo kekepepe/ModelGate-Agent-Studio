@@ -6,6 +6,7 @@ from sqlalchemy.orm import Session
 
 from src.models.agent import AgentStation
 from src.models.workspace import Goal, Task
+from src.core.config import settings
 
 
 class GoalNotFoundError(Exception):
@@ -26,12 +27,19 @@ DEFAULT_GOAL_PLAN = (
 )
 
 
-def create_goal(db: Session, title: str, description: Optional[str] = None) -> Goal:
+def create_goal(db: Session, title: str, description: Optional[str] = None, execution_mode: Optional[str] = None,
+                workspace_root: Optional[str] = None, budget_tokens: int = 100000,
+                budget_cost_usd: Optional[float] = None, max_duration_seconds: int = 3600) -> Goal:
     goal = Goal(
         id=str(uuid.uuid4()),
         title=title,
         description=description,
         status="idle",
+        execution_mode=execution_mode or settings.execution_mode,
+        workspace_root=workspace_root or settings.workspace_root,
+        budget_tokens=budget_tokens,
+        budget_cost_usd=budget_cost_usd,
+        max_duration_seconds=max_duration_seconds,
     )
     db.add(goal)
     db.commit()
@@ -54,37 +62,12 @@ def start_goal(db: Session, goal_id: str) -> Dict[str, str]:
     goal.status = "planning"
     goal.updated_at = datetime.now(timezone.utc)
 
-    enabled_agents = (
-        db.query(AgentStation)
-        .filter(AgentStation.is_enabled == True)
-        .order_by(AgentStation.created_at.asc(), AgentStation.id.asc())
-        .all()
-    )
-    agents_by_role = {}
-    for agent in enabled_agents:
-        agents_by_role.setdefault(agent.role, agent)
-
-    planner = agents_by_role.get("planner")
-    if not planner:
-        raise GoalValidationError("No enabled Planner Agent is available; configure an Agent Station before starting a Goal")
-
-    goal_context = goal.description or goal.title
-    for role, action, instruction, priority in DEFAULT_GOAL_PLAN:
-        agent = agents_by_role.get(role)
-        # Planner is required above; optional roles keep minimal deployments
-        # executable while a fully seeded install receives the three-step flow.
-        if not agent:
-            continue
-        task = Task(
-            id=str(uuid.uuid4()),
-            goal_id=goal.id,
-            title=f"{action}: {goal.title}",
-            description=f"{instruction}。Goal: {goal_context}",
-            status="pending",
-            assigned_agent_id=agent.id,
-            priority=priority,
-        )
-        db.add(task)
+    from src.services.orchestrator_service import plan_goal
+    tasks = plan_goal(db, goal)
+    if not tasks:
+        goal.status = "blocked"
+        db.commit()
+        raise GoalValidationError("No enabled Planner or Agent with a required capability is available")
     db.commit()
     db.refresh(goal)
 

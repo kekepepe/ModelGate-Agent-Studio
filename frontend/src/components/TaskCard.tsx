@@ -19,6 +19,12 @@ interface TaskCardProps {
   onOpenHandoff?: (handoffId: string) => void;
   quotaStatus?: string | null;
   quotaUsagePercent?: number | null;
+  latestToolCall?: { tool_name: string; status: string } | null;
+  changedFileCount?: number;
+  testStatus?: string | null;
+  blockedReason?: string | null;
+  currentStep?: number;
+  nextAction?: string | null;
 }
 
 export default function TaskCard({
@@ -38,6 +44,12 @@ export default function TaskCard({
   onOpenHandoff,
   quotaStatus,
   quotaUsagePercent,
+  latestToolCall,
+  changedFileCount = 0,
+  testStatus,
+  blockedReason,
+  currentStep = 0,
+  nextAction,
 }: TaskCardProps) {
   const icon = TASK_STATUS_ICONS[status] || '•';
   const border = TASK_STATUS_BORDERS[status] || 'border-stone-200';
@@ -77,9 +89,19 @@ export default function TaskCard({
               {modelName && <span className="font-mono text-stone-400">{modelName}</span>}
             </div>
           )}
+          {(currentStep > 0 || nextAction) && (
+            <div className="mt-1 text-[10px] text-stone-500">步骤 {currentStep}{nextAction ? ` · ${nextAction}` : ''}</div>
+          )}
           {quotaStatus && quotaStatus !== 'unknown' && (
             <div className={`mt-2 inline-flex rounded px-1.5 py-0.5 text-[10px] ${quotaStatus === 'limited' || quotaStatus === 'cooldown' ? 'bg-red-50 text-red-700' : quotaStatus === 'warning' || quotaStatus === 'near_limit' ? 'bg-amber-50 text-amber-700' : 'bg-green-50 text-green-700'}`}>
               额度 {quotaStatus}{quotaUsagePercent != null ? ` · ${Math.round(quotaUsagePercent * 100)}%` : ''}
+            </div>
+          )}
+          {(latestToolCall || changedFileCount > 0 || testStatus) && (
+            <div className="mt-2 flex flex-wrap gap-1.5 text-[10px] text-stone-600">
+              {latestToolCall && <span className="rounded bg-stone-100 px-1.5 py-0.5">工具 {latestToolCall.tool_name} · {latestToolCall.status}</span>}
+              {changedFileCount > 0 && <span className="rounded bg-blue-50 px-1.5 py-0.5 text-blue-700">文件 {changedFileCount}</span>}
+              {testStatus && <span className={`rounded px-1.5 py-0.5 ${testStatus === 'completed' ? 'bg-green-50 text-green-700' : 'bg-red-50 text-red-700'}`}>测试 {testStatus}</span>}
             </div>
           )}
         </div>
@@ -88,6 +110,9 @@ export default function TaskCard({
         <p className="mt-3 line-clamp-2 text-xs leading-relaxed text-stone-500 border-l-2 border-stone-200 pl-2">
           {outputSnippet}
         </p>
+      )}
+      {blockedReason && (
+        <p className="mt-2 rounded bg-red-50 px-2 py-1 text-xs text-red-700 line-clamp-2">阻塞：{blockedReason}</p>
       )}
       {handoff && (
         <button

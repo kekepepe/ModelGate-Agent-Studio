@@ -16,6 +16,9 @@ export interface AgentStation {
   output_format?: string;
   max_steps_per_task: number;
   max_tool_calls_per_task?: number;
+  max_tokens_per_task: number;
+  max_duration_seconds: number;
+  max_consecutive_failures: number;
   allow_handoff: boolean;
   handoff_threshold_tokens?: number;
   is_enabled: boolean;
@@ -58,6 +61,9 @@ export interface AgentCreateData {
   system_prompt?: string;
   output_format?: string;
   max_steps_per_task?: number;
+  max_tokens_per_task?: number;
+  max_duration_seconds?: number;
+  max_consecutive_failures?: number;
   allow_handoff?: boolean;
   handoff_threshold_tokens?: number;
   template_id?: string;
@@ -73,6 +79,9 @@ export interface AgentUpdateData {
   system_prompt?: string;
   output_format?: string;
   max_steps_per_task?: number;
+  max_tokens_per_task?: number;
+  max_duration_seconds?: number;
+  max_consecutive_failures?: number;
   allow_handoff?: boolean;
   handoff_threshold_tokens?: number;
 }

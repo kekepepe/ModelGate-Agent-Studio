@@ -22,7 +22,10 @@ def _error(code: str, message: str, status_code: int = 400):
 @router.post("/goals", status_code=201)
 def create_goal(data: GoalCreate, db: Session = Depends(get_db)):
     try:
-        goal = goal_service.create_goal(db, data.title, data.description)
+        goal = goal_service.create_goal(
+            db, data.title, data.description, data.execution_mode, data.workspace_root,
+            data.budget_tokens, data.budget_cost_usd, data.max_duration_seconds,
+        )
         return _success({"goal_id": goal.id, "status": goal.status}, 201)
     except Exception as e:
         _error("INTERNAL_ERROR", str(e), 500)

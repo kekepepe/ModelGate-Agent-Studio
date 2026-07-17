@@ -7,6 +7,8 @@ from src.models.handoff import ExecutionLog, HandoffRecord, WorkerSession
 from src.models.model import Model
 from src.models.quota import QuotaRecord
 from src.models.workspace import Goal, Task
+from src.models.workspace import Artifact, VerificationResult
+from src.models.tool import ToolCallRecord
 
 
 class WorkspaceNotFoundError(Exception):
@@ -18,8 +20,8 @@ def get_workspace_state(db: Session, goal_id: str) -> Dict:
     if not goal:
         raise WorkspaceNotFoundError(f"Goal '{goal_id}' not found")
 
-    # Runtime executes the current MVP plan serially, so return the persisted
-    # creation order as the same order rendered by the Workspace task flow.
+    # Return the persisted graph order; dependencies remain available on each
+    # task so the UI can distinguish waiting from actively running work.
     tasks = (
         db.query(Task)
         .filter(Task.goal_id == goal_id)
@@ -40,6 +42,17 @@ def get_workspace_state(db: Session, goal_id: str) -> Dict:
     )
 
     task_ids = {task.id for task in tasks}
+    artifacts_by_task: Dict[str, List[Artifact]] = {}
+    verification_by_task: Dict[str, List[VerificationResult]] = {}
+    tools_by_task: Dict[str, List[ToolCallRecord]] = {}
+    if task_ids:
+        for artifact in db.query(Artifact).filter(Artifact.task_id.in_(task_ids)).order_by(Artifact.created_at.asc()).all():
+            artifacts_by_task.setdefault(artifact.task_id, []).append(artifact)
+        for verification in db.query(VerificationResult).filter(VerificationResult.task_id.in_(task_ids)).order_by(VerificationResult.created_at.asc()).all():
+            verification_by_task.setdefault(verification.task_id, []).append(verification)
+        for call in db.query(ToolCallRecord).filter(ToolCallRecord.task_id.in_(task_ids)).order_by(ToolCallRecord.created_at.desc()).all():
+            if len(tools_by_task.setdefault(call.task_id, [])) < 6:
+                tools_by_task[call.task_id].append(call)
     recent_logs = []
     if task_ids:
         # One bounded query feeds the task detail panels and avoids a polling
@@ -100,6 +113,16 @@ def get_workspace_state(db: Session, goal_id: str) -> Dict:
         item["routing_decision"] = routing_decision
         item["context"] = worker.current_context if worker else None
         item["recent_logs"] = [_serialize_workspace_log(log, models, agent_labels) for log in task_logs]
+        artifacts = artifacts_by_task.get(task.id, [])
+        verifications = verification_by_task.get(task.id, [])
+        tool_calls = tools_by_task.get(task.id, [])
+        item["artifacts"] = [_serialize_artifact(artifact) for artifact in artifacts]
+        item["verification_results"] = [_serialize_verification(verification) for verification in verifications]
+        item["recent_tool_calls"] = [_serialize_tool_call(call) for call in tool_calls]
+        item["latest_tool_call"] = item["recent_tool_calls"][0] if item["recent_tool_calls"] else None
+        item["changed_files"] = sorted({path for call in tool_calls for path in call.get_result().get("changed_files", [])})
+        latest_test = next((call for call in tool_calls if call.tool_name in {"test_runner", "lint_run", "typecheck_run", "build_run"}), None)
+        item["test_status"] = latest_test.status if latest_test else None
         task_data.append(item)
 
     return {
@@ -126,6 +149,11 @@ def get_workspace_state(db: Session, goal_id: str) -> Dict:
                 "inherited_from_handoff_id": w.inherited_from_handoff_id,
                 "status": w.status,
                 "total_tokens_used": w.total_tokens_used,
+                "workspace_scope": w.workspace_scope,
+                "step_count": w.step_count,
+                "failure_count": w.failure_count,
+                "last_observation": w.last_observation,
+                "next_action": w.next_action,
                 "model_name": models.get(w.model_id) if w.model_id else None,
             }
             for w in workers
@@ -183,4 +211,29 @@ def _serialize_workspace_log(log: ExecutionLog, models: Dict[str, str], agent_la
         "agent_id": log.agent_id,
         "agent_name": agent_labels.get(log.agent_id, {}).get("name"),
         "created_at": log.created_at.isoformat() if log.created_at else None,
+    }
+
+
+def _serialize_artifact(artifact: Artifact) -> Dict:
+    return {
+        "id": artifact.id, "type": artifact.type, "path": artifact.path,
+        "checksum": artifact.checksum, "verification_status": artifact.verification_status,
+        "created_at": artifact.created_at.isoformat() if artifact.created_at else None,
+    }
+
+
+def _serialize_verification(result: VerificationResult) -> Dict:
+    return {
+        "id": result.id, "criterion_type": result.criterion_type,
+        "command_or_rule": result.command_or_rule, "status": result.status,
+        "evidence": result.evidence, "exit_code": result.exit_code,
+        "created_at": result.created_at.isoformat() if result.created_at else None,
+    }
+
+
+def _serialize_tool_call(call: ToolCallRecord) -> Dict:
+    return {
+        "id": call.id, "tool_name": call.tool_name, "status": call.status,
+        "latency_ms": call.latency_ms, "error_message": call.error_message,
+        "result": call.get_result(),
     }

@@ -13,9 +13,13 @@ services:
     volumes:
       - ./backend/src:/app/src          # 挂载源码，uvicorn --reload 检测变更自动重启
       - modelgate-dev-data:/app/data
+      - ./:/workspace:rw                # Agent 工具唯一可见的受控工作区
     environment:
       - DATABASE_URL=sqlite:///./data/modelgate.db
-      - MODEL_PROVIDER=${MODEL_PROVIDER:-mock}
+      - EXECUTION_MODE=${EXECUTION_MODE:-live}
+      - WORKSPACE_ROOT=/workspace
+      - SANDBOX_BACKEND=${SANDBOX_BACKEND:-local}
+      - SANDBOX_IMAGE=${SANDBOX_IMAGE:-python:3.12-slim}
       - OPENAI_BASE_URL=${OPENAI_BASE_URL:-https://api.openai.com/v1}
       - OPENAI_API_KEY=${OPENAI_API_KEY:-}
       - OPENAI_TIMEOUT=${OPENAI_TIMEOUT:-60}

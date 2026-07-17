@@ -1,6 +1,6 @@
 import { useState } from 'react';
-import { Plus, Search, X, AlertTriangle, Loader2, Trash2, Edit3, Power, PowerOff } from 'lucide-react';
-import { useModels, useCreateModel, useUpdateModel, useDeleteModel, useToggleModel } from '../hooks/useModels';
+import { Plus, Search, X, AlertTriangle, Loader2, Trash2, Edit3, Power, PowerOff, Activity } from 'lucide-react';
+import { useModels, useCreateModel, useUpdateModel, useDeleteModel, useToggleModel, useModelHealth } from '../hooks/useModels';
 import type { Model, ModelCreateData, ModelUpdateData } from '../types/model';
 import { DEFAULT_MODEL_CONTEXT_TOKENS, formatTokenCount, MODEL_CONTEXT_OPTIONS } from '../constants/modelContext';
 
@@ -24,6 +24,8 @@ export default function ModelManagerPage() {
   const updateModel = useUpdateModel(editingModel?.id || '');
   const deleteModel = useDeleteModel();
   const toggleModel = useToggleModel();
+  const modelHealth = useModelHealth();
+  const [healthMessage, setHealthMessage] = useState<string | null>(null);
 
   const handleAdd = () => {
     setEditingModel(null);
@@ -44,6 +46,11 @@ export default function ModelManagerPage() {
 
   const handleToggle = (modelId: string) => {
     toggleModel.mutate(modelId);
+  };
+
+  const handleHealth = (modelId: string) => {
+    setHealthMessage(null);
+    modelHealth.mutate({ modelId }, { onSuccess: (result) => setHealthMessage(result.healthy ? `模型连通：${result.latency_ms}ms` : `不可用：${result.message || '未知错误'}`), onError: (error: Error) => setHealthMessage(`检查失败：${error.message}`) });
   };
 
   const handleSave = (data: ModelCreateData | ModelUpdateData) => {
@@ -105,6 +112,7 @@ export default function ModelManagerPage() {
       </div>
 
       {/* Table */}
+      {healthMessage && <div className="mb-3 rounded-lg border border-stone-200 bg-stone-50 px-3 py-2 text-sm text-stone-700">{healthMessage}</div>}
       <div className="bg-white border border-stone-200 rounded-xl overflow-hidden">
         {isLoading && (
           <div className="flex items-center justify-center py-20">
@@ -189,6 +197,14 @@ export default function ModelManagerPage() {
                   <td className="px-4 py-3 text-right">
                     <div className="flex items-center justify-end gap-1">
                       <button
+                        onClick={() => handleHealth(model.id)}
+                        disabled={modelHealth.isPending}
+                        className="p-1.5 text-stone-400 hover:text-blue-700 hover:bg-blue-50 rounded transition-colors disabled:opacity-40"
+                        title="检测 Live 连通性"
+                      >
+                        <Activity size={14} />
+                      </button>
+                      <button
                         onClick={() => handleEdit(model)}
                         className="p-1.5 text-stone-400 hover:text-stone-700 hover:bg-stone-100 rounded transition-colors"
                         title="编辑"
@@ -247,7 +263,7 @@ function ModelFormModal({ model, onSave, onCancel, isSubmitting, error }: ModelF
     speed_level: model?.speed_level || 3,
     is_enabled: model?.is_enabled ?? true,
     is_default: model?.is_default ?? false,
-    api_key: model?.api_key || '',
+    api_key: '',
     api_base_url: model?.api_base_url || '',
   });
 
@@ -336,7 +352,7 @@ function ModelFormModal({ model, onSave, onCancel, isSubmitting, error }: ModelF
               className="w-full px-3 py-2 text-sm border border-stone-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-stone-300"
               placeholder={isEdit && !form.api_key ? '留空则不修改' : '输入 API Key'}
             />
-            {isEdit && model?.api_key && (
+            {isEdit && model?.has_api_key && (
               <p className="text-xs text-stone-400 mt-1">已设置 API Key，留空则不修改</p>
             )}
           </div>

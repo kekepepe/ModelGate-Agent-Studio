@@ -118,6 +118,11 @@ class WorkerSession(Base):
     final_output = Column(Text, nullable=True)
     error_message = Column(Text, nullable=True)
     total_tokens_used = Column(Integer, nullable=False, default=0)
+    workspace_scope = Column(Text, nullable=True)
+    step_count = Column(Integer, nullable=False, default=0)
+    failure_count = Column(Integer, nullable=False, default=0)
+    last_observation = Column(Text, nullable=True)
+    next_action = Column(Text, nullable=True)
     created_at = Column(DateTime, nullable=False, default=lambda: datetime.now(timezone.utc))
     updated_at = Column(DateTime, nullable=False, default=lambda: datetime.now(timezone.utc))
 
@@ -134,6 +139,11 @@ class WorkerSession(Base):
             "final_output": self.final_output,
             "error_message": self.error_message,
             "total_tokens_used": self.total_tokens_used,
+            "workspace_scope": self.workspace_scope,
+            "step_count": self.step_count,
+            "failure_count": self.failure_count,
+            "last_observation": self.last_observation,
+            "next_action": self.next_action,
             "created_at": self.created_at.isoformat() if self.created_at else None,
             "updated_at": self.updated_at.isoformat() if self.updated_at else None,
         }

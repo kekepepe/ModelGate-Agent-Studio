@@ -16,6 +16,7 @@ class MemoryDraftResponse(BaseModel):
     approved_by: Optional[str] = None
     approved_at: Optional[str] = None
     metadata: Dict[str, Any] = Field(default_factory=dict)
+    expires_at: Optional[str] = None
     created_at: Optional[str] = None
     updated_at: Optional[str] = None
 
@@ -24,6 +25,7 @@ class SkillDraftResponse(BaseModel):
     id: str
     source_run_id: Optional[str] = None
     name: str
+    version: str = "1.0"
     scenario: Optional[str] = None
     input_requirements: Optional[str] = None
     steps: List[str] = Field(default_factory=list)
@@ -37,6 +39,9 @@ class SkillDraftResponse(BaseModel):
     human_approved: Optional[bool] = None
     approved_by: Optional[str] = None
     approved_at: Optional[str] = None
+    success_count: int = 0
+    failure_count: int = 0
+    last_used_at: Optional[str] = None
     created_at: Optional[str] = None
     updated_at: Optional[str] = None
 

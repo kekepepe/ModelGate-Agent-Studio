@@ -91,7 +91,7 @@ class ModelOut(BaseModel):
     speed_level: int
     is_enabled: bool
     is_default: bool
-    api_key: Optional[str] = None
+    has_api_key: bool = False
     api_base_url: Optional[str] = None
     created_at: Optional[str] = None
     updated_at: Optional[str] = None

@@ -59,6 +59,7 @@ class ToolCallRecord(Base):
     tool_name = Column(String(100), nullable=False)
     tool_input = Column(Text, nullable=False, default="{}")
     tool_output = Column(Text, nullable=True)
+    result_data = Column(Text, nullable=False, default="{}")
     status = Column(String(20), nullable=False, default="started")
     latency_ms = Column(Integer, nullable=False, default=0)
     error_message = Column(Text, nullable=True)
@@ -69,6 +70,15 @@ class ToolCallRecord(Base):
 
     def set_tool_input(self, data: Dict[str, Any]) -> None:
         self.tool_input = json.dumps(data)
+
+    def get_result(self) -> Dict[str, Any]:
+        try:
+            return json.loads(self.result_data or "{}")
+        except json.JSONDecodeError:
+            return {}
+
+    def set_result(self, data: Dict[str, Any]) -> None:
+        self.result_data = json.dumps(data, ensure_ascii=False)
 
     def to_dict(self) -> dict:
         return {
@@ -84,4 +94,14 @@ class ToolCallRecord(Base):
             "latency_ms": self.latency_ms,
             "error_message": self.error_message,
             "created_at": self.created_at.isoformat() if self.created_at else None,
+            "result": self.get_result() or {
+                "tool_call_id": self.id,
+                "tool_name": self.tool_name,
+                "status": "success" if self.status == "completed" else self.status,
+                "exit_code": 0 if self.status == "completed" else None,
+                "stdout": self.tool_output or "",
+                "stderr": self.error_message or "",
+                "duration_ms": self.latency_ms,
+                "truncated": bool(self.tool_output and self.tool_output.endswith("[output truncated]")),
+            },
         }

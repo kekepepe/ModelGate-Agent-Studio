@@ -1,5 +1,5 @@
 import { useState, useCallback } from 'react';
-import { useWorkspaceState, useTaskDetail, useExecuteGoal, useRuntimeStatus } from '../hooks/useWorkspace';
+import { useWorkspaceState, useTaskDetail, useExecuteGoal, useRuntimeStatus, usePauseGoal, useResumeGoal, useRuntimeEvents } from '../hooks/useWorkspace';
 import { useAgents } from '../hooks/useAgents';
 import { useAcceptHandoff, useHandoff, useTriggerHandoff, useUpdateHandoffResult } from '../hooks/useHandoffs';
 import TopStatusBar from '../components/TopStatusBar';
@@ -22,8 +22,11 @@ export default function WorkspacePage() {
   const { data: state, isLoading } = useWorkspaceState(goalId);
   const { data: taskDetail, isLoading: isTaskLoading } = useTaskDetail(selectedTaskId);
   const { data: runtimeStatus } = useRuntimeStatus(goalId);
+  useRuntimeEvents(goalId);
   const { data: agentsData } = useAgents({ page_size: 100 });
   const executeGoal = useExecuteGoal();
+  const pauseGoal = usePauseGoal();
+  const resumeGoal = useResumeGoal();
   const triggerHandoff = useTriggerHandoff();
   const acceptHandoff = useAcceptHandoff();
   const updateHandoffResult = useUpdateHandoffResult();
@@ -103,26 +106,32 @@ export default function WorkspacePage() {
                 <div className="grid grid-cols-4 gap-3 flex-1">
                   <StatCard label="总 Task" value={state.tasks.length.toString()} />
                   <StatCard label="运行中" value={state.tasks.filter((t) => t.status === 'running').length.toString()} color="text-blue-600" />
-                  <StatCard label="已完成" value={state.tasks.filter((t) => t.status === 'completed').length.toString()} color="text-green-600" />
+                  <StatCard label="已完成" value={state.tasks.filter((t) => ['completed', 'completed_verified', 'completed_unverified'].includes(t.status)).length.toString()} color="text-green-600" />
                   <StatCard label="交接中" value={state.tasks.filter((t) => t.status === 'handoff').length.toString()} color="text-purple-600" />
                 </div>
                 {state.goal && ['planning', 'running'].includes(state.goal.status) && (
-                  <button
-                    onClick={() => executeGoal.mutate(goalId!, {
-                      onSuccess: (result) => {
-                        const lastCompleted = [...result.execution_log]
-                          .reverse()
-                          .find((step) => step.status === 'completed');
-                        if (lastCompleted) setSelectedTaskId(lastCompleted.task_id);
-                      },
-                    })}
-                    disabled={executeGoal.isPending}
-                    className="px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 disabled:opacity-40 flex-shrink-0"
-                  >
-                    {executeGoal.isPending ? '执行中...' : '▶ 执行'}
-                  </button>
+                  <div className="flex gap-2 flex-shrink-0">
+                    <button onClick={() => executeGoal.mutate(goalId!)} disabled={executeGoal.isPending}
+                      className="px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 disabled:opacity-40">
+                      {executeGoal.isPending ? '执行中...' : '▶ 执行'}
+                    </button>
+                    <button onClick={() => pauseGoal.mutate(goalId!)} disabled={pauseGoal.isPending || executeGoal.isPending}
+                      className="px-3 py-2 border border-stone-300 text-stone-700 text-sm rounded-lg hover:bg-stone-100 disabled:opacity-40">暂停</button>
+                  </div>
+                )}
+                {state.goal?.status === 'paused' && (
+                  <button onClick={() => resumeGoal.mutate(goalId!)} disabled={resumeGoal.isPending}
+                    className="px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 disabled:opacity-40 flex-shrink-0">▶ 恢复</button>
                 )}
               </div>
+              {state.goal && (
+                <div className={`inline-flex items-center rounded-full px-2.5 py-1 text-xs font-medium ${
+                  state.goal.execution_mode === 'mock' ? 'bg-amber-100 text-amber-800' :
+                  state.goal.execution_mode === 'dry_run' ? 'bg-sky-100 text-sky-800' : 'bg-emerald-100 text-emerald-800'
+                }`}>
+                  执行模式：{state.goal.execution_mode === 'live' ? 'Live' : state.goal.execution_mode === 'sandbox' ? 'Sandbox' : state.goal.execution_mode === 'dry_run' ? 'Dry Run' : 'Mock'}
+                </div>
+              )}
 
               {/* Final output when goal completed */}
               {(taskOutputs.length > 0 || (runtimeStatus && ['completed', 'failed', 'handoff'].includes(runtimeStatus.goal_status))) && (
@@ -144,6 +153,9 @@ export default function WorkspacePage() {
               {state.tasks.length > 0 && (
                 <TaskFlow taskCount={state.tasks.length} handoffCount={state.handoffs?.length || 0}>
                     {state.tasks.map((task) => (
+                      (() => {
+                        const taskWorker = state.workers.find((worker) => worker.task_id === task.id);
+                        return (
                       <TaskCard
                         key={task.id}
                         id={task.id}
@@ -161,7 +173,15 @@ export default function WorkspacePage() {
                         onOpenHandoff={setSelectedHandoffId}
                         quotaStatus={task.quota?.quota_status}
                         quotaUsagePercent={task.quota?.usage_percent}
+                        latestToolCall={task.latest_tool_call}
+                        changedFileCount={task.changed_files?.length || 0}
+                        testStatus={task.test_status}
+                        blockedReason={task.blocked_reason}
+                        currentStep={taskWorker?.step_count}
+                        nextAction={taskWorker?.next_action}
                       />
+                        );
+                      })()
                     ))}
                 </TaskFlow>
               )}

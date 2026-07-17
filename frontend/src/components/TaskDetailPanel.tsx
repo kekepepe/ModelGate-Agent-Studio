@@ -23,7 +23,7 @@ export default function TaskDetailPanel({ task, isLoading, onClose, handoffs = [
 
   useEffect(() => {
     if (task) {
-      setActiveTab(task.status === 'completed' && task.output ? 'output' : 'overview');
+      setActiveTab(['completed', 'completed_verified', 'completed_unverified'].includes(task.status) && task.output ? 'output' : 'overview');
     }
   }, [task?.id]);
 
@@ -86,6 +86,15 @@ export default function TaskDetailPanel({ task, isLoading, onClose, handoffs = [
               <span className="text-stone-400">状态</span>
               <span className="text-stone-700 font-medium">{TASK_STATUS_LABELS[task.status] || task.status}</span>
             </div>
+            {task.task_type && (
+              <div className="flex justify-between"><span className="text-stone-400">任务类型</span><span className="text-stone-700">{task.task_type}</span></div>
+            )}
+            {task.blocked_reason && (
+              <div className="rounded border border-red-200 bg-red-50 p-2 text-xs text-red-800"><span className="font-medium">阻塞原因</span><p className="mt-1 break-words">{task.blocked_reason}</p></div>
+            )}
+            {task.worker_status && task.context && task.worker_status !== 'failed' && (
+              <p className="text-xs text-stone-400">Worker 上下文与工具权限已绑定到当前 Task。</p>
+            )}
             <div className="flex justify-between">
               <span className="text-stone-400">优先级</span>
               <span className="text-stone-700">{task.priority}</span>
@@ -104,6 +113,12 @@ export default function TaskDetailPanel({ task, isLoading, onClose, handoffs = [
               <span className="text-stone-400">Worker 模型</span>
               <span className="text-stone-700 font-mono text-xs">{task.model_name || '—'}</span>
             </div>
+            {task.workspace_scope && (
+              <div>
+                <span className="text-stone-400 text-xs">隔离 Worktree</span>
+                <p className="mt-1 break-all font-mono text-[11px] text-stone-600">{task.workspace_scope}</p>
+              </div>
+            )}
             <div className="flex justify-between">
               <span className="text-stone-400">Token 消耗</span>
               <span className="text-stone-700">{task.tokens_used.toLocaleString()}</span>
@@ -121,6 +136,46 @@ export default function TaskDetailPanel({ task, isLoading, onClose, handoffs = [
                 <span className="text-stone-400">耗时</span>
                 <span className="text-stone-700">{formatDuration(task.duration_ms)}</span>
               </div>
+            )}
+            <div className="flex justify-between">
+              <span className="text-stone-400">验收状态</span>
+              <span className={task.verification_status === 'passed' ? 'text-green-700 font-medium' : 'text-amber-700'}>{task.verification_status || '未验证'}</span>
+            </div>
+            {(task.dependencies?.length || 0) > 0 && (
+              <div>
+                <span className="text-stone-400 text-xs">依赖 Task</span>
+                <p className="mt-1 font-mono text-xs text-stone-600 break-all">{task.dependencies?.join(', ')}</p>
+              </div>
+            )}
+            {(task.acceptance_criteria?.length || 0) > 0 && (
+              <div>
+                <span className="text-stone-400 text-xs">Completion Contract</span>
+                <pre className="mt-1 whitespace-pre-wrap rounded bg-stone-50 p-2 text-xs text-stone-600">{JSON.stringify(task.acceptance_criteria, null, 2)}</pre>
+              </div>
+            )}
+            {(task.verification_results?.length || 0) > 0 && (
+              <div>
+                <span className="text-stone-400 text-xs">验证证据</span>
+                <div className="mt-1 space-y-1">
+                  {task.verification_results?.map((item) => (
+                    <div key={item.id} className={`rounded p-2 text-xs ${item.status === 'passed' ? 'bg-green-50 text-green-800' : 'bg-red-50 text-red-800'}`}>
+                      <span className="font-medium">{item.criterion_type}: {item.status}</span>
+                      <p className="mt-0.5 break-words opacity-80">{item.evidence || item.command_or_rule}</p>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+            {(task.artifacts?.length || 0) > 0 && (
+              <div>
+                <span className="text-stone-400 text-xs">生成产物</span>
+                <ul className="mt-1 space-y-1 font-mono text-xs text-stone-600">
+                  {task.artifacts?.map((item) => <li key={item.id}>{item.path || item.type}</li>)}
+                </ul>
+              </div>
+            )}
+            {(task.changed_files?.length || 0) > 0 && (
+              <div><span className="text-stone-400 text-xs">真实文件变化</span><ul className="mt-1 space-y-1 font-mono text-xs text-stone-600">{task.changed_files?.map((path) => <li key={path}>{path}</li>)}</ul></div>
             )}
           </div>
         )}

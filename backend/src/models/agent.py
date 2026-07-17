@@ -24,6 +24,9 @@ class AgentStation(Base):
     output_format = Column(String(50))
     max_steps_per_task = Column(Integer, nullable=False, default=10)
     max_tool_calls_per_task = Column(Integer, default=20)
+    max_tokens_per_task = Column(Integer, nullable=False, default=32000)
+    max_duration_seconds = Column(Integer, nullable=False, default=900)
+    max_consecutive_failures = Column(Integer, nullable=False, default=3)
     allow_handoff = Column(Boolean, nullable=False, default=False)
     handoff_threshold_tokens = Column(Integer)
     is_enabled = Column(Boolean, nullable=False, default=True)
@@ -61,6 +64,9 @@ class AgentStation(Base):
             "output_format": self.output_format,
             "max_steps_per_task": self.max_steps_per_task,
             "max_tool_calls_per_task": self.max_tool_calls_per_task,
+            "max_tokens_per_task": self.max_tokens_per_task,
+            "max_duration_seconds": self.max_duration_seconds,
+            "max_consecutive_failures": self.max_consecutive_failures,
             "allow_handoff": self.allow_handoff,
             "handoff_threshold_tokens": self.handoff_threshold_tokens,
             "is_enabled": self.is_enabled,

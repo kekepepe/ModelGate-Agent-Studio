@@ -24,6 +24,7 @@ class MemoryDraft(Base):
     approved_by = Column(String(100), nullable=True)
     approved_at = Column(DateTime, nullable=True)
     extra_metadata = Column(Text, nullable=True)
+    expires_at = Column(DateTime, nullable=True, index=True)
     created_at = Column(DateTime, nullable=False, default=lambda: datetime.now(timezone.utc))
     updated_at = Column(DateTime, nullable=False, default=lambda: datetime.now(timezone.utc))
 
@@ -45,6 +46,7 @@ class MemoryDraft(Base):
             "human_approved": self.human_approved, "approved_by": self.approved_by,
             "approved_at": self.approved_at.isoformat() if self.approved_at else None,
             "metadata": self.get_metadata(),
+            "expires_at": self.expires_at.isoformat() if self.expires_at else None,
             "created_at": self.created_at.isoformat() if self.created_at else None,
             "updated_at": self.updated_at.isoformat() if self.updated_at else None,
         }
@@ -56,6 +58,7 @@ class SkillDraft(Base):
     id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
     source_run_id = Column(String(36), nullable=True, index=True)
     name = Column(String(255), nullable=False)
+    version = Column(String(50), nullable=False, default="1.0")
     scenario = Column(Text, nullable=True)
     input_requirements = Column(Text, nullable=True)
     steps = Column(Text, nullable=False, default="[]")
@@ -69,6 +72,9 @@ class SkillDraft(Base):
     human_approved = Column(Boolean, nullable=True)
     approved_by = Column(String(100), nullable=True)
     approved_at = Column(DateTime, nullable=True)
+    success_count = Column(Integer, nullable=False, default=0)
+    failure_count = Column(Integer, nullable=False, default=0)
+    last_used_at = Column(DateTime, nullable=True)
     created_at = Column(DateTime, nullable=False, default=lambda: datetime.now(timezone.utc))
     updated_at = Column(DateTime, nullable=False, default=lambda: datetime.now(timezone.utc))
 
@@ -87,6 +93,7 @@ class SkillDraft(Base):
         return {
             "id": self.id, "source_run_id": self.source_run_id,
             "name": self.name, "scenario": self.scenario,
+            "version": self.version,
             "input_requirements": self.input_requirements,
             "steps": self.get_steps(), "recommended_agents": self.get_agents(),
             "recommended_models": self.get_models(), "tools": self.get_tools(),
@@ -95,6 +102,8 @@ class SkillDraft(Base):
             "status": self.status, "human_approved": self.human_approved,
             "approved_by": self.approved_by,
             "approved_at": self.approved_at.isoformat() if self.approved_at else None,
+            "success_count": self.success_count, "failure_count": self.failure_count,
+            "last_used_at": self.last_used_at.isoformat() if self.last_used_at else None,
             "created_at": self.created_at.isoformat() if self.created_at else None,
             "updated_at": self.updated_at.isoformat() if self.updated_at else None,
         }

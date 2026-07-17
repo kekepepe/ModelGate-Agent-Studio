@@ -60,3 +60,7 @@ export function useToggleModel() {
     },
   });
 }
+
+export function useModelHealth() {
+  return useMutation({ mutationFn: ({ modelId, executionMode }: { modelId: string; executionMode?: 'live' | 'sandbox' | 'dry_run' | 'mock' }) => api.checkModelHealth(modelId, executionMode) });
+}

@@ -5,6 +5,7 @@ from sqlalchemy.orm import Session
 from src.core.database import get_db
 from src.models.model import Model as ModelORM
 from src.schemas.model import DEFAULT_MODEL_CONTEXT_TOKENS, ModelCreate, ModelUpdate, ModelOut, ModelListResponse
+from src.services.model_gateway import check_model_health
 
 router = APIRouter(tags=["models"])
 
@@ -60,6 +61,14 @@ def get_model(model_id: str, db: Session = Depends(get_db)):
     if not model:
         _error_response("NOT_FOUND", f"Model '{model_id}' not found", 404)
     return _success_response(ModelOut(**model.to_dict()).model_dump())
+
+
+@router.post("/models/{model_id}/health")
+def model_health(model_id: str, execution_mode: str = Query("live", pattern="^(live|sandbox|dry_run|mock)$"), db: Session = Depends(get_db)):
+    try:
+        return _success_response(check_model_health(db, model_id, execution_mode))
+    except ValueError as exc:
+        _error_response("NOT_FOUND", str(exc), 404)
 
 
 @router.post("/models", status_code=201)

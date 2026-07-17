@@ -1,5 +1,5 @@
-export type GoalStatus = 'idle' | 'planning' | 'running' | 'waiting' | 'handoff' | 'reviewing' | 'completed' | 'failed';
-export type TaskStatus = 'pending' | 'assigned' | 'running' | 'completed' | 'failed' | 'handoff';
+export type GoalStatus = 'idle' | 'planning' | 'running' | 'paused' | 'waiting' | 'handoff' | 'reviewing' | 'completed' | 'failed';
+export type TaskStatus = 'pending' | 'ready' | 'assigned' | 'running' | 'waiting_tool' | 'waiting_approval' | 'verifying' | 'revision_required' | 'blocked' | 'completed' | 'completed_verified' | 'completed_unverified' | 'failed' | 'handoff' | 'cancelled';
 export type WorkerStatus = 'idle' | 'running' | 'handoff_required' | 'completed' | 'failed';
 
 export interface Goal {
@@ -7,6 +7,12 @@ export interface Goal {
   title: string;
   description?: string | null;
   status: GoalStatus;
+  execution_mode?: 'live' | 'sandbox' | 'dry_run' | 'mock';
+  workspace_root?: string | null;
+  final_verification_status?: string | null;
+  budget_tokens?: number;
+  budget_cost_usd?: number | null;
+  max_duration_seconds?: number;
   created_at?: string | null;
   updated_at?: string | null;
 }
@@ -30,6 +36,7 @@ export interface WorkspaceTask {
   agent_role?: string | null;
   model_name?: string | null;
   worker_status?: string | null;
+  workspace_scope?: string | null;
   handoff?: WorkspaceHandoff | null;
   handoffs?: WorkspaceHandoff[];
   model_id?: string | null;
@@ -37,6 +44,17 @@ export interface WorkspaceTask {
   routing_decision?: WorkspaceRoutingDecision | null;
   context?: string | null;
   recent_logs?: WorkspaceLog[];
+  dependencies?: string[];
+  acceptance_criteria?: Array<Record<string, unknown>>;
+  verification_status?: string | null;
+  artifacts?: Array<{ id: string; type: string; path?: string | null; checksum?: string | null; verification_status?: string | null }>;
+  verification_results?: Array<{ id: string; criterion_type: string; command_or_rule: string; status: string; evidence?: string | null; exit_code?: number | null }>;
+  task_type?: string;
+  blocked_reason?: string | null;
+  changed_files?: string[];
+  test_status?: string | null;
+  latest_tool_call?: { id: string; tool_name: string; status: string; latency_ms: number; error_message?: string | null; result?: { changed_files?: string[] } } | null;
+  recent_tool_calls?: Array<{ id: string; tool_name: string; status: string; latency_ms: number; error_message?: string | null; result?: { changed_files?: string[] } }>;
 }
 
 export interface WorkspaceQuota {
@@ -77,6 +95,7 @@ export interface WorkspaceLog {
   input_summary?: string | null;
   error_message?: string | null;
   quota_status?: string | null;
+  workspace_scope?: string | null;
   model_id?: string | null;
   model_name?: string | null;
   agent_id?: string | null;
@@ -122,6 +141,11 @@ export interface WorkspaceWorker {
   total_tokens_used: number;
   model_name?: string | null;
   quota_status?: string | null;
+  workspace_scope?: string | null;
+  step_count?: number;
+  failure_count?: number;
+  last_observation?: string | null;
+  next_action?: string | null;
 }
 
 export interface WorkspaceState {
@@ -136,10 +160,16 @@ export const GOAL_STATUS_LABELS: Record<string, string> = {
   idle: '未启动',
   planning: '规划中',
   running: '运行中',
+  paused: '已暂停',
   waiting: '等待中',
   handoff: '交接中',
   reviewing: '审查中',
   completed: '已完成',
+  completed_verified: '已验证完成',
+  completed_unverified: '未验证完成',
+  verifying: '验证中',
+  revision_required: '需要修订',
+  blocked: '已阻塞',
   failed: '失败',
 };
 
@@ -147,6 +177,7 @@ export const GOAL_STATUS_COLORS: Record<string, string> = {
   idle: 'bg-stone-100 text-stone-600 border-stone-200',
   planning: 'bg-purple-100 text-purple-700 border-purple-200',
   running: 'bg-blue-100 text-blue-700 border-blue-200',
+  paused: 'bg-stone-100 text-stone-700 border-stone-300',
   waiting: 'bg-amber-100 text-amber-700 border-amber-200',
   handoff: 'bg-purple-100 text-purple-700 border-purple-200',
   reviewing: 'bg-orange-100 text-orange-700 border-orange-200',
@@ -156,20 +187,38 @@ export const GOAL_STATUS_COLORS: Record<string, string> = {
 
 export const TASK_STATUS_LABELS: Record<string, string> = {
   pending: '待处理',
+  ready: '就绪',
   assigned: '已分配',
   running: '执行中',
+  waiting_tool: '等待工具',
+  waiting_approval: '等待审批',
+  verifying: '验证中',
+  revision_required: '需要修订',
+  blocked: '已阻塞',
   completed: '已完成',
+  completed_verified: '已验证完成',
+  completed_unverified: '未验证完成',
   failed: '失败',
   handoff: '交接中',
+  cancelled: '已取消',
 };
 
 export const TASK_STATUS_ICONS: Record<string, string> = {
   pending: '⏸',
+  ready: '◌',
   assigned: '📋',
   running: '▶',
+  waiting_tool: '⏳',
+  waiting_approval: '⚠',
+  verifying: '🔎',
+  revision_required: '↩',
+  blocked: '⛔',
   completed: '✓',
+  completed_verified: '✓',
+  completed_unverified: '⚠',
   failed: '✗',
   handoff: '🔄',
+  cancelled: '—',
 };
 
 export const TASK_STATUS_BORDERS: Record<string, string> = {
@@ -177,6 +226,11 @@ export const TASK_STATUS_BORDERS: Record<string, string> = {
   assigned: 'border-stone-400',
   running: 'border-blue-500 shadow-blue-100 shadow-md',
   completed: 'border-green-500',
+  completed_verified: 'border-green-500',
+  completed_unverified: 'border-amber-500',
+  verifying: 'border-blue-500',
+  revision_required: 'border-amber-500',
+  blocked: 'border-red-500',
   failed: 'border-red-500',
   handoff: 'border-purple-500 shadow-purple-100 shadow-md',
 };
@@ -186,6 +240,11 @@ export const TASK_STATUS_BG: Record<string, string> = {
   assigned: 'bg-white',
   running: 'bg-blue-50',
   completed: 'bg-green-50',
+  completed_verified: 'bg-green-50',
+  completed_unverified: 'bg-amber-50',
+  verifying: 'bg-blue-50',
+  revision_required: 'bg-amber-50',
+  blocked: 'bg-red-50',
   failed: 'bg-red-50',
   handoff: 'bg-purple-50',
 };

@@ -43,3 +43,11 @@ export async function toggleModel(modelId: string): Promise<{ id: string; is_ena
   const resp = await client.patch<ApiResponse<{ id: string; is_enabled: boolean }>>(`/models/${modelId}/toggle`);
   return resp.data.data as { id: string; is_enabled: boolean };
 }
+
+export interface ModelHealth { model_id: string; provider: string; execution_mode: string; healthy: boolean; latency_ms: number; message?: string; }
+
+export async function checkModelHealth(modelId: string, executionMode: 'live' | 'sandbox' | 'dry_run' | 'mock' = 'live'): Promise<ModelHealth> {
+  const resp = await client.post<ApiResponse<ModelHealth>>(`/models/${modelId}/health?execution_mode=${executionMode}`);
+  if (!resp.data.success || !resp.data.data) throw new Error(resp.data.error?.message || '检查失败');
+  return resp.data.data;
+}

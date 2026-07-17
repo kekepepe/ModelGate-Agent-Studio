@@ -136,6 +136,31 @@ class TestCreateAgent:
         })
         assert resp.status_code == 201
 
+    def test_create_agent_persists_resource_limits(self, client):
+        resp = client.post("/api/v1/agents", json={
+            "name": "Bounded Agent", "role": "coder", "default_model_id": "model-1",
+            "max_tokens_per_task": 2048, "max_duration_seconds": 60,
+            "max_consecutive_failures": 2,
+        })
+        assert resp.status_code == 201
+        detail = client.get(f"/api/v1/agents/{resp.json()['data']['id']}").json()["data"]
+        assert detail["max_tokens_per_task"] == 2048
+        assert detail["max_duration_seconds"] == 60
+        assert detail["max_consecutive_failures"] == 2
+
+
+class TestGoalBudgets:
+    def test_create_goal_persists_run_budget_controls(self, client, db_session):
+        response = client.post("/api/v1/goals", json={
+            "title": "Bounded goal", "budget_tokens": 2500,
+            "budget_cost_usd": 1.5, "max_duration_seconds": 120,
+        })
+        assert response.status_code == 201
+        goal_id = response.json()["data"]["goal_id"]
+        from src.models.workspace import Goal
+        goal = db_session.query(Goal).filter(Goal.id == goal_id).one()
+        assert (goal.budget_tokens, goal.budget_cost_usd, goal.max_duration_seconds) == (2500, 1.5, 120)
+
 
 class TestGetAgent:
     def test_get_agent_success(self, client):
@@ -184,6 +209,13 @@ class TestUpdateAgent:
         resp = client.patch(f"/api/v1/agents/{agent_id}", json={
             "max_steps_per_task": 0,
         })
+        assert resp.status_code == 422
+
+    def test_update_agent_rejects_non_positive_resource_limit(self, client):
+        created = client.post("/api/v1/agents", json={
+            "name": "Agent", "role": "coder", "default_model_id": "model-1",
+        })
+        resp = client.patch(f"/api/v1/agents/{created.json()['data']['id']}", json={"max_duration_seconds": 0})
         assert resp.status_code == 422
 
     def test_update_agent_partial(self, client):

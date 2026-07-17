@@ -16,7 +16,8 @@ RUN mkdir -p /app/data
 
 ENV PYTHONPATH=/app
 ENV DATABASE_URL=sqlite:///./data/modelgate.db
-ENV MODEL_PROVIDER=mock
+ENV EXECUTION_MODE=live
+ENV WORKSPACE_ROOT=/workspace
 ENV APP_NAME="ModelGate Agent Studio"
 ENV DEBUG=true
 ENV API_V1_PREFIX=/api/v1

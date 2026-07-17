@@ -21,6 +21,9 @@ class AgentCreate(BaseModel):
     system_prompt: Optional[str] = ""
     output_format: Optional[str] = "markdown"
     max_steps_per_task: Optional[int] = 10
+    max_tokens_per_task: Optional[int] = 32000
+    max_duration_seconds: Optional[int] = 900
+    max_consecutive_failures: Optional[int] = 3
     allow_handoff: Optional[bool] = False
     handoff_threshold_tokens: Optional[int] = None
     template_id: Optional[str] = None
@@ -32,6 +35,13 @@ class AgentCreate(BaseModel):
             raise ValueError("max_steps_per_task must be greater than 0")
         if v is not None and v > 50:
             raise ValueError("max_steps_per_task must not exceed 50")
+        return v
+
+    @field_validator("max_tokens_per_task", "max_duration_seconds", "max_consecutive_failures")
+    @classmethod
+    def validate_positive_limits(cls, v: Optional[int]) -> Optional[int]:
+        if v is not None and v <= 0:
+            raise ValueError("resource limits must be greater than 0")
         return v
 
     @field_validator("handoff_threshold_tokens")
@@ -52,6 +62,9 @@ class AgentUpdate(BaseModel):
     system_prompt: Optional[str] = None
     output_format: Optional[str] = None
     max_steps_per_task: Optional[int] = None
+    max_tokens_per_task: Optional[int] = None
+    max_duration_seconds: Optional[int] = None
+    max_consecutive_failures: Optional[int] = None
     allow_handoff: Optional[bool] = None
     handoff_threshold_tokens: Optional[int] = None
 
@@ -62,6 +75,13 @@ class AgentUpdate(BaseModel):
             raise ValueError("max_steps_per_task must be greater than 0")
         if v is not None and v > 50:
             raise ValueError("max_steps_per_task must not exceed 50")
+        return v
+
+    @field_validator("max_tokens_per_task", "max_duration_seconds", "max_consecutive_failures")
+    @classmethod
+    def validate_positive_limits(cls, v: Optional[int]) -> Optional[int]:
+        if v is not None and v <= 0:
+            raise ValueError("resource limits must be greater than 0")
         return v
 
     @field_validator("handoff_threshold_tokens")
@@ -90,6 +110,9 @@ class AgentResponse(BaseModel):
     output_format: Optional[str]
     max_steps_per_task: int
     max_tool_calls_per_task: Optional[int]
+    max_tokens_per_task: int
+    max_duration_seconds: int
+    max_consecutive_failures: int
     allow_handoff: bool
     handoff_threshold_tokens: Optional[int]
     is_enabled: bool

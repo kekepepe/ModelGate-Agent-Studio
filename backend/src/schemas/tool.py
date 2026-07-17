@@ -57,6 +57,7 @@ class ToolCallRecordOut(BaseModel):
     latency_ms: int
     error_message: Optional[str] = None
     created_at: Optional[str] = None
+    result: Dict[str, Any] = Field(default_factory=dict)
 
     model_config = ConfigDict(from_attributes=True)
 

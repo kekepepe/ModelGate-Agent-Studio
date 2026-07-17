@@ -12,9 +12,9 @@ def _seed_knowledge_data(db_session):
     goal = Goal(id=str(uuid.uuid4()), title="Knowledge Test", status="completed")
     db_session.add(goal)
     db_session.commit()
-    t1 = Task(id=str(uuid.uuid4()), goal_id=goal.id, title="T1", status="completed",
+    t1 = Task(id=str(uuid.uuid4()), goal_id=goal.id, title="T1", status="completed_verified",
               assigned_agent_id=planner.id, output="Done", tokens_used=100)
-    t2 = Task(id=str(uuid.uuid4()), goal_id=goal.id, title="T2", status="completed",
+    t2 = Task(id=str(uuid.uuid4()), goal_id=goal.id, title="T2", status="completed_verified",
               assigned_agent_id=planner.id, output="Done too", tokens_used=200)
     db_session.add_all([t1, t2])
     db_session.commit()
@@ -30,6 +30,7 @@ class TestKnowledgeAPI:
         assert data["total_memories"] >= 1
         assert data["total_skills"] >= 1
         assert data["pending_review"] >= 1
+        assert data["memory_drafts"][0]["expires_at"] is not None
 
     def test_get_evolution(self, client: TestClient, db_session):
         goal = _seed_knowledge_data(db_session)

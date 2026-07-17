@@ -69,6 +69,9 @@ export default function AgentRegistryPage() {
         system_prompt: (data as AgentCreateData).system_prompt,
         output_format: (data as AgentCreateData).output_format,
         max_steps_per_task: (data as AgentCreateData).max_steps_per_task,
+        max_tokens_per_task: (data as AgentCreateData).max_tokens_per_task,
+        max_duration_seconds: (data as AgentCreateData).max_duration_seconds,
+        max_consecutive_failures: (data as AgentCreateData).max_consecutive_failures,
         allow_handoff: (data as AgentCreateData).allow_handoff,
         handoff_threshold_tokens: (data as AgentCreateData).handoff_threshold_tokens,
       };
