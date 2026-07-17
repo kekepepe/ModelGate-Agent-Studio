@@ -1,0 +1,143 @@
+- main [ref=e4]:
+  - generic [ref=e6]:
+    - generic [ref=e7]:
+      - generic [ref=e8]: "进度: 1/5 Tasks"
+      - generic [ref=e9]:
+        - generic [ref=e10]: ModelGate
+        - button "代码交付团队 v1.2.3" [ref=e17] [cursor=pointer]:
+          - generic [ref=e18]: 代码交付团队
+          - generic [ref=e19]: v1.2.3
+        - paragraph [ref=e23]:
+          - strong [ref=e24]: "Goal:"
+          - text: 完成一个可验证的代码交付
+        - generic [ref=e25]: 运行中
+        - generic [ref=e27]:
+          - generic [ref=e28]:
+            - generic [ref=e29]: Quota
+            - strong [ref=e30]: 25%
+          - generic [ref=e33]: 25,328 / 100,000 tokens
+      - generic [ref=e34]:
+        - generic "工作区视图" [ref=e35]:
+          - button "Card Flow" [ref=e36] [cursor=pointer]
+          - button "Pixel Office" [active] [pressed] [ref=e37] [cursor=pointer]
+        - generic [ref=e38]:
+          - button "Pause" [ref=e39]
+          - button "Resume" [disabled] [ref=e44]
+          - button "Stop" [ref=e48]
+          - button "Export" [ref=e52]
+    - generic [ref=e57]:
+      - complementary [ref=e58]:
+        - generic [ref=e59]:
+          - generic [ref=e60]:
+            - generic [ref=e61]:
+              - heading "Goal" [level=3] [ref=e66]
+              - button "Edit Goal" [ref=e67]
+            - paragraph [ref=e71]: 完成一个可验证的代码交付
+            - generic [ref=e72]: ab598913-aa04-4807-baa9-d2b879591ac3
+          - generic [ref=e73]:
+            - heading "Completion criteria" [level=3] [ref=e79]
+            - list [ref=e80]:
+              - listitem [ref=e81]: 功能按要求实现
+              - listitem [ref=e84]: 测试与构建通过
+              - listitem [ref=e87]: 代码经过独立审查
+          - generic [ref=e90]:
+            - heading "Run config" [level=3] [ref=e96]
+            - generic [ref=e97]:
+              - term [ref=e98]: Mode
+              - definition [ref=e99]: Multi-Agent
+              - term [ref=e100]: Max Parallel Agents
+              - definition [ref=e101]: "3"
+              - term [ref=e102]: Model Routing
+              - definition [ref=e103]: Auto
+              - term [ref=e104]: Max Tokens (Run)
+              - definition [ref=e105]: 100,000
+              - term [ref=e106]: Temperature
+              - definition [ref=e107]: "0.3"
+              - term [ref=e108]: Retry Policy
+              - definition [ref=e109]: 2 retries
+            - button "View all config" [ref=e110] [cursor=pointer]
+        - generic [ref=e111]:
+          - heading "Task tree" [level=3] [ref=e116]
+          - generic [ref=e117]: 完成一个可验证的代码交付
+          - generic [ref=e121]:
+            - generic [ref=e122]:
+              - strong [ref=e126]: 1. Planning & Breakdown
+              - 'button "1.1 Plan: 完成一个可验证的代码交付" [ref=e131]':
+                - generic [ref=e132]: "1.1"
+                - generic [ref=e133]: "Plan: 完成一个可验证的代码交付"
+            - generic [ref=e137]:
+              - strong [ref=e141]: 2. Implementation
+              - generic [ref=e144]:
+                - 'button "2.1 Build: 完成一个可验证的代码交付" [ref=e145]':
+                  - generic [ref=e146]: "2.1"
+                  - generic [ref=e147]: "Build: 完成一个可验证的代码交付"
+                - 'button "2.2 Replan: Build: 完成一个可验证的代码交付" [ref=e151]':
+                  - generic [ref=e152]: "2.2"
+                  - generic [ref=e153]: "Replan: Build: 完成一个可验证的代码交付"
+            - generic [ref=e156]:
+              - strong [ref=e160]: 3. Code Review
+              - generic [ref=e163]:
+                - 'button "3.1 Review: 完成一个可验证的代码交付" [ref=e164]':
+                  - generic [ref=e165]: "3.1"
+                  - generic [ref=e166]: "Review: 完成一个可验证的代码交付"
+                - 'button "3.2 Replan: Review: 完成一个可验证的代码交付" [ref=e169]':
+                  - generic [ref=e170]: "3.2"
+                  - generic [ref=e171]: "Replan: Review: 完成一个可验证的代码交付"
+          - button "View full task tree" [ref=e174] [cursor=pointer]
+          - generic [ref=e175]: 5 个 Task · 0 个进行中 · 1 个已完成
+      - main [ref=e176]:
+        - region "Pixel Office" [ref=e392]:
+          - heading "Pixel office" [level=2] [ref=e394]
+          - generic [ref=e397]:
+            - button "打开 Planner 工位" [ref=e399] [cursor=pointer]:
+              - generic [ref=e401]:
+                - strong [ref=e402]: Planner
+                - generic [ref=e403]: MiniMax-M3
+              - generic [ref=e404]:
+                - generic [ref=e405]: Current task
+                - generic [ref=e406]: "Plan: 完成一个可验证的代码交付"
+              - generic [ref=e409]: Output
+            - button "打开 Coder 工位" [ref=e415] [cursor=pointer]:
+              - generic [ref=e417]:
+                - strong [ref=e418]: Coder
+                - generic [ref=e419]: deepseek-v4-pro
+              - generic [ref=e420]:
+                - generic [ref=e421]: Current task
+                - generic [ref=e422]: "Replan: Build: 完成一个可验证的代码交付"
+                - generic [ref=e423]: ⌛
+              - generic [ref=e424]: Output
+            - button "打开 Reviewer 工位" [ref=e432] [cursor=pointer]:
+              - generic [ref=e434]:
+                - strong [ref=e435]: Reviewer
+                - generic [ref=e436]: Configured Model
+              - generic [ref=e437]:
+                - generic [ref=e438]: Current task
+                - generic [ref=e439]: "Replan: Review: 完成一个可验证的代码交付"
+                - generic [ref=e440]: ⌛
+              - generic [ref=e441]: Output
+            - 'button "Handoff folder No active handoff From: — To: —" [disabled] [ref=e458]':
+              - generic [ref=e461]:
+                - generic [ref=e462]: Handoff folder
+                - strong [ref=e463]: No active handoff
+                - emphasis [ref=e464]: "From: — To: —"
+    - generic [ref=e365]:
+      - button [ref=e366]
+      - generic [ref=e373]:
+        - generic [ref=e374]:
+          - generic [ref=e375]: Tasks Completed
+          - strong [ref=e376]: 1 / 5
+        - generic [ref=e377]:
+          - generic [ref=e378]: In Progress
+          - strong [ref=e379]: "0"
+        - generic [ref=e380]:
+          - generic [ref=e381]: Waiting
+          - strong [ref=e382]: "3"
+        - generic [ref=e383]:
+          - generic [ref=e384]: Handoffs
+          - strong [ref=e385]: "0"
+        - generic [ref=e386]:
+          - generic [ref=e387]: Errors
+          - strong [ref=e388]: "1"
+        - generic [ref=e389]:
+          - generic [ref=e390]: Last Update
+          - strong [ref=e391]: 02:04:05 PM

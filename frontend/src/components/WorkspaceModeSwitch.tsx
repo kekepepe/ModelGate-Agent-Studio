@@ -1,24 +1,23 @@
-import { Building2, PanelsTopLeft } from 'lucide-react';
 import type { WorkspaceViewMode } from '../utils/workspaceViewModel';
 
 export default function WorkspaceModeSwitch({ mode, onChange }: { mode: WorkspaceViewMode; onChange: (mode: WorkspaceViewMode) => void }) {
   return (
-    <div className="inline-flex rounded-lg border border-stone-200 bg-stone-50 p-0.5" aria-label="工作区视图">
+    <div className="workspace-mode-switch" aria-label="工作区视图">
       <button
         type="button"
         aria-pressed={mode === 'card'}
         onClick={() => onChange('card')}
-        className={`inline-flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-medium transition-colors ${mode === 'card' ? 'bg-white text-blue-700 shadow-sm' : 'text-stone-500 hover:text-stone-800'}`}
+        className={mode === 'card' ? 'is-active' : ''}
       >
-        <PanelsTopLeft size={14} /> Card Flow
+        Card Flow
       </button>
       <button
         type="button"
         aria-pressed={mode === 'pixel'}
         onClick={() => onChange('pixel')}
-        className={`inline-flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-medium transition-colors ${mode === 'pixel' ? 'bg-white text-blue-700 shadow-sm' : 'text-stone-500 hover:text-stone-800'}`}
+        className={mode === 'pixel' ? 'is-active' : ''}
       >
-        <Building2 size={14} /> Pixel Office
+        Pixel Office
       </button>
     </div>
   );

@@ -1,69 +1,57 @@
 import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { ChevronUp, ChevronDown } from 'lucide-react';
+import { ChevronDown, ChevronUp, TerminalSquare } from 'lucide-react';
 import LogListItem from './LogListItem';
 import LogFilters from './LogFilters';
 import { getLogs } from '../api/logs';
 import type { LogFilters as LogFiltersType } from '../types/log';
+import type { WorkspaceHandoff, WorkspaceTask } from '../types/workspace';
 
 interface BottomConsoleProps {
   goalId?: string | null;
+  tasks?: WorkspaceTask[];
+  handoffs?: WorkspaceHandoff[];
 }
 
-export default function BottomConsole({ goalId }: BottomConsoleProps) {
+const COMPLETE = new Set(['completed', 'completed_verified', 'completed_unverified']);
+
+export default function BottomConsole({ goalId, tasks = [], handoffs = [] }: BottomConsoleProps) {
   const [expanded, setExpanded] = useState(false);
   const [filters, setFilters] = useState<LogFiltersType>({ page_size: 50 });
-
   const allFilters = goalId ? { ...filters, goal_id: goalId } : filters;
-  const { data: logsData } = useQuery({
-    queryKey: ['workspace-logs', allFilters],
-    queryFn: () => getLogs(allFilters),
-    enabled: !!goalId && expanded,
-    refetchInterval: expanded ? 2000 : false,
-  });
+  const { data: logsData } = useQuery({ queryKey: ['workspace-logs', allFilters], queryFn: () => getLogs(allFilters), enabled: !!goalId && expanded, refetchInterval: expanded ? 2000 : false });
 
-  // If no goalId, show placeholder
-  if (!goalId) {
-    return (
-      <div className="border-t border-stone-200 bg-white">
-        <div className="flex items-center justify-between px-4 py-2">
-          <span className="text-xs text-stone-400">启动 Goal 后此处将显示实时执行日志</span>
-        </div>
-      </div>
-    );
-  }
-
-  const summaryText = logsData
-    ? `${logsData.total} 条日志`
-    : '加载中...';
+  const completed = tasks.filter((task) => COMPLETE.has(task.status)).length;
+  const running = tasks.filter((task) => task.status === 'running').length;
+  const waiting = tasks.filter((task) => ['pending', 'ready', 'assigned', 'waiting_tool', 'waiting_approval'].includes(task.status)).length;
+  const errors = tasks.filter((task) => ['failed', 'blocked'].includes(task.status)).length;
+  const latestUpdate = tasks.map((task) => task.updated_at).filter(Boolean).sort().at(-1);
 
   return (
-    <div className="border-t border-stone-200 bg-white">
-      <button
-        onClick={() => setExpanded(!expanded)}
-        className="w-full flex items-center justify-between px-4 py-2 hover:bg-stone-50 transition-colors"
-      >
-        <span className="text-xs text-stone-500 font-medium">
-          执行日志 · {summaryText}
-        </span>
-        {expanded ? <ChevronDown size={16} className="text-stone-400" /> : <ChevronUp size={16} className="text-stone-400" />}
+    <section className={`console-summary ${expanded ? 'is-expanded' : ''}`}>
+      <button type="button" onClick={() => setExpanded((value) => !value)} className="console-summary-heading" aria-expanded={expanded}>
+        <span><TerminalSquare size={18} />Console summary</span>{expanded ? <ChevronDown size={17} /> : <ChevronUp size={17} />}
       </button>
-
-      {expanded && (
-        <div className={`border-t border-stone-100 ${expanded ? 'animate-slide-up' : ''}`} style={{ maxHeight: '300px', overflow: 'hidden' }}>
-          <div className="border-b border-stone-100 px-3 py-2">
-            <LogFilters filters={filters} onChange={(f) => setFilters(f)} />
-          </div>
-          <div className="overflow-y-auto" style={{ maxHeight: '240px' }}>
-            {logsData?.items.map((log) => (
-              <LogListItem key={log.id} log={log} />
-            ))}
-            {logsData?.items.length === 0 && (
-              <p className="text-xs text-stone-400 text-center py-4">暂无日志</p>
-            )}
-          </div>
+      <div className="console-metrics">
+        <ConsoleMetric label="Tasks Completed" value={`${completed} / ${tasks.length}`} />
+        <ConsoleMetric label="In Progress" value={running} />
+        <ConsoleMetric label="Waiting" value={waiting} />
+        <ConsoleMetric label="Handoffs" value={handoffs.length} />
+        <ConsoleMetric label="Errors" value={errors} danger={errors > 0} />
+        <ConsoleMetric label="Last Update" value={latestUpdate ? new Date(latestUpdate).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }) : '—'} wide />
+      </div>
+      {expanded ? <div className="console-log-drawer">
+        <div className="console-log-filters"><LogFilters filters={filters} onChange={setFilters} /></div>
+        <div className="console-log-list">
+          {logsData?.items.map((log) => <LogListItem key={log.id} log={log} />)}
+          {!goalId ? <p>启动 Goal 后此处显示实时执行日志。</p> : null}
+          {goalId && logsData?.items.length === 0 ? <p>暂无日志</p> : null}
         </div>
-      )}
-    </div>
+      </div> : null}
+    </section>
   );
+}
+
+function ConsoleMetric({ label, value, danger = false, wide = false }: { label: string; value: string | number; danger?: boolean; wide?: boolean }) {
+  return <div className={`console-metric ${wide ? 'console-metric--wide' : ''}`}><span>{label}</span><strong className={danger ? 'is-danger' : ''}>{value}</strong></div>;
 }

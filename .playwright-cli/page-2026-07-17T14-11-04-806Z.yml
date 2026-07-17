@@ -1,0 +1,153 @@
+- main [ref=f1e4]:
+  - generic [ref=f1e6]:
+    - generic [ref=f1e7]:
+      - generic [ref=f1e8]: "进度: 1/5 Tasks"
+      - generic [ref=f1e9]:
+        - generic [ref=f1e10]: ModelGate
+        - button "代码交付团队 v1.2.3" [ref=f1e17] [cursor=pointer]:
+          - generic [ref=f1e18]: 代码交付团队
+          - generic [ref=f1e19]: v1.2.3
+        - paragraph [ref=f1e23]:
+          - strong [ref=f1e24]: "Goal:"
+          - text: 完成一个可验证的代码交付
+        - generic [ref=f1e25]: 运行中
+        - generic [ref=f1e27]:
+          - generic [ref=f1e28]:
+            - generic [ref=f1e29]: Quota
+            - strong [ref=f1e30]: 25%
+          - generic [ref=f1e33]: 25,328 / 100,000 tokens
+      - generic [ref=f1e34]:
+        - generic "工作区视图" [ref=f1e35]:
+          - button "Card Flow" [ref=f1e36] [cursor=pointer]
+          - button "Pixel Office" [pressed] [ref=f1e37] [cursor=pointer]
+        - generic [ref=f1e38]:
+          - button "Pause" [ref=f1e39]
+          - button "Resume" [disabled] [ref=f1e44]
+          - button "Stop" [ref=f1e48]
+          - button "Export" [ref=f1e52]
+    - generic [ref=f1e57]:
+      - complementary [ref=f1e58]:
+        - generic [ref=f1e59]:
+          - generic [ref=f1e60]:
+            - generic [ref=f1e61]:
+              - heading "Goal" [level=3] [ref=f1e66]
+              - button "Edit Goal" [ref=f1e67]
+            - paragraph [ref=f1e71]: 完成一个可验证的代码交付
+            - generic [ref=f1e72]: ab598913-aa04-4807-baa9-d2b879591ac3
+          - generic [ref=f1e73]:
+            - heading "Completion criteria" [level=3] [ref=f1e79]
+            - list [ref=f1e80]:
+              - listitem [ref=f1e81]: 功能按要求实现
+              - listitem [ref=f1e84]: 测试与构建通过
+              - listitem [ref=f1e87]: 代码经过独立审查
+          - generic [ref=f1e90]:
+            - heading "Run config" [level=3] [ref=f1e96]
+            - generic [ref=f1e97]:
+              - term [ref=f1e98]: Mode
+              - definition [ref=f1e99]: Multi-Agent
+              - term [ref=f1e100]: Max Parallel Agents
+              - definition [ref=f1e101]: "3"
+              - term [ref=f1e102]: Model Routing
+              - definition [ref=f1e103]: Auto
+              - term [ref=f1e104]: Max Tokens (Run)
+              - definition [ref=f1e105]: 100,000
+              - term [ref=f1e106]: Temperature
+              - definition [ref=f1e107]: "0.3"
+              - term [ref=f1e108]: Retry Policy
+              - definition [ref=f1e109]: 2 retries
+            - button "View all config" [ref=f1e110] [cursor=pointer]
+        - generic [ref=f1e111]:
+          - heading "Task tree" [level=3] [ref=f1e116]
+          - generic [ref=f1e117]: 完成一个可验证的代码交付
+          - generic [ref=f1e121]:
+            - generic [ref=f1e122]:
+              - strong [ref=f1e126]: 1. Planning & Breakdown
+              - 'button "1.1 Plan: 完成一个可验证的代码交付" [ref=f1e131]':
+                - generic [ref=f1e132]: "1.1"
+                - generic [ref=f1e133]: "Plan: 完成一个可验证的代码交付"
+            - generic [ref=f1e137]:
+              - strong [ref=f1e141]: 2. Implementation
+              - generic [ref=f1e144]:
+                - 'button "2.1 Build: 完成一个可验证的代码交付" [ref=f1e145]':
+                  - generic [ref=f1e146]: "2.1"
+                  - generic [ref=f1e147]: "Build: 完成一个可验证的代码交付"
+                - 'button "2.2 Replan: Build: 完成一个可验证的代码交付" [ref=f1e151]':
+                  - generic [ref=f1e152]: "2.2"
+                  - generic [ref=f1e153]: "Replan: Build: 完成一个可验证的代码交付"
+            - generic [ref=f1e156]:
+              - strong [ref=f1e160]: 3. Code Review
+              - generic [ref=f1e163]:
+                - 'button "3.1 Review: 完成一个可验证的代码交付" [ref=f1e164]':
+                  - generic [ref=f1e165]: "3.1"
+                  - generic [ref=f1e166]: "Review: 完成一个可验证的代码交付"
+                - 'button "3.2 Replan: Review: 完成一个可验证的代码交付" [ref=f1e169]':
+                  - generic [ref=f1e170]: "3.2"
+                  - generic [ref=f1e171]: "Replan: Review: 完成一个可验证的代码交付"
+          - button "View full task tree" [ref=f1e174] [cursor=pointer]
+          - generic [ref=f1e175]: 5 个 Task · 0 个进行中 · 1 个已完成
+      - main [ref=f1e176]:
+        - region "Pixel Office" [ref=f1e177]:
+          - heading "Pixel office" [level=2] [ref=f1e179]
+          - generic [ref=f1e182]:
+            - button "打开 Planner 工位" [ref=f1e184] [cursor=pointer]:
+              - generic [ref=f1e186]:
+                - strong [ref=f1e187]: Planner
+                - generic [ref=f1e188]: MiniMax-M3
+              - generic [ref=f1e189]:
+                - generic [ref=f1e190]: Current task
+                - generic [ref=f1e191]: "Plan: 完成一个可验证的代码交付"
+              - generic [ref=f1e194]: Output
+            - generic [ref=f1e199]:
+              - dialog "Coder工位详情" [ref=f1e279]:
+                - button "关闭工位详情" [ref=f1e280]
+                - generic [ref=f1e286]:
+                  - strong [ref=f1e287]: Coder (error)
+                  - generic [ref=f1e288]: "Model: deepseek-v4-pro"
+                - generic [ref=f1e289]:
+                  - button "View Full Detail" [ref=f1e290]
+                  - button "Pause" [ref=f1e294]
+                  - button "Handoff" [disabled] [ref=f1e298]
+              - button "打开 Coder 工位" [active] [ref=f1e200] [cursor=pointer]:
+                - generic [ref=f1e202]:
+                  - strong [ref=f1e203]: Coder
+                  - generic [ref=f1e204]: deepseek-v4-pro
+                - generic [ref=f1e205]:
+                  - generic [ref=f1e206]: Current task
+                  - generic [ref=f1e207]: "Replan: Build: 完成一个可验证的代码交付"
+                  - generic [ref=f1e208]: ⌛
+                - generic [ref=f1e209]: Output
+            - button "打开 Reviewer 工位" [ref=f1e217] [cursor=pointer]:
+              - generic [ref=f1e219]:
+                - strong [ref=f1e220]: Reviewer
+                - generic [ref=f1e221]: Configured Model
+              - generic [ref=f1e222]:
+                - generic [ref=f1e223]: Current task
+                - generic [ref=f1e224]: "Replan: Review: 完成一个可验证的代码交付"
+                - generic [ref=f1e225]: ⌛
+              - generic [ref=f1e226]: Output
+            - 'button "Handoff folder No active handoff From: — To: —" [disabled] [ref=f1e243]':
+              - generic [ref=f1e246]:
+                - generic [ref=f1e247]: Handoff folder
+                - strong [ref=f1e248]: No active handoff
+                - emphasis [ref=f1e249]: "From: — To: —"
+    - generic [ref=f1e252]:
+      - button [ref=f1e253]
+      - generic [ref=f1e260]:
+        - generic [ref=f1e261]:
+          - generic [ref=f1e262]: Tasks Completed
+          - strong [ref=f1e263]: 1 / 5
+        - generic [ref=f1e264]:
+          - generic [ref=f1e265]: In Progress
+          - strong [ref=f1e266]: "0"
+        - generic [ref=f1e267]:
+          - generic [ref=f1e268]: Waiting
+          - strong [ref=f1e269]: "3"
+        - generic [ref=f1e270]:
+          - generic [ref=f1e271]: Handoffs
+          - strong [ref=f1e272]: "0"
+        - generic [ref=f1e273]:
+          - generic [ref=f1e274]: Errors
+          - strong [ref=f1e275]: "1"
+        - generic [ref=f1e276]:
+          - generic [ref=f1e277]: Last Update
+          - strong [ref=f1e278]: 02:04:05 PM

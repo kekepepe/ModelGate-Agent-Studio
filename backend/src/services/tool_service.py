@@ -164,14 +164,32 @@ def _file_read(path: str, cwd: str = ".") -> Dict[str, Any]:
 
 
 def _file_search(pattern: str, directory: Optional[str] = None, cwd: str = ".") -> Dict[str, Any]:
-    """Search for files matching a glob pattern."""
+    """Search for files matching a glob pattern on Python 3.9+.
+
+    ``glob.root_dir`` is unavailable in the Python 3.9 backend image. Build an
+    absolute pattern instead, then convert safe matches back to paths relative
+    to the requested search directory so the Tool Gateway contract stays the
+    same across local and Docker runtimes.
+    """
     normalized_pattern = pattern.replace("\\", "/")
     if os.path.isabs(pattern) or any(part == ".." for part in normalized_pattern.split("/")):
         raise ToolPolicyError("Glob pattern escapes the configured workspace root")
     search_dir = _safe_path(cwd, directory or ".")
     try:
-        matches = glob.glob(pattern, root_dir=search_dir, recursive=True)
-        matches.sort()
+        absolute_pattern = os.path.join(search_dir, normalized_pattern)
+        raw_matches = glob.glob(absolute_pattern, recursive=True)
+        matches = []
+        for raw_match in raw_matches:
+            try:
+                safe_match = _safe_path(search_dir, raw_match, allow_missing=False)
+            except ToolPolicyError:
+                # Do not expose targets reached through a symlink that escapes
+                # the selected workspace directory.
+                continue
+            relative_match = os.path.relpath(safe_match, search_dir).replace(os.sep, "/")
+            if relative_match != ".":
+                matches.append(relative_match)
+        matches = sorted(set(matches))
         result = f"Found {len(matches)} file(s):\n" + "\n".join(matches[:50])
         if len(matches) > 50:
             result += f"\n... and {len(matches) - 50} more"

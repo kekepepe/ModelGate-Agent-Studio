@@ -1,5 +1,5 @@
 import { lazy, Suspense } from 'react'
-import { Routes, Route, Link, NavLink } from 'react-router-dom'
+import { Routes, Route, Link, NavLink, useLocation } from 'react-router-dom'
 import { Bot, ChevronDown } from 'lucide-react'
 import './styles/animations.css'
 
@@ -19,9 +19,12 @@ const ToolManagerPage = lazy(() => import('./pages/ToolManagerPage'))
 const StudioPage = lazy(() => import('./pages/StudioPage'))
 
 function App() {
+  const location = useLocation()
+  const isWorkspace = location.pathname === '/workspace'
+
   return (
     <div className="min-h-screen flex flex-col bg-stone-50">
-      <nav className="bg-white border-b border-stone-200 px-4 sm:px-6 lg:px-8">
+      {!isWorkspace ? <nav className="bg-white border-b border-stone-200 px-4 sm:px-6 lg:px-8">
         <div className="max-w-[1400px] mx-auto flex items-center gap-7 h-14">
           <Link to="/" className="flex items-center gap-2 text-base font-semibold text-stone-900">
             <span className="flex h-7 w-7 items-center justify-center rounded-lg border border-blue-200 bg-blue-50 text-blue-700">
@@ -47,8 +50,8 @@ function App() {
           </div>
           <Link to="/dashboard" className="ml-auto text-xs font-medium text-stone-400 hover:text-stone-700">运行概览</Link>
         </div>
-      </nav>
-      <main className="flex-1">
+      </nav> : null}
+      <main className={isWorkspace ? 'flex h-screen min-h-0 flex-1 overflow-hidden' : 'flex-1'}>
         <Suspense fallback={<RouteLoadingFallback />}>
           <Routes>
             <Route path="/dashboard" element={<DashboardPage />} />
