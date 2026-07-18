@@ -229,13 +229,7 @@ def _file_read(path: str, cwd: str = ".") -> Dict[str, Any]:
 
 
 def _file_search(pattern: str, directory: Optional[str] = None, cwd: str = ".") -> Dict[str, Any]:
-    """Search for files matching a glob pattern on Python 3.9+.
-
-    ``glob.root_dir`` is unavailable in the Python 3.9 backend image. Build an
-    absolute pattern instead, then convert safe matches back to paths relative
-    to the requested search directory so the Tool Gateway contract stays the
-    same across local and Docker runtimes.
-    """
+    """Search safely for files below the configured Python 3.12 workspace."""
     normalized_pattern = pattern.replace("\\", "/")
     if os.path.isabs(pattern) or any(part == ".." for part in normalized_pattern.split("/")):
         raise ToolPolicyError("Glob pattern escapes the configured workspace root")

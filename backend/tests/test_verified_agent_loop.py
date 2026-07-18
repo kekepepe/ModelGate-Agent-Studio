@@ -46,8 +46,15 @@ def _coding_task(db_session, tmp_path):
 
 def test_agent_write_test_and_verified_completion(db_session, tmp_path):
     task = _coding_task(db_session, tmp_path)
+    fixed_module = (
+        "import unittest\n\n"
+        "answer = 42\n\n"
+        "class FixedTest(unittest.TestCase):\n"
+        "    def test_answer(self):\n"
+        "        self.assertEqual(answer, 42)\n"
+    )
     provider = ScriptedProvider([
-        {"tool_calls": [_tool_call("file_write", json.dumps({"path": "fixed.py", "content": "answer = 42\n"}))]},
+        {"tool_calls": [_tool_call("file_write", json.dumps({"path": "fixed.py", "content": fixed_module}))]},
         {"tool_calls": [_tool_call("test_runner", json.dumps({"command": "python3 -m unittest fixed"}))]},
         {"content": "Fixed the bug and verified the command."},
     ])
@@ -59,7 +66,7 @@ def test_agent_write_test_and_verified_completion(db_session, tmp_path):
     calls = [(item.tool_name, item.status, item.tool_output, item.error_message) for item in db_session.query(ToolCallRecord).filter(ToolCallRecord.task_id == task.id).all()]
     assert result["status"] == "completed_verified", (result["verification"], calls)
     assert [item["status"] for item in result["verification"]["results"]] == ["passed", "passed"]
-    assert (tmp_path / "fixed.py").read_text() == "answer = 42\n"
+    assert (tmp_path / "fixed.py").read_text() == fixed_module
     worker = db_session.query(WorkerSession).filter(WorkerSession.task_id == task.id).one()
     assert worker.step_count == 3
     assert worker.next_action == "completed"

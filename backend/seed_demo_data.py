@@ -3,7 +3,7 @@
 Creates: 6 agents (Planner, Coder, Reviewer, Research, Summarizer, Supervisor),
 6 models, 1 sample Goal with 4 Tasks. Ready for Workspace demo.
 
-Usage: cd backend && ./.venv/bin/python seed_demo_data.py
+Usage: docker compose exec backend python seed_demo_data.py
 """
 
 import uuid

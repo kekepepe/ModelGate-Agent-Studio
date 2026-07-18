@@ -146,7 +146,13 @@ def test_workspace_state_surfaces_real_tool_evidence(db_session):
         agent.set_allowed_tools(["file_write", "test_runner"])
         db_session.commit()
         executor = ToolExecutor()
-        asyncio.run(executor.execute(db_session, "file_write", {"path": "evidence.py", "content": "value = 1\n"}, goal.id, task.id, agent.id, "worker"))
+        test_module = (
+            "import unittest\n\n"
+            "class EvidenceTest(unittest.TestCase):\n"
+            "    def test_value(self):\n"
+            "        self.assertEqual(1, 1)\n"
+        )
+        asyncio.run(executor.execute(db_session, "file_write", {"path": "evidence.py", "content": test_module}, goal.id, task.id, agent.id, "worker"))
         asyncio.run(executor.execute(db_session, "test_runner", {"command": "python3 -m unittest evidence"}, goal.id, task.id, agent.id, "worker"))
         item = get_workspace_state(db_session, goal.id)["tasks"][0]
         assert item["latest_tool_call"]["tool_name"] == "test_runner"

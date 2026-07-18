@@ -136,19 +136,18 @@ ModelGate Agent Studio 不是普通 AI 聊天工具，也不是简单的多 API 
 
 ### 前置条件
 
-- Python 3.12.8（见 `.python-version`）
+- Docker Desktop / Docker Engine + Docker Compose
 - Node.js 22.23.1（见 `.nvmrc`）
 - npm 10.9.8
 
 ### 后端
 
+后端只在 Docker 中安装、运行和验证。镜像的 Python 固定为 3.12.8，Python 依赖均在
+`backend/requirements.txt` 与 `backend/requirements-dev.txt` 中使用精确版本。
+
 ```bash
-cd backend
-python3 -m venv .venv
-source .venv/bin/activate
-pip install -r requirements.txt
-cp .env.example .env  # 编辑配置
-.venv/bin/python -m uvicorn src.main:app --reload
+cp backend/.env.example backend/.env  # 按需编辑配置
+docker compose -f docker-compose.dev.yml up --build backend
 ```
 
 ### 前端
@@ -182,12 +181,12 @@ export MODEL_GATE_EXECUTION_MODE=mock
 后端测试依赖单独锁定在 `requirements-dev.txt`：
 
 ```bash
-cd backend
-.venv/bin/pip install -r requirements-dev.txt
-.venv/bin/ruff check src tests scripts
-.venv/bin/mypy src/services/providers src/services/sandbox_service.py src/schemas
-.venv/bin/pytest -m "not provider" --cov=src --cov-fail-under=75
+docker compose --profile verify build backend-verify
+docker compose --profile verify run --rm backend-verify
 ```
+
+验证容器会依次运行 `pip check`、`alembic upgrade head`、`alembic current` 和完整 `pytest`；
+宿主机不需要 Python、pip 或 `.venv`。
 
 前端与浏览器：
 

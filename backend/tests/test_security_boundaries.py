@@ -89,7 +89,13 @@ def test_command_policy_blocks_code_network_destructive_and_privileged(command, 
 
 
 def test_safe_command_classification_is_persisted(db_session, tmp_path):
-    (tmp_path / "valid.py").write_text("value = 1\n", encoding="utf-8")
+    (tmp_path / "valid.py").write_text(
+        "import unittest\n\n"
+        "class ValidTest(unittest.TestCase):\n"
+        "    def test_value(self):\n"
+        "        self.assertEqual(1, 1)\n",
+        encoding="utf-8",
+    )
     agent, goal, task = _tool_scope(db_session, tmp_path, ["test_runner"])
     record = asyncio.run(ToolExecutor().execute(
         db_session, "test_runner", {"command": "python3 -m unittest valid"},

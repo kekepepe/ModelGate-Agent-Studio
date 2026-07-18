@@ -20,7 +20,7 @@ class Settings:
     # second isolation layer for sandbox runs; local is useful for development
     # machines that do not have a compatible sandbox image yet.
     sandbox_backend: str = os.getenv("SANDBOX_BACKEND", "local").lower()
-    sandbox_image: str = os.getenv("SANDBOX_IMAGE", "python:3.12-slim")
+    sandbox_image: str = os.getenv("SANDBOX_IMAGE", "python:3.12.8-slim-bookworm")
 
 
 settings = Settings()

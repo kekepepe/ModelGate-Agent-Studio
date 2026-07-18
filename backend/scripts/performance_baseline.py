@@ -2,7 +2,7 @@
 """Deterministic local load baseline for Workspace, Retrieval, and Scheduler.
 
 Run from ``backend`` with:
-    DATABASE_URL=sqlite:////tmp/modelgate-performance.db .venv/bin/python scripts/performance_baseline.py
+    docker compose --profile verify run --rm --entrypoint python backend-verify scripts/performance_baseline.py
 
 The database URL is intentionally disposable. The script recreates all tables.
 """
