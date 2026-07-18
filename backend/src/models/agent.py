@@ -3,7 +3,7 @@ import json
 from datetime import datetime, timezone
 from typing import List
 
-from sqlalchemy import Column, String, Text, Integer, Boolean, DateTime, event
+from sqlalchemy import Column, String, Text, Integer, Boolean, DateTime, Float, event
 
 from src.core.database import Base
 
@@ -20,6 +20,11 @@ class AgentStation(Base):
     default_model_id = Column(String(36), nullable=False)
     backup_model_ids = Column(Text, nullable=False, default="[]")
     allowed_tools = Column(Text, nullable=False, default="[]")
+    capability_profile = Column(Text, nullable=False, default="{}")
+    workspace_permissions = Column(Text, nullable=False, default="[]")
+    input_types = Column(Text, nullable=False, default='["text"]')
+    output_types = Column(Text, nullable=False, default='["text"]')
+    max_concurrency = Column(Integer, nullable=False, default=1)
     system_prompt = Column(Text, nullable=False, default="")
     output_format = Column(String(50))
     max_steps_per_task = Column(Integer, nullable=False, default=10)
@@ -34,6 +39,8 @@ class AgentStation(Base):
     total_tasks_failed = Column(Integer, nullable=False, default=0)
     total_handoffs_initiated = Column(Integer, nullable=False, default=0)
     average_tokens_per_task = Column(Integer)
+    average_duration_ms = Column(Integer)
+    average_cost_usd = Column(Float)
     created_at = Column(DateTime, nullable=False, default=lambda: datetime.now(timezone.utc))
     updated_at = Column(DateTime, nullable=False, default=lambda: datetime.now(timezone.utc))
 
@@ -49,6 +56,30 @@ class AgentStation(Base):
     def set_allowed_tools(self, tools: List[str]) -> None:
         self.allowed_tools = json.dumps(tools)
 
+    def get_capability_profile(self) -> dict:
+        return json.loads(self.capability_profile) if self.capability_profile else {}
+
+    def set_capability_profile(self, profile: dict) -> None:
+        self.capability_profile = json.dumps(profile)
+
+    def get_workspace_permissions(self) -> List[str]:
+        return json.loads(self.workspace_permissions) if self.workspace_permissions else []
+
+    def set_workspace_permissions(self, scopes: List[str]) -> None:
+        self.workspace_permissions = json.dumps(scopes)
+
+    def get_input_types(self) -> List[str]:
+        return json.loads(self.input_types) if self.input_types else []
+
+    def set_input_types(self, types: List[str]) -> None:
+        self.input_types = json.dumps(types)
+
+    def get_output_types(self) -> List[str]:
+        return json.loads(self.output_types) if self.output_types else []
+
+    def set_output_types(self, types: List[str]) -> None:
+        self.output_types = json.dumps(types)
+
     def to_dict(self) -> dict:
         return {
             "id": self.id,
@@ -60,6 +91,11 @@ class AgentStation(Base):
             "default_model_id": self.default_model_id,
             "backup_model_ids": self.get_backup_model_ids(),
             "allowed_tools": self.get_allowed_tools(),
+            "capability_profile": self.get_capability_profile(),
+            "workspace_permissions": self.get_workspace_permissions(),
+            "input_types": self.get_input_types(),
+            "output_types": self.get_output_types(),
+            "max_concurrency": self.max_concurrency,
             "system_prompt": self.system_prompt,
             "output_format": self.output_format,
             "max_steps_per_task": self.max_steps_per_task,
@@ -74,6 +110,8 @@ class AgentStation(Base):
             "total_tasks_failed": self.total_tasks_failed,
             "total_handoffs_initiated": self.total_handoffs_initiated,
             "average_tokens_per_task": self.average_tokens_per_task,
+            "average_duration_ms": self.average_duration_ms,
+            "average_cost_usd": self.average_cost_usd,
             "created_at": self.created_at.isoformat() if self.created_at else None,
             "updated_at": self.updated_at.isoformat() if self.updated_at else None,
         }

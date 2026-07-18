@@ -12,6 +12,11 @@ export interface AgentStation {
   default_model_id: string;
   backup_model_ids: string[];
   allowed_tools: string[];
+  capability_profile?: Record<string, number>;
+  workspace_permissions?: string[];
+  input_types?: string[];
+  output_types?: string[];
+  max_concurrency?: number;
   system_prompt: string;
   output_format?: string;
   max_steps_per_task: number;
@@ -26,6 +31,8 @@ export interface AgentStation {
   total_tasks_failed: number;
   total_handoffs_initiated: number;
   average_tokens_per_task?: number;
+  average_duration_ms?: number;
+  average_cost_usd?: number;
   created_at?: string;
   updated_at?: string;
 }
@@ -40,6 +47,8 @@ export interface AgentListItem {
   is_enabled: boolean;
   current_task_id?: string;
   total_tasks_completed: number;
+  capabilities?: string[];
+  max_concurrency?: number;
   created_at?: string;
 }
 
@@ -58,6 +67,11 @@ export interface AgentCreateData {
   default_model_id?: string;
   backup_model_ids?: string[];
   allowed_tools?: string[];
+  capability_profile?: Record<string, number>;
+  workspace_permissions?: string[];
+  input_types?: string[];
+  output_types?: string[];
+  max_concurrency?: number;
   system_prompt?: string;
   output_format?: string;
   max_steps_per_task?: number;
@@ -76,6 +90,11 @@ export interface AgentUpdateData {
   default_model_id?: string;
   backup_model_ids?: string[];
   allowed_tools?: string[];
+  capability_profile?: Record<string, number>;
+  workspace_permissions?: string[];
+  input_types?: string[];
+  output_types?: string[];
+  max_concurrency?: number;
   system_prompt?: string;
   output_format?: string;
   max_steps_per_task?: number;
@@ -138,4 +157,10 @@ export const MOCK_TOOLS = [
   { id: 'terminal_execute', name: 'terminal_execute', description: '执行终端命令', category: '终端', risk_level: 'high' as const },
   { id: 'web_search', name: 'web_search', description: '网络搜索', category: '网络', risk_level: 'low' as const },
   { id: 'diff_view', name: 'diff_view', description: '查看代码差异', category: '代码', risk_level: 'low' as const },
+];
+
+export const AGENT_CAPABILITIES = [
+  'planning', 'research', 'code_read', 'code_edit', 'test', 'review',
+  'security_review', 'document_write', 'data_analysis', 'tool_orchestration',
+  'supervision', 'direct',
 ];

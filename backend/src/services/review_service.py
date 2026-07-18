@@ -41,7 +41,8 @@ def generate_review(db: Session, goal_id: str, run_id: Optional[str] = None) -> 
     if not goal:
         raise ReviewError(f"Goal '{goal_id}' not found")
 
-    tasks = db.query(Task).filter(Task.goal_id == goal_id).all()
+    from src.services import replan_service
+    tasks = replan_service.get_active_runtime_tasks(db, goal_id)
     completed = [t for t in tasks if t.status in ("completed", "completed_verified", "completed_unverified")]
     failed = [t for t in tasks if t.status == "failed"]
 
@@ -116,7 +117,7 @@ def generate_review(db: Session, goal_id: str, run_id: Optional[str] = None) -> 
         response_latency = response.latency_ms
 
     # Parse structured result from response
-    verification_failures = [task for task in tasks if task.task_type in {"coding", "verification"} and task.status != "completed_verified"]
+    verification_failures = [task for task in tasks if task.task_type in {"coding", "merge", "verification"} and task.status != "completed_verified"]
     all_completed = len(failed) == 0 and len(completed) > 0 and not verification_failures
     has_errors = len(errors) > 0 or len(failed) > 0
     review_passed = all_completed and not has_errors
@@ -124,7 +125,26 @@ def generate_review(db: Session, goal_id: str, run_id: Optional[str] = None) -> 
     # Extract issues from response
     issues = _extract_issues(response_content, errors, failed, handoffs)
     suggested = [] if review_passed else _build_suggested_tasks(response_content, goal, tasks)
-    created_replans = _create_replan_tasks(db, goal, verification_failures, response_content)
+    created_replans = []
+    if verification_failures:
+        try:
+            replan_result = replan_service.replan_failed_tasks(
+                db,
+                goal,
+                verification_failures,
+                reason="Supervisor verification found incomplete completion evidence.",
+                evidence=[
+                    {
+                        "task_id": task.id,
+                        "status": task.status,
+                        "verification_status": task.verification_status,
+                    }
+                    for task in verification_failures
+                ],
+            )
+            created_replans = replan_result["created_task_ids"]
+        except replan_service.ReplanError as exc:
+            issues.append(f"Replan failed: {exc}")
 
     # Write review
     review = SupervisorReview(
@@ -164,44 +184,24 @@ def generate_review(db: Session, goal_id: str, run_id: Optional[str] = None) -> 
 
     # Update goal status based on review
     if review_passed:
-        goal.status = "completed"
+        from src.services import verifier_service
+        gate = verifier_service.evaluate_goal_completion(db, goal)
+        goal.status = gate["goal_status"]
+        goal.final_verification_status = gate["status"]
     elif created_replans:
         # The new tasks are runnable on the next Runtime invocation; keep the
         # Workspace action enabled instead of leaving a dead review state.
         goal.status = "running"
     elif suggested:
-        goal.status = "reviewing"
+        goal.status = "revision_required"
     else:
-        goal.status = "completed"
+        # A failed Supervisor decision can never promote the Goal merely
+        # because it did not manage to produce a repair suggestion.
+        goal.status = "revision_required"
     goal.updated_at = datetime.now(timezone.utc)
     db.commit()
 
     return review.to_dict()
-
-
-def _create_replan_tasks(db: Session, goal: Goal, failed_tasks: List[Task], review_text: str) -> List[Task]:
-    """Materialize Supervisor feedback as executable child tasks once."""
-    created = []
-    for original in failed_tasks:
-        already_replanned = db.query(Task).filter(Task.parent_task_id == original.id).first()
-        if already_replanned:
-            continue
-        child = Task(
-            id=str(uuid.uuid4()), goal_id=goal.id, parent_task_id=original.id,
-            title=f"Replan: {original.title}",
-            description=(f"Repair the verification failure for: {original.description or original.title}\n"
-                         f"Supervisor context: {(review_text or '')[:500]}"),
-            status="pending", assigned_agent_id=original.assigned_agent_id,
-            priority=original.priority + 1, task_type=original.task_type,
-            risk_level=original.risk_level, max_retries=original.max_retries,
-        )
-        child.set_json("required_tools", original._get_json("required_tools"))
-        child.set_json("required_capabilities", original._get_json("required_capabilities"))
-        child.set_json("dependencies", [])
-        child.set_json("acceptance_criteria", original._get_json("acceptance_criteria"))
-        db.add(child)
-        created.append(child)
-    return created
 
 
 def get_review(db: Session, goal_id: str) -> Optional[Dict[str, Any]]:

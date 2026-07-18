@@ -1,4 +1,4 @@
-import { ArrowRight, Boxes, Copy, Play, Settings2 } from 'lucide-react';
+import { Boxes, Copy, Play, Settings2 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { TEAM_PRESETS, type TeamPreset } from '../types/team';
 
@@ -22,7 +22,7 @@ export default function StudioPage() {
         <div>
           <h1 className="text-2xl font-semibold tracking-tight text-stone-950">选择一支 Agent 团队</h1>
           <p className="mt-2 max-w-2xl text-sm leading-6 text-stone-500">
-            从交付目标开始，而不是先填写底层 Agent 表单。每支团队都会进入可切换的 Card Flow 与 Pixel Office 工作区。
+            模板提供能力池与执行政策；Orchestrator 会按 Goal 选择最小安全路径，不承诺固定 Agent 顺序。
           </p>
         </div>
         <button
@@ -71,17 +71,16 @@ function TeamPresetCard({ preset, onRun }: { preset: TeamPreset; onRun: () => vo
       <h2 className="mt-4 text-lg font-semibold text-stone-900">{preset.name}</h2>
       <p className="mt-1 text-sm leading-6 text-stone-500">{preset.description}</p>
 
-      <div className="mt-5 flex items-center overflow-x-auto pb-1" aria-label={`${preset.name}角色流`}>
-        {preset.roles.map((role, index) => (
-          <div key={`${preset.id}-${role.role}`} className="flex shrink-0 items-center">
-            <div className="rounded-lg border border-stone-200 bg-stone-50 px-3 py-2">
-              <p className="text-xs font-semibold text-stone-700">{role.label}</p>
-              <p className="mt-0.5 text-[10px] text-stone-400">{role.modelHint}</p>
-            </div>
-            {index < preset.roles.length - 1 ? <ArrowRight size={15} className="mx-1.5 text-stone-300" /> : null}
-          </div>
-        ))}
+      <div className="mt-4">
+        <p className="text-[10px] font-semibold uppercase tracking-wide text-stone-400">Available capabilities</p>
+        <div className="mt-2 flex flex-wrap gap-1.5">{preset.capabilities.map((capability) => <span key={capability} className="rounded-md bg-stone-100 px-2 py-1 text-[10px] text-stone-600">{capability}</span>)}</div>
       </div>
+      <dl className="mt-4 grid grid-cols-2 gap-2 rounded-lg border border-stone-100 bg-stone-50 p-3 text-[10px]">
+        <div><dt className="text-stone-400">Selection</dt><dd className="mt-0.5 font-medium text-stone-700">Prefer single Agent</dd></div>
+        <div><dt className="text-stone-400">Max parallel</dt><dd className="mt-0.5 font-medium text-stone-700">{preset.executionPolicy.maxParallel}</dd></div>
+        <div><dt className="text-stone-400">Independent review</dt><dd className="mt-0.5 font-medium text-stone-700">{preset.executionPolicy.independentReview.replace('_', ' ')}</dd></div>
+        <div><dt className="text-stone-400">Parallel writes</dt><dd className="mt-0.5 font-medium text-stone-700">Isolated worktrees</dd></div>
+      </dl>
 
       <div className="mt-auto flex items-center gap-2 pt-5">
         <button type="button" onClick={onRun} className={`inline-flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-medium text-white ${accent.button}`}>

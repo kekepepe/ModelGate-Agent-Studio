@@ -3,6 +3,7 @@ import { Copy, GitBranch, Pause, RotateCcw, X, Wrench } from 'lucide-react';
 import type { WorkspaceHandoff, WorkspaceTask } from '../types/workspace';
 import { TASK_STATUS_LABELS } from '../types/workspace';
 import { useToolCalls } from '../hooks/useTools';
+import { useDisableKnowledgeSource } from '../hooks/useKnowledge';
 
 interface TaskDetailPanelProps {
   task?: WorkspaceTask | null;
@@ -24,6 +25,7 @@ export default function TaskDetailPanel({ task, isLoading, onClose, handoffs = [
   const { data: toolCallsData } = useToolCalls(
     task ? { task_id: task.id } : {}
   );
+  const disableSource = useDisableKnowledgeSource();
   const taskId = task?.id;
   const taskStatus = task?.status;
   const taskOutput = task?.output;
@@ -37,6 +39,7 @@ export default function TaskDetailPanel({ task, isLoading, onClose, handoffs = [
   if (!task) return null;
 
   const toolCalls = toolCallsData?.items || [];
+  const contextMeta = parseContextMeta(task.context);
 
   const handleCopy = async () => {
     if (!task.output) return;
@@ -122,6 +125,16 @@ export default function TaskDetailPanel({ task, isLoading, onClose, handoffs = [
               <span className="text-stone-400">Worker 模型</span>
               <span className="text-stone-700 font-mono text-xs">{task.model_name || '—'}</span>
             </div>
+            {task.selection_decision && (
+              <section className="rounded-lg border border-stone-200 bg-stone-50 p-3 text-xs">
+                <div className="flex items-center justify-between gap-2"><span className="font-semibold text-stone-700">Agent / Model selection</span><span className="text-stone-500">score {task.selection_decision.score.toFixed(3)}</span></div>
+                <p className="mt-1 text-stone-600">{task.selection_decision.selection_reason}</p>
+                <div className="mt-2 space-y-1">
+                  {task.selection_decision.candidates.map((candidate) => <div key={candidate.agent_id} className="flex items-start justify-between gap-2"><span className={candidate.eligible ? 'text-green-700' : 'text-stone-500'}>{candidate.agent_name} · {candidate.selected_model_name}</span><span className="text-right text-stone-400">{candidate.eligible ? candidate.score.toFixed(3) : candidate.elimination_reasons.join('; ')}</span></div>)}
+                </div>
+                <p className="mt-2 text-stone-500">Fallback: {task.selection_decision.fallback_entry.reason || 'No fallback entry recorded.'}</p>
+              </section>
+            )}
             {task.workspace_scope && (
               <div>
                 <span className="text-stone-400 text-xs">隔离 Worktree</span>
@@ -245,8 +258,53 @@ export default function TaskDetailPanel({ task, isLoading, onClose, handoffs = [
 
         {activeTab === 'context' && (
           task.context ? (
-            <div>
+            <div className="space-y-3">
               <p className="mb-2 text-xs text-stone-400">当前 Worker 接收到的上下文（包含交接摘要时会在此呈现）。</p>
+              {contextMeta ? (
+                <div className="rounded-lg border border-blue-100 bg-blue-50 p-3 text-xs text-blue-900">
+                  <div className="flex flex-wrap gap-2 font-medium">
+                    <span>{contextMeta.policy || 'runtime_context'}</span>
+                    <span>{contextMeta.token_count || 0} tokens</span>
+                    <span>{contextMeta.source_count} sources</span>
+                  </div>
+                  <p className="mt-2 leading-relaxed text-blue-800">{contextMeta.retrieval_reason || 'Runtime context package recorded.'}</p>
+                </div>
+              ) : null}
+              {(task.context_runs?.length || 0) > 0 ? (
+                <div className="space-y-3">
+                  {task.context_runs?.map((run) => (
+                    <section key={run.id} className="rounded-lg border border-stone-200 bg-white p-3 text-xs">
+                      <div className="flex flex-wrap items-center justify-between gap-2">
+                        <strong className="text-stone-700">{run.policy}</strong>
+                        <span className="text-stone-400">{run.token_count}/{run.token_budget} tokens · {run.latency_ms}ms</span>
+                      </div>
+                      <p className="mt-2 break-words text-stone-600">Query: {run.query}</p>
+                      <div className="mt-2 space-y-2">
+                        {run.items.map((item) => (
+                          <article key={item.id} className={`rounded border p-2 ${item.used ? 'border-green-200 bg-green-50' : 'border-stone-200 bg-stone-50 opacity-70'}`}>
+                            <div className="flex items-center justify-between gap-2">
+                              <span className="truncate font-medium text-stone-700">#{item.rank} {item.source_name || item.path || item.source_id}</span>
+                              <span className={item.used ? 'text-green-700' : 'text-stone-500'}>{item.used ? 'Injected' : 'Dropped'} · {item.score.toFixed(3)}</span>
+                            </div>
+                            {item.citation ? <p className="mt-1 break-all font-mono text-[10px] text-blue-700">{item.citation}</p> : null}
+                            {item.content ? <p className="mt-1 line-clamp-3 text-stone-600">{item.content}</p> : null}
+                            <button
+                              type="button"
+                              className="mt-2 rounded border border-stone-300 bg-white px-2 py-1 text-[10px] font-medium text-stone-600 hover:border-red-300 hover:text-red-700 disabled:opacity-50"
+                              onClick={() => disableSource.mutate(item.source_id)}
+                              disabled={disableSource.isPending}
+                            >
+                              Disable source
+                            </button>
+                          </article>
+                        ))}
+                      </div>
+                    </section>
+                  ))}
+                </div>
+              ) : null}
+              {disableSource.isSuccess ? <p className="text-xs text-amber-700">Source disabled. Retry this Task to build a clean Context Package.</p> : null}
+              {disableSource.error ? <p className="text-xs text-red-700">{disableSource.error.message}</p> : null}
               <pre className="max-h-96 overflow-y-auto whitespace-pre-wrap break-words rounded-lg border border-stone-200 bg-stone-50 p-3 text-xs leading-relaxed text-stone-700">{formatContext(task.context)}</pre>
             </div>
           ) : (
@@ -353,6 +411,22 @@ function formatContext(context: string): string {
     return JSON.stringify(JSON.parse(context), null, 2);
   } catch {
     return context;
+  }
+}
+
+function parseContextMeta(context?: string | null): { policy?: string; token_count?: number; retrieval_reason?: string; source_count: number } | null {
+  if (!context) return null;
+  try {
+    const parsed = JSON.parse(context) as Record<string, unknown>;
+    const references = Array.isArray(parsed.source_references) ? parsed.source_references : [];
+    return {
+      policy: typeof parsed.policy === 'string' ? parsed.policy : undefined,
+      token_count: typeof parsed.token_count === 'number' ? parsed.token_count : undefined,
+      retrieval_reason: typeof parsed.retrieval_reason === 'string' ? parsed.retrieval_reason : undefined,
+      source_count: references.length,
+    };
+  } catch {
+    return null;
   }
 }
 

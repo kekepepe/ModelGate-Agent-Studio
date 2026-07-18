@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { X, AlertTriangle, Loader2, ChevronLeft, Check } from 'lucide-react';
 import type { AgentStation, AgentCreateData, AgentUpdateData } from '../types/agent';
+import { AGENT_CAPABILITIES } from '../types/agent';
 import { useModels } from '../hooks/useModels';
 import { useTools } from '../hooks/useTools';
 import { formatTokenCount } from '../constants/modelContext';
@@ -21,6 +22,11 @@ const defaultForm: AgentCreateData = {
   default_model_id: '',
   backup_model_ids: [],
   allowed_tools: [],
+  capability_profile: { code_read: 1, code_edit: 1, test: 0.8 },
+  workspace_permissions: [],
+  input_types: ['text'],
+  output_types: ['text'],
+  max_concurrency: 1,
   system_prompt: '',
   output_format: 'markdown',
   max_steps_per_task: 10,
@@ -51,6 +57,11 @@ export default function AgentConfigForm({ agent, initialData, onSave, onCancel, 
         default_model_id: agent.default_model_id,
         backup_model_ids: agent.backup_model_ids || [],
         allowed_tools: agent.allowed_tools || [],
+        capability_profile: agent.capability_profile || {},
+        workspace_permissions: agent.workspace_permissions || [],
+        input_types: agent.input_types || ['text'],
+        output_types: agent.output_types || ['text'],
+        max_concurrency: agent.max_concurrency || 1,
         system_prompt: agent.system_prompt || '',
         output_format: agent.output_format || 'markdown',
         max_steps_per_task: agent.max_steps_per_task,
@@ -101,6 +112,13 @@ export default function AgentConfigForm({ agent, initialData, onSave, onCancel, 
     } else {
       handleChange('allowed_tools', [...current, toolId]);
     }
+  };
+
+  const toggleCapability = (capability: string) => {
+    const profile = { ...(form.capability_profile || {}) };
+    if (profile[capability] !== undefined) delete profile[capability];
+    else profile[capability] = 0.8;
+    handleChange('capability_profile', profile);
   };
 
   const validateStep1 = (): boolean => {
@@ -267,6 +285,21 @@ export default function AgentConfigForm({ agent, initialData, onSave, onCancel, 
                 </div>
               </div>
             </section>
+            <section>
+              <h3 className="text-xs font-semibold uppercase tracking-wide text-stone-400 mb-3">能力与权限范围</h3>
+              <div className="grid grid-cols-2 gap-2">
+                {AGENT_CAPABILITIES.map((capability) => {
+                  const enabled = form.capability_profile?.[capability] !== undefined;
+                  return <div key={capability} className={`rounded-lg border p-2 ${enabled ? 'border-blue-200 bg-blue-50' : 'border-stone-200'}`}>
+                    <label className="flex items-center gap-2 text-xs text-stone-700"><input type="checkbox" checked={enabled} onChange={() => toggleCapability(capability)} />{capability}</label>
+                    {enabled && <input aria-label={`${capability} proficiency`} type="number" min={0.5} max={1} step={0.1} value={form.capability_profile?.[capability] || 0.8} onChange={(event) => handleChange('capability_profile', { ...(form.capability_profile || {}), [capability]: Number(event.target.value) })} className="mt-2 w-full rounded border border-blue-200 px-2 py-1 text-xs" />}
+                  </div>;
+                })}
+              </div>
+              <label className="mt-3 block text-xs font-medium text-stone-600">Workspace permissions
+                <input aria-label="Workspace permissions" value={(form.workspace_permissions || []).join(', ')} onChange={(event) => handleChange('workspace_permissions', event.target.value.split(',').map((item) => item.trim()).filter(Boolean))} className="mt-1 w-full rounded-lg border border-stone-200 px-3 py-2 text-sm" placeholder="frontend/**, docs/** (empty = Workspace Root)" />
+              </label>
+            </section>
           </div>
         )}
 
@@ -429,6 +462,12 @@ export default function AgentConfigForm({ agent, initialData, onSave, onCancel, 
                       className="w-full px-3 py-2 text-sm border border-stone-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-stone-300" />
                   </div>
                 </div>
+                <div>
+                  <label className="block text-xs font-medium text-stone-600 mb-1">最大并发 Task</label>
+                  <input aria-label="最大并发 Task" type="number" min={1} max={20} value={form.max_concurrency}
+                    onChange={(e) => handleChange('max_concurrency', parseInt(e.target.value) || 1)}
+                    className="w-full px-3 py-2 text-sm border border-stone-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-stone-300" />
+                </div>
 
                 <div className="flex items-center justify-between">
                   <label className="text-sm font-medium text-stone-700">允许 Handoff</label>
@@ -494,6 +533,10 @@ export default function AgentConfigForm({ agent, initialData, onSave, onCancel, 
                 <div className="flex justify-between">
                   <span className="text-stone-500">角色</span>
                   <span className="font-medium text-stone-800">{form.role}</span>
+                </div>
+                <div className="flex justify-between gap-4">
+                  <span className="text-stone-500">可用能力</span>
+                  <span className="text-right font-medium text-stone-800">{Object.keys(form.capability_profile || {}).join(', ') || '-'}</span>
                 </div>
                 <div className="flex justify-between">
                   <span className="text-stone-500">默认模型</span>

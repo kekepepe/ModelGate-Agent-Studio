@@ -1,10 +1,11 @@
 import { lazy, Suspense, useCallback, useMemo, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import { useWorkspaceState, useTaskDetail, useExecuteGoal, usePauseGoal, useResumeGoal, useRuntimeEvents, useStopGoal, useRetryTask } from '../hooks/useWorkspace';
+import { useWorkspaceState, useTaskDetail, useExecuteGoal, usePauseGoal, useResumeGoal, useRuntimeEvents, useStopGoal, useRetryTask, useConfirmPlan, useUpdatePlan } from '../hooks/useWorkspace';
 import { useAgents } from '../hooks/useAgents';
 import { useAcceptHandoff, useHandoff, useTriggerHandoff, useUpdateHandoffResult } from '../hooks/useHandoffs';
 import TopStatusBar from '../components/TopStatusBar';
 import GoalInputPanel from '../components/GoalInputPanel';
+import PlanOverviewPanel from '../components/PlanOverviewPanel';
 import TaskTree from '../components/TaskTree';
 import AgentDetailModal from '../components/AgentDetailModal';
 import CardFlowRenderer from '../components/CardFlowRenderer';
@@ -30,6 +31,8 @@ export default function WorkspacePage() {
   useRuntimeEvents(goalId);
   const { data: agentsData } = useAgents({ page_size: 100 });
   const executeGoal = useExecuteGoal();
+  const confirmPlan = useConfirmPlan();
+  const updatePlan = useUpdatePlan();
   const pauseGoal = usePauseGoal();
   const resumeGoal = useResumeGoal();
   const stopGoal = useStopGoal();
@@ -46,6 +49,18 @@ export default function WorkspacePage() {
     () => state ? buildWorkspaceViewModel(state, teamPreset) : { stations: [], edges: [], handoffs: [] },
     [state, teamPreset],
   );
+  const activeTasks = useMemo(() => {
+    if (!state) return [];
+    const activeTaskIds = state.active_plan?.tasks
+      .map((task) => task.runtime_task_id)
+      .filter((taskId): taskId is string => Boolean(taskId)) || [];
+    if (activeTaskIds.length === 0) return state.tasks;
+    const taskById = new Map(state.tasks.map((task) => [task.id, task]));
+    return activeTaskIds.flatMap((taskId) => {
+      const task = taskById.get(taskId);
+      return task ? [task] : [];
+    });
+  }, [state]);
 
   const handleGoalCreated = useCallback((newGoalId: string) => {
     setGoalId(newGoalId);
@@ -89,7 +104,7 @@ export default function WorkspacePage() {
     <div className="workspace-shell flex min-h-0 flex-1 flex-col">
       <TopStatusBar
         goal={state?.goal || null}
-        tasks={state?.tasks || []}
+        tasks={activeTasks}
         teamName={teamPreset.name}
         showWhenEmpty
         mode={viewMode}
@@ -100,6 +115,8 @@ export default function WorkspacePage() {
         onStop={goalId && !['completed', 'failed', 'cancelled'].includes(state?.goal?.status || '') ? () => stopGoal.mutate(goalId) : undefined}
         onExport={handleExport}
         isBusy={executeGoal.isPending || pauseGoal.isPending || resumeGoal.isPending || stopGoal.isPending}
+        taskMode={state?.task_mode}
+        metrics={state?.multi_agent_metrics}
       />
 
       <div className="workspace-body flex min-h-0 flex-1 overflow-hidden">
@@ -111,8 +128,34 @@ export default function WorkspacePage() {
             goal={state?.goal || null}
             preset={teamPreset}
           />
+          <PlanOverviewPanel
+            activePlan={state?.active_plan}
+            versions={state?.plan_versions}
+            changes={state?.replan_events}
+            completionEvidence={state?.completion_evidence}
+            onConfirm={goalId && state?.active_plan ? () => confirmPlan.mutateAsync({ goalId, version: state.active_plan!.version }).then(() => undefined) : undefined}
+            onModify={goalId && state?.active_plan ? (objectives) => updatePlan.mutateAsync({
+              goalId,
+              plan: {
+                ...state.active_plan!,
+                tasks: state.active_plan!.tasks.map((task, index) => ({ ...task, objective: objectives[index] })),
+              },
+              reason: 'User modified Task objectives before execution.',
+            }).then(() => undefined) : undefined}
+            onDowngrade={goalId && state?.active_plan ? () => updatePlan.mutateAsync({
+              goalId,
+              plan: {
+                ...state.active_plan!,
+                task_mode: state.active_plan!.tasks.length === 1 ? 'single_agent' : 'sequential_multi_agent',
+                tasks: state.active_plan!.tasks.map((task) => ({ ...task, parallel_safe: false })),
+              },
+              reason: 'User downgraded parallel execution to a sequential plan.',
+            }).then(() => undefined) : undefined}
+            isMutating={confirmPlan.isPending || updatePlan.isPending}
+            mutationError={(confirmPlan.error || updatePlan.error)?.message || null}
+          />
           <TaskTree
-            tasks={state?.tasks || []}
+            tasks={activeTasks}
             goalTitle={state?.goal?.title || null}
             onTaskClick={setSelectedTaskId}
             selectedTaskId={selectedTaskId}
@@ -127,7 +170,7 @@ export default function WorkspacePage() {
         </main>
       </div>
 
-      <BottomConsole goalId={goalId} tasks={state?.tasks || []} handoffs={state?.handoffs || []} />
+      <BottomConsole goalId={goalId} tasks={activeTasks} handoffs={state?.handoffs || []} />
 
       <AgentDetailModal
         task={selectedTask}

@@ -45,6 +45,64 @@ export interface EvolutionSummary {
   pending_review: number;
 }
 
+export interface KnowledgeSource {
+  id: string;
+  name: string;
+  type: 'workspace' | 'project_document';
+  uri: string;
+  workspace_scope?: string | null;
+  status: 'active' | 'syncing' | 'error' | 'disabled';
+  sync_policy: 'manual' | 'on_start' | 'scheduled';
+  checksum?: string | null;
+  metadata: Record<string, unknown>;
+  error_message?: string | null;
+  last_synced_at?: string | null;
+  created_at?: string | null;
+  updated_at?: string | null;
+}
+
+export interface KnowledgeDocument {
+  id: string;
+  source_id: string;
+  path: string;
+  title: string;
+  checksum: string;
+  mime_type?: string | null;
+  status: 'indexed' | 'deleted' | string;
+  metadata: Record<string, unknown>;
+  chunk_count: number;
+  indexed_at?: string | null;
+}
+
+export interface KnowledgeChunk {
+  id: string;
+  document_id: string;
+  chunk_index: number;
+  content: string;
+  token_count: number;
+  symbol_path?: string | null;
+  status: 'active' | 'disabled' | string;
+  metadata: Record<string, unknown>;
+  created_at?: string | null;
+}
+
+export interface KnowledgeSourceInput {
+  name: string;
+  type: 'workspace' | 'project_document';
+  uri: string;
+  workspace_scope?: string;
+  sync_policy: 'manual' | 'on_start' | 'scheduled';
+}
+
+export interface KnowledgeSyncResult {
+  source: KnowledgeSource;
+  added: number;
+  updated: number;
+  unchanged: number;
+  deleted: number;
+  documents: number;
+}
+
 export const MEMORY_TYPE_LABELS: Record<string, string> = {
   project_memory: '项目记忆',
   agent_memory: 'Agent 记忆',

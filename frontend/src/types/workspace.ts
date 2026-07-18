@@ -1,5 +1,5 @@
-export type GoalStatus = 'idle' | 'planning' | 'running' | 'paused' | 'waiting' | 'handoff' | 'reviewing' | 'completed' | 'failed' | 'cancelled';
-export type TaskStatus = 'pending' | 'ready' | 'assigned' | 'running' | 'waiting_tool' | 'waiting_approval' | 'verifying' | 'revision_required' | 'blocked' | 'completed' | 'completed_verified' | 'completed_unverified' | 'failed' | 'handoff' | 'cancelled';
+export type GoalStatus = 'idle' | 'planning' | 'running' | 'paused' | 'waiting' | 'waiting_approval' | 'replanning' | 'revision_required' | 'blocked' | 'handoff' | 'reviewing' | 'completed' | 'failed' | 'cancelled';
+export type TaskStatus = 'pending' | 'ready' | 'assigned' | 'running' | 'waiting_tool' | 'waiting_approval' | 'verifying' | 'replanning' | 'revision_required' | 'blocked' | 'completed' | 'completed_verified' | 'completed_unverified' | 'failed' | 'handoff' | 'skipped' | 'cancelled';
 export type WorkerStatus = 'idle' | 'running' | 'handoff_required' | 'completed' | 'failed' | 'cancelled';
 
 export interface Goal {
@@ -14,6 +14,7 @@ export interface Goal {
   budget_tokens?: number;
   budget_cost_usd?: number | null;
   max_duration_seconds?: number;
+  max_parallel_tasks?: number;
   created_at?: string | null;
   updated_at?: string | null;
 }
@@ -50,12 +51,82 @@ export interface WorkspaceTask {
   verification_status?: string | null;
   artifacts?: Array<{ id: string; type: string; path?: string | null; checksum?: string | null; verification_status?: string | null }>;
   verification_results?: Array<{ id: string; criterion_type: string; command_or_rule: string; status: string; evidence?: string | null; exit_code?: number | null }>;
+  context_runs?: ContextRun[];
   task_type?: string;
   blocked_reason?: string | null;
   changed_files?: string[];
   test_status?: string | null;
   latest_tool_call?: { id: string; tool_name: string; status: string; latency_ms: number; error_message?: string | null; result?: { changed_files?: string[] } } | null;
   recent_tool_calls?: Array<{ id: string; tool_name: string; status: string; latency_ms: number; error_message?: string | null; result?: { changed_files?: string[] } }>;
+  plan_version_id?: string | null;
+  plan_task_id?: string | null;
+  plan_source?: string | null;
+  selection_decision?: AgentSelectionDecision | null;
+}
+
+export interface PlanTask {
+  id: string;
+  client_task_id: string;
+  objective: string;
+  task_type: string;
+  required_capabilities: string[];
+  required_tools: string[];
+  dependencies: string[];
+  acceptance_criteria: Array<Record<string, unknown>>;
+  risk_level: string;
+  parallel_safe: boolean;
+  context_query: string;
+  approval_required: boolean;
+  workspace_scope?: string | null;
+  merge_strategy?: string | null;
+  runtime_task_id?: string | null;
+  source: string;
+}
+
+export interface ExecutionPlan {
+  id: string;
+  plan_id: string;
+  goal_id: string;
+  version: number;
+  status: string;
+  task_mode: 'direct' | 'single_agent' | 'sequential_multi_agent' | 'parallel_multi_agent';
+  goal_summary: string;
+  assumptions: string[];
+  required_context: string[];
+  activation_reason: string;
+  final_acceptance_criteria: Array<Record<string, unknown>>;
+  human_approval_points: string[];
+  estimated_cost: Record<string, unknown>;
+  fallback_reason?: string | null;
+  planner_type: string;
+  confirmed_at?: string | null;
+  tasks: PlanTask[];
+}
+
+export interface PlanVersionSummary {
+  id: string;
+  plan_id: string;
+  version: number;
+  status: string;
+  task_mode: string;
+  activation_reason: string;
+  planner_type: string;
+  created_at?: string | null;
+}
+
+export interface PlanChange {
+  id: string;
+  goal_id: string;
+  from_plan_version_id?: string | null;
+  to_plan_version_id: string;
+  change_type: string;
+  reason: string;
+  evidence: Array<Record<string, unknown>>;
+  retained_task_ids: string[];
+  cancelled_task_ids: string[];
+  added_task_ids: string[];
+  replaced_task_ids: string[];
+  created_at?: string | null;
 }
 
 export interface WorkspaceQuota {
@@ -155,6 +226,100 @@ export interface WorkspaceState {
   agents: WorkspaceAgent[];
   workers: WorkspaceWorker[];
   handoffs: WorkspaceHandoff[];
+  active_plan?: ExecutionPlan | null;
+  plan_versions?: PlanVersionSummary[];
+  task_mode?: ExecutionPlan['task_mode'] | null;
+  activation_reason?: string | null;
+  task_edges?: Array<{ source: string; target: string; source_client_task_id: string; target_client_task_id: string }>;
+  parallel_groups?: Array<{ id: string; task_ids: string[] }>;
+  replan_events?: PlanChange[];
+  completion_evidence?: {
+    allowed: boolean;
+    status: string;
+    goal_status: string;
+    reason: string;
+    failed_task_ids: string[];
+    tasks: Array<{
+      task_id: string;
+      title: string;
+      status: string;
+      verification_status?: string | null;
+      verification_required: boolean;
+      satisfied: boolean;
+      reasons: string[];
+    }>;
+  } | null;
+  context_runs?: ContextRun[];
+  selection_decisions?: AgentSelectionDecision[];
+  multi_agent_metrics?: MultiAgentMetrics;
+}
+
+export interface AgentSelectionDecision {
+  id: string;
+  task_id: string;
+  required_capabilities: string[];
+  required_tools: string[];
+  candidates: Array<{
+    agent_id: string; agent_name: string; role: string; eligible: boolean;
+    elimination_reasons: string[]; score: number; selected_model_id: string;
+    selected_model_name: string; score_breakdown: Record<string, number>;
+  }>;
+  selected_agent_id: string;
+  selected_model_id: string;
+  backup_model_ids: string[];
+  score: number;
+  selection_reason: string;
+  fallback_entry: { agent_ids?: string[]; model_ids?: string[]; handoff_allowed?: boolean; reason?: string };
+  created_at?: string | null;
+}
+
+export interface MultiAgentMetrics {
+  mode: ExecutionPlan['task_mode'];
+  why_multi_agent: string;
+  activated_agent_count: number;
+  active_agent_count: number;
+  active_parallelism: number;
+  coordination_task_count: number;
+  coordination_tokens: number;
+  productive_tokens: number;
+  coordination_token_ratio: number;
+  coordination_duration_ms: number;
+  parallel_task_count: number;
+  single_agent_serial_baseline_ms: number;
+  parallel_observed_estimate_ms: number;
+  potential_parallel_saving_ms: number;
+  estimated_net_time_benefit_ms: number;
+  benefit_positive: boolean;
+  measurement_note: string;
+  mode_comparison: Record<'single_agent' | 'sequential_multi_agent' | 'parallel_multi_agent', { duration_ms: number; tokens: number; basis: string }>;
+}
+
+export interface ContextRun {
+  id: string;
+  goal_id?: string | null;
+  task_id?: string | null;
+  agent_id?: string | null;
+  query: string;
+  policy: string;
+  filters: Record<string, unknown>;
+  latency_ms: number;
+  token_budget: number;
+  token_count: number;
+  status: string;
+  created_at?: string | null;
+  items: Array<{
+    id: string;
+    rank: number;
+    score: number;
+    used: boolean;
+    citation?: string | null;
+    token_count: number;
+    source_id: string;
+    source_name?: string | null;
+    chunk_id?: string | null;
+    path?: string | null;
+    content?: string | null;
+  }>;
 }
 
 export const GOAL_STATUS_LABELS: Record<string, string> = {

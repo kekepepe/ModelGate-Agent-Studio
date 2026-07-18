@@ -18,10 +18,8 @@ from sqlalchemy import func
 
 from src.models.agent import AgentStation
 from src.models.handoff import ExecutionLog, HandoffRecord, WorkerSession
-from src.models.tool import ToolCallRecord
 from src.models.model import Model
-from src.models.workspace import Goal, RuntimeRun, Task
-from src.models.workspace import Artifact, VerificationResult
+from src.models.workspace import Goal, PlanTask, RuntimeRun, Task
 from src.services import (
     goal_service,
     handoff_service,
@@ -47,6 +45,16 @@ class TaskNotReadyError(RuntimeError):
     pass
 
 
+def ensure_plan_confirmed(db: Session, goal_id: str) -> None:
+    from src.services import planning_service
+
+    active_plan = planning_service.get_active_plan_record(db, goal_id)
+    if active_plan and not active_plan.confirmed_at:
+        raise GoalNotReadyError(
+            f"ExecutionPlan v{active_plan.version} must be confirmed before execution"
+        )
+
+
 ROLE_TO_TASK_TYPE = {
     "planner": "planning",
     "coder": "coding",
@@ -62,6 +70,7 @@ def execute_goal_pipeline(db: Session, goal_id: str) -> Dict[str, Any]:
     goal = goal_service.get_goal(db, goal_id)
     if goal.status not in ("planning", "running"):
         raise GoalNotReadyError(f"Goal must be planning or running, current: {goal.status}")
+    ensure_plan_confirmed(db, goal_id)
 
     run = _get_or_start_run(db, goal)
     start_time = time.time()
@@ -73,6 +82,8 @@ def execute_goal_pipeline(db: Session, goal_id: str) -> Dict[str, Any]:
     paused = False
     cancelled = False
     resource_limited = False
+    scheduler_status = None
+    scheduler_blocked_reason = None
 
     if goal.status == "planning":
         goal.status = "running"
@@ -99,13 +110,38 @@ def execute_goal_pipeline(db: Session, goal_id: str) -> Dict[str, Any]:
                 "metadata": {"budget_tokens": run.budget_tokens, "max_duration_seconds": run.max_duration_seconds},
             })
             db.commit()
+            from src.schemas.planning import RuntimeDecisionContract
+            from src.services import runtime_decision_service
+            runtime_decision_service.record_goal_decision(
+                db,
+                goal.id,
+                RuntimeDecisionContract(
+                    action="ask_user",
+                    reason=resource_error,
+                    evidence=[{
+                        "trigger": "budget_pressure",
+                        "budget_tokens": run.budget_tokens,
+                        "max_duration_seconds": run.max_duration_seconds,
+                    }],
+                ),
+            )
             break
-        from src.services.orchestrator_service import ready_tasks
-        ready = ready_tasks(db, goal_id)
-        task = ready[0] if ready else None
-        if not task:
+        from src.services.scheduler_service import schedule_ready_tasks
+        decision = schedule_ready_tasks(db, goal)
+        if not decision.selected_tasks:
+            scheduler_status = decision.goal_status
+            scheduler_blocked_reason = decision.blocked_reason
+            if scheduler_blocked_reason:
+                log_service.create_log(db, {
+                    "goal_id": goal.id,
+                    "event_type": "task.blocked",
+                    "event_status": scheduler_status or "blocked",
+                    "output_summary": scheduler_blocked_reason,
+                    "metadata": {"invalid_task_ids": decision.invalid_task_ids},
+                })
             break
-        parallel = [item for item in ready if "parallel_safe" in item._get_json("required_capabilities")]
+        parallel = decision.selected_tasks if len(decision.selected_tasks) > 1 else []
+        task = decision.selected_tasks[0]
         if len(parallel) > 1:
             results = _execute_parallel_tasks(db, [item.id for item in parallel])
             db.expire_all()
@@ -133,6 +169,7 @@ def execute_goal_pipeline(db: Session, goal_id: str) -> Dict[str, Any]:
 
     # Phase 3: Determine initial goal status
     db.refresh(goal)
+    completion_gate = None
     if cancelled:
         # A user stop is terminal. Never let the pipeline's normal completion
         # bookkeeping overwrite an explicitly cancelled run.
@@ -146,23 +183,40 @@ def execute_goal_pipeline(db: Session, goal_id: str) -> Dict[str, Any]:
         goal.status = "blocked"
     elif tasks_handoff > 0:
         goal.status = "handoff"
-    elif tasks_failed > 0 and tasks_completed == 0:
-        goal.status = "failed"
     else:
-        goal.status = "completed"
+        from src.services import verifier_service
+        completion_gate = verifier_service.evaluate_goal_completion(db, goal)
+        goal.status = completion_gate["goal_status"]
+        goal.final_verification_status = completion_gate["status"]
     goal.updated_at = datetime.now(timezone.utc)
     db.commit()
 
-    # Phase 4: Supervisor Review
+    # Phase 4: Supervisor Review (policy-gated, never a ceremonial fixed step)
     review_result = None
     run_id = f"run-{goal.id[:8]}"
-    if goal.status == "completed" and tasks_completed > 0:
-        try:
-            from src.services import review_service as review_svc
-            review_result = review_svc.generate_review(db, goal.id, run_id)
-            total_tokens += review_result.get("tokens_used", 0)
-        except Exception:
-            pass
+    if goal.status in {"completed", "revision_required"} and tasks_completed > 0:
+        from src.services import supervisor_policy_service
+        active_tasks = db.query(Task).filter(Task.goal_id == goal.id).all()
+        supervisor_policy = supervisor_policy_service.evaluate(db, goal, active_tasks)
+        if supervisor_policy["activate"]:
+            try:
+                from src.services import review_service as review_svc
+                review_result = review_svc.generate_review(db, goal.id, run_id)
+                review_result["activation_policy"] = supervisor_policy
+                total_tokens += review_result.get("tokens_used", 0)
+            except Exception:
+                pass
+        else:
+            review_result = {
+                "passed": goal.status == "completed", "status": "skipped", "skipped": True,
+                "reason": supervisor_policy["reasons"][0], "tokens_used": 0,
+                "activation_policy": supervisor_policy,
+            }
+            log_service.create_log(db, {
+                "goal_id": goal.id, "event_type": "supervisor.skipped", "event_status": "completed",
+                "output_summary": supervisor_policy["reasons"][0], "metadata": supervisor_policy,
+            })
+            db.commit()
 
     # Phase 5: Memory Curation (after review passes)
     memory_result = None
@@ -178,9 +232,9 @@ def execute_goal_pipeline(db: Session, goal_id: str) -> Dict[str, Any]:
     run.status = "completed" if goal.status == "completed" else goal.status
     if run.status == "completed":
         run.ended_at = datetime.now(timezone.utc)
-        verified = db.query(Task).filter(Task.goal_id == goal.id, Task.task_type.in_(["coding", "verification"]), Task.status != "completed_verified").count() == 0
-        run.final_verification_status = "passed" if verified else "unverified"
-        goal.final_verification_status = run.final_verification_status
+    if completion_gate:
+        run.final_verification_status = completion_gate["status"]
+        goal.final_verification_status = completion_gate["status"]
     db.commit()
 
     return {
@@ -196,6 +250,7 @@ def execute_goal_pipeline(db: Session, goal_id: str) -> Dict[str, Any]:
         "memory": memory_result,
         "run_id": run.id,
         "final_verification_status": run.final_verification_status,
+        "completion_gate": completion_gate,
     }
 
 
@@ -336,19 +391,26 @@ def _merge_parallel_worktrees(db: Session, task_ids: List[str]) -> set[str]:
             conflicted.add(task.id)
             task.status = "blocked"
             task.blocked_reason = "Parallel worktree merge conflict"
-            if not db.query(Task).filter(Task.parent_task_id == task.id, Task.title.like("Resolve conflict:%")).first():
-                resolution = Task(
-                    id=str(uuid.uuid4()), goal_id=task.goal_id, parent_task_id=task.id,
-                    title=f"Resolve conflict: {task.title}",
-                    description=f"Resolve the merge conflict retained in isolated worktree: {record.path}",
-                    status="pending", assigned_agent_id=task.assigned_agent_id, priority=task.priority + 1,
-                    task_type="coding", risk_level="high",
-                )
-                resolution.set_json("required_tools", task._get_json("required_tools"))
-                resolution.set_json("required_capabilities", ["code_edit"])
-                resolution.set_json("acceptance_criteria", task._get_json("acceptance_criteria"))
-                db.add(resolution)
         db.commit()
+    if conflicted:
+        from src.services import replan_service, runtime_decision_service
+        first = db.query(Task).filter(Task.id.in_(conflicted)).first()
+        if first:
+            decision = runtime_decision_service.decide_failure(
+                first,
+                trigger="workspace_conflict",
+                reason="Parallel worktree merge conflict requires a versioned resolution plan.",
+                evidence=[{"task_ids": sorted(conflicted)}],
+            )
+            runtime_decision_service.record_decision(db, first, decision)
+            replan_service.request_automatic_replan(
+                db,
+                first.goal_id,
+                trigger="workspace_conflict",
+                reason="Resolve conflicts produced while merging isolated parallel worktrees.",
+                task_ids=sorted(conflicted),
+                evidence=[{"task_ids": sorted(conflicted)}],
+            )
     return conflicted
 
 
@@ -357,6 +419,10 @@ def execute_task_step(db: Session, task_id: str) -> Dict[str, Any]:
     task = db.query(Task).filter(Task.id == task_id).first()
     if not task:
         raise TaskNotReadyError(f"Task '{task_id}' not found")
+    try:
+        ensure_plan_confirmed(db, task.goal_id)
+    except GoalNotReadyError as exc:
+        raise TaskNotReadyError(str(exc)) from exc
     resumed_worker = None
     if task.assigned_worker_id:
         resumed_worker = db.query(WorkerSession).filter(WorkerSession.id == task.assigned_worker_id).first()
@@ -387,7 +453,7 @@ def _execute_single_task(db: Session, task: Task) -> Dict[str, Any]:
     start_ts = time.time()
 
     # 1. Assign task
-    if task.status == "pending":
+    if task.status in {"pending", "ready"}:
         task.status = "assigned"
         task.updated_at = datetime.now(timezone.utc)
         db.commit()
@@ -482,12 +548,14 @@ def _execute_single_task(db: Session, task: Task) -> Dict[str, Any]:
         )
         db.add(worker)
         db.flush()
+        from src.services.context_service import persist_context_snapshot
+        persist_context_snapshot(db, worker.id, task.plan_version_id, context_package)
         task.assigned_worker_id = worker.id
         log_service.create_log(db, {
             "goal_id": task.goal_id, "task_id": task.id, "agent_id": agent.id, "worker_id": worker.id,
             "event_type": "memory_retrieved", "event_status": "completed",
-            "output_summary": f"Retrieved {len(context_package['project_memories'])} memory item(s) and {len(context_package['skills'])} skill(s)",
-            "metadata": {"memory_ids": [item["id"] for item in context_package["project_memories"]], "skill_ids": [item["id"] for item in context_package["skills"]]},
+            "output_summary": f"Retrieved {len(context_package['project_memories'])} memory item(s), {len(context_package['skills'])} skill(s), and {len(context_package.get('knowledge_items', []))} knowledge chunk(s)",
+            "metadata": {"memory_ids": [item["id"] for item in context_package["project_memories"]], "skill_ids": [item["id"] for item in context_package["skills"]], "retrieval_run_id": context_package.get("retrieval_run_id"), "citations": context_package.get("citations", [])},
         })
         if workspace_scope:
             log_service.create_log(db, {
@@ -730,26 +798,55 @@ def _execute_single_task(db: Session, task: Task) -> Dict[str, Any]:
 
     # 11. Evidence-based completion. A code task with a contract can never be
     # promoted by a model sentence alone.
+    from src.schemas.planning import RuntimeDecisionContract
+    from src.services import runtime_decision_service
     verification = _verify_task(db, task)
     task.verification_status = verification["status"]
+    completion_decision = None
+    should_auto_replan = False
     if verification["status"] == "passed":
         task.status = "completed_verified"
+        completion_decision = RuntimeDecisionContract(
+            action="complete",
+            reason="Completion Contract and VerificationResult passed.",
+            evidence=verification["results"],
+            task_id=task.id,
+        )
     elif task.retry_count < task.max_retries and task.task_type in {"coding", "verification"}:
         task.retry_count += 1
         task.status = "pending"
         task.blocked_reason = "Verification failed; retrying with recorded evidence."
         final_content = f"{final_content}\n\n[Verification failed; retry {task.retry_count}/{task.max_retries} scheduled.]"
+        completion_decision = runtime_decision_service.decide_failure(
+            task,
+            trigger="verification_failure",
+            reason=task.blocked_reason,
+            retry_available=True,
+            evidence=verification["results"],
+        )
     elif task.task_type in {"general", "direct", "planning", "research", "summarization", "review"}:
         # Subjective/direct work has no executable contract by design. It is
         # explicitly visible as unverified rather than being blocked or
         # promoted to verified completion.
         task.status = "completed" if task.task_type == "general" else "completed_unverified"
+        completion_decision = RuntimeDecisionContract(
+            action="complete",
+            reason="Non-code Task completed without a deterministic execution contract.",
+            evidence=verification["results"],
+            task_id=task.id,
+        )
     elif goal_service.get_goal(db, task.goal_id).execution_mode == "mock":
         # Explicit Mock is retained for offline/demo regression only. It can
         # never claim verification, but it must keep the legacy presentation
         # flow runnable without faking a Live success.
         task.status = "completed_unverified"
         task.blocked_reason = "Mock execution cannot supply real verification evidence."
+        completion_decision = runtime_decision_service.decide_failure(
+            task,
+            trigger="verification_failure",
+            reason=task.blocked_reason,
+            evidence=verification["results"],
+        )
     else:
         # Code and verification work may not be presented as complete merely
         # because the model exhausted its retry budget. Restore the latest
@@ -760,6 +857,13 @@ def _execute_single_task(db: Session, task: Task) -> Dict[str, Any]:
             "Verification failed after retry budget; restored latest checkpoints: "
             + (", ".join(restored) if restored else "none available")
         )
+        completion_decision = runtime_decision_service.decide_failure(
+            task,
+            trigger="verification_failure",
+            reason=task.blocked_reason,
+            evidence=verification["results"],
+        )
+        should_auto_replan = completion_decision.action == "replan_graph"
     task.output = final_content
     task.tokens_used = total_tokens
     task.duration_ms = elapsed_ms
@@ -777,10 +881,17 @@ def _execute_single_task(db: Session, task: Task) -> Dict[str, Any]:
     # 13. Update agent
     agent.status = "idle"
     agent.current_task_id = None
-    if task.status == "pending":
-        agent.total_tasks_failed = (agent.total_tasks_failed or 0) + 1
+    if task.status in {"completed", "completed_verified"}:
+        previous_completed = agent.total_tasks_completed or 0
+        agent.average_tokens_per_task = round(
+            ((agent.average_tokens_per_task or 0) * previous_completed + total_tokens) / (previous_completed + 1)
+        )
+        agent.average_duration_ms = round(
+            ((agent.average_duration_ms or 0) * previous_completed + elapsed_ms) / (previous_completed + 1)
+        )
+        agent.total_tasks_completed = previous_completed + 1
     else:
-        agent.total_tasks_completed = (agent.total_tasks_completed or 0) + 1
+        agent.total_tasks_failed = (agent.total_tasks_failed or 0) + 1
     agent.updated_at = datetime.now(timezone.utc)
 
     # 14. Log completion
@@ -811,6 +922,21 @@ def _execute_single_task(db: Session, task: Task) -> Dict[str, Any]:
         "output_summary": f"Task {task.status}. Tokens: {total_tokens}, Duration: {elapsed_ms}ms, Tool calls: {tool_call_count}",
     })
     db.commit()
+    if completion_decision:
+        runtime_decision_service.record_decision(db, task, completion_decision)
+    if should_auto_replan:
+        from src.services import replan_service
+        try:
+            replan_service.request_automatic_replan(
+                db,
+                task.goal_id,
+                trigger="verification_failure",
+                reason="Verification retry budget was exhausted; replace the invalid Task.",
+                task_ids=[task.id],
+                evidence=verification["results"],
+            )
+        except replan_service.ReplanError:
+            pass
 
     return {
         "task_id": task.id,
@@ -889,60 +1015,10 @@ def _restore_task_checkpoints(db: Session, task: Task) -> List[str]:
 
 
 def _verify_task(db: Session, task: Task) -> Dict[str, Any]:
-    """Evaluate the persisted Completion Contract and retain its evidence."""
-    criteria = task._get_json("acceptance_criteria")
-    if not criteria:
-        return {"status": "unverified", "results": []}
-    results = []
-    all_passed = True
-    artifacts = db.query(Artifact).filter(Artifact.task_id == task.id).all()
-    for criterion in criteria:
-        kind = criterion.get("type") if isinstance(criterion, dict) else "unknown"
-        if kind == "diff_exists":
-            passed = bool(artifacts)
-            evidence = f"{len(artifacts)} tracked changed file(s)"
-            command = "artifact_register"
-        elif kind == "file_exists":
-            import os
-            root = goal_service.get_goal(db, task.goal_id).workspace_root or "."
-            target = os.path.realpath(os.path.join(root, criterion.get("target", "")))
-            passed = target.startswith(os.path.realpath(root) + os.sep) and os.path.isfile(target)
-            evidence, command = target, "file_exists"
-        elif kind in {"tests_pass", "lint_pass", "typecheck_pass", "build_pass"}:
-            latest_change = max((item.created_at for item in artifacts), default=None)
-            required_tool = {
-                "tests_pass": "test_runner", "lint_pass": "lint_run",
-                "typecheck_pass": "typecheck_run", "build_pass": "build_run",
-            }[kind]
-            query = db.query(ToolCallRecord).filter(
-                ToolCallRecord.task_id == task.id,
-                # A generic shell command is evidence of observation, not of
-                # a named verification step. Completion contracts require the
-                # dedicated tool so a model cannot satisfy them with `exit(0)`.
-                ToolCallRecord.tool_name == required_tool,
-                ToolCallRecord.status == "completed",
-            )
-            if latest_change:
-                query = query.filter(ToolCallRecord.created_at >= latest_change)
-            successful_run = query.order_by(ToolCallRecord.created_at.desc()).first()
-            passed = successful_run is not None
-            evidence = successful_run.tool_output[:1000] if successful_run and successful_run.tool_output else f"No successful {required_tool} command after the latest change"
-            command = successful_run.get_tool_input().get("command", required_tool) if successful_run else required_tool
-        elif kind == "review_score":
-            from src.models.supervisor import SupervisorReview
-            review = db.query(SupervisorReview).filter(SupervisorReview.goal_id == task.goal_id).order_by(SupervisorReview.created_at.desc()).first()
-            score = 1.0 if review and review.passed else 0.0
-            minimum = float(criterion.get("minimum", 0.8))
-            passed = score >= minimum
-            evidence, command = f"Supervisor score proxy={score:.1f}; minimum={minimum:.2f}", "supervisor_review"
-        else:
-            passed, evidence, command = False, "Unsupported verification criterion", str(criterion)
-        result = VerificationResult(task_id=task.id, criterion_type=kind, command_or_rule=command,
-                                    status="passed" if passed else "failed", evidence=evidence, exit_code=0 if passed else 1)
-        db.add(result)
-        results.append({"type": kind, "status": result.status, "evidence": evidence})
-        all_passed = all_passed and passed
-    return {"status": "passed" if all_passed else "failed", "results": results}
+    """Compatibility wrapper around the unified Completion Contract verifier."""
+    from src.services import verifier_service
+
+    return verifier_service.verify_task_contract(db, task)
 
 
 def _handle_task_failure(
@@ -969,6 +1045,17 @@ def _handle_task_failure(
             worker.next_action = "handoff"
             worker.updated_at = datetime.now(timezone.utc)
             db.commit()
+            from src.services import runtime_decision_service
+            runtime_decision_service.record_decision(
+                db,
+                task,
+                runtime_decision_service.decide_failure(
+                    task,
+                    trigger="tool_failure",
+                    reason=f"Provider execution failed; responsibility transferred: {error_msg}",
+                    handoff_available=True,
+                ),
+            )
             return {
                 "task_id": task.id,
                 "status": "handoff",
@@ -1008,6 +1095,26 @@ def _handle_task_failure(
         "error_type": "runtime_error",
     })
     db.commit()
+    from src.services import replan_service, runtime_decision_service
+    decision = runtime_decision_service.decide_failure(
+        task,
+        trigger="tool_failure",
+        reason=f"Execution failed without a viable Handoff: {error_msg}",
+        evidence=[{"error": error_msg}],
+    )
+    runtime_decision_service.record_decision(db, task, decision)
+    if decision.action == "replan_graph":
+        try:
+            replan_service.request_automatic_replan(
+                db,
+                task.goal_id,
+                trigger="tool_failure",
+                reason=f"Replace failed Task after execution error: {error_msg}",
+                task_ids=[task.id],
+                evidence=[{"error": error_msg}],
+            )
+        except replan_service.ReplanError:
+            pass
     return {
         "task_id": task.id,
         "status": "failed",
@@ -1212,6 +1319,10 @@ def _build_final_summary(
     completed = [task for task in tasks if task.status in terminal_success]
     incomplete = [task for task in tasks if task.status not in terminal_success]
     review = review_service.get_review(db, goal.id)
+    from src.services import multi_agent_metrics_service, planning_service
+    active_plan = planning_service.get_active_plan_record(db, goal.id)
+    plan_tasks = db.query(PlanTask).filter(PlanTask.plan_version_id == active_plan.id).all() if active_plan else []
+    multi_agent_metrics = multi_agent_metrics_service.calculate(active_plan, plan_tasks, tasks)
 
     logs = (
         db.query(ExecutionLog)
@@ -1254,6 +1365,7 @@ def _build_final_summary(
         "risks": risks,
         "models": model_usage,
         "handoff_count": handoff_count,
+        "multi_agent": multi_agent_metrics,
         "cost": {
             "currency_estimate": None,
             "available": False,

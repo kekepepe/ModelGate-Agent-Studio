@@ -12,6 +12,7 @@ class GoalCreate(BaseModel):
     budget_tokens: int = Field(100000, gt=0, le=10_000_000)
     budget_cost_usd: Optional[float] = Field(None, gt=0)
     max_duration_seconds: int = Field(3600, gt=0, le=86_400)
+    max_parallel_tasks: int = Field(3, gt=0, le=32)
 
 
 class GoalResponse(BaseModel):
@@ -26,6 +27,7 @@ class GoalResponse(BaseModel):
     budget_tokens: int = 100000
     budget_cost_usd: Optional[float] = None
     max_duration_seconds: int = 3600
+    max_parallel_tasks: int = 3
     created_at: Optional[str] = None
     updated_at: Optional[str] = None
 
@@ -60,6 +62,11 @@ class TaskResponse(BaseModel):
     verification_status: Optional[str] = None
     artifacts: List[Dict[str, Any]] = Field(default_factory=list)
     verification_results: List[Dict[str, Any]] = Field(default_factory=list)
+    context_runs: List[Dict[str, Any]] = Field(default_factory=list)
+    selection_decision: Optional[Dict[str, Any]] = None
+    plan_version_id: Optional[str] = None
+    plan_task_id: Optional[str] = None
+    plan_source: Optional[str] = None
 
 
 class AgentState(BaseModel):
@@ -90,6 +97,17 @@ class WorkspaceState(BaseModel):
     tasks: List[TaskResponse] = Field(default_factory=list)
     agents: List[AgentState] = Field(default_factory=list)
     workers: List[WorkerState] = Field(default_factory=list)
+    active_plan: Optional[Dict[str, Any]] = None
+    plan_versions: List[Dict[str, Any]] = Field(default_factory=list)
+    task_mode: Optional[str] = None
+    activation_reason: Optional[str] = None
+    task_edges: List[Dict[str, str]] = Field(default_factory=list)
+    parallel_groups: List[Dict[str, Any]] = Field(default_factory=list)
+    replan_events: List[Dict[str, Any]] = Field(default_factory=list)
+    completion_evidence: Optional[Dict[str, Any]] = None
+    context_runs: List[Dict[str, Any]] = Field(default_factory=list)
+    selection_decisions: List[Dict[str, Any]] = Field(default_factory=list)
+    multi_agent_metrics: Optional[Dict[str, Any]] = None
 
 
 class StartResponse(BaseModel):
@@ -99,6 +117,10 @@ class StartResponse(BaseModel):
 
 class TaskCancelRequest(BaseModel):
     reason: str = Field("Cancelled by user", min_length=1, max_length=1000)
+
+
+class TaskSkipRequest(BaseModel):
+    reason: str = Field("Skipped by user", min_length=1, max_length=1000)
 
 
 class TaskSplitRequest(BaseModel):

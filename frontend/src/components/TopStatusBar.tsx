@@ -1,5 +1,5 @@
 import { Box, ChevronDown, Download, Pause, Play, Square, Users } from 'lucide-react';
-import type { Goal, WorkspaceTask } from '../types/workspace';
+import type { Goal, MultiAgentMetrics, WorkspaceTask } from '../types/workspace';
 import { GOAL_STATUS_LABELS } from '../types/workspace';
 import type { WorkspaceViewMode } from '../utils/workspaceViewModel';
 import WorkspaceModeSwitch from './WorkspaceModeSwitch';
@@ -18,6 +18,8 @@ interface TopStatusBarProps {
   onExport?: () => void;
   isBusy?: boolean;
   showWhenEmpty?: boolean;
+  taskMode?: string | null;
+  metrics?: MultiAgentMetrics | null;
 }
 
 export default function TopStatusBar({
@@ -34,13 +36,17 @@ export default function TopStatusBar({
   onExport,
   isBusy = false,
   showWhenEmpty = false,
+  taskMode,
+  metrics,
 }: TopStatusBarProps) {
   if (!goal && !showWhenEmpty) return null;
   const completedCount = tasks.filter((task) => ['completed', 'completed_verified', 'completed_unverified'].includes(task.status)).length;
   const totalTokens = tasks.reduce((sum, task) => sum + (task.tokens_used || 0), 0);
   const tokenLimit = goal?.budget_tokens || 100_000;
   const usagePercent = Math.min(100, Math.round((totalTokens / Math.max(1, tokenLimit)) * 100));
-  const activeAgents = new Set(tasks.filter((task) => task.assigned_agent_id).map((task) => task.assigned_agent_id)).size;
+  const activeAgents = metrics?.active_agent_count ?? new Set(tasks.filter((task) => ['assigned', 'running', 'handoff'].includes(task.status) && task.assigned_agent_id).map((task) => task.assigned_agent_id)).size;
+  const parallelism = metrics?.active_parallelism ?? tasks.filter((task) => task.status === 'running').length;
+  const modeLabel = (taskMode || metrics?.mode || 'idle').replaceAll('_', ' ');
   const statusLabel = goal ? (GOAL_STATUS_LABELS[goal.status] || goal.status) : 'Ready';
   const isRunning = goal?.status === 'running';
 
@@ -61,6 +67,8 @@ export default function TopStatusBar({
         <span className={`workspace-run-status workspace-run-status--${goal?.status || 'idle'}`}><i />{statusLabel}</span>
         <div className="workspace-header-divider workspace-header-divider--desktop" />
         <div className="workspace-active-agents"><Users size={15} /><span>{activeAgents || 0} Agents Active</span></div>
+        <div className="workspace-header-divider workspace-header-divider--desktop" />
+        <div className="workspace-active-agents" title={metrics?.why_multi_agent}><span>{modeLabel} · {parallelism}× parallel · {metrics?.coordination_tokens || 0} coordination tokens</span></div>
         <div className="workspace-header-divider workspace-header-divider--desktop" />
         <div className="workspace-quota">
           <div className="workspace-quota-copy"><span>Quota</span><strong>{usagePercent}%</strong></div>

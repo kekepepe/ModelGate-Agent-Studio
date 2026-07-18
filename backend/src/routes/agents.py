@@ -59,6 +59,8 @@ def list_agents(
             is_enabled=a.is_enabled,
             current_task_id=a.current_task_id,
             total_tasks_completed=a.total_tasks_completed,
+            capabilities=sorted((a.get_capability_profile() or agent_service.default_capability_profile(a.role)).keys()),
+            max_concurrency=a.max_concurrency,
             created_at=a.created_at.isoformat() if a.created_at else None,
         )
         for a in agents

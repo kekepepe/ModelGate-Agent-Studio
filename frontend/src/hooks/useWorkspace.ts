@@ -1,6 +1,6 @@
 import { useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { createGoal, getTask, getWorkspaceState, retryTask as apiRetryTask, startGoal } from '../api/workspace';
+import { confirmPlan, createGoal, getTask, getWorkspaceState, retryTask as apiRetryTask, startGoal, updatePlan } from '../api/workspace';
 import { executeStep as apiExecuteStep, getRuntimeStatus, pauseGoal as apiPauseGoal, resumeGoal as apiResumeGoal, startGoalExecution, stopGoal as apiStopGoal } from '../api/runtime';
 
 const WORKSPACE_QUERY_KEY = 'workspace-state';
@@ -48,6 +48,22 @@ export function useExecuteGoal() {
     onSuccess: (_, goalId) => {
       queryClient.invalidateQueries({ queryKey: [WORKSPACE_QUERY_KEY, goalId] });
     },
+  });
+}
+
+export function useConfirmPlan() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ goalId, version }: { goalId: string; version: number }) => confirmPlan(goalId, version),
+    onSuccess: (_, variables) => queryClient.invalidateQueries({ queryKey: [WORKSPACE_QUERY_KEY, variables.goalId] }),
+  });
+}
+
+export function useUpdatePlan() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ goalId, plan, reason }: { goalId: string; plan: import('../types/workspace').ExecutionPlan; reason: string }) => updatePlan(goalId, plan, reason),
+    onSuccess: (_, variables) => queryClient.invalidateQueries({ queryKey: [WORKSPACE_QUERY_KEY, variables.goalId] }),
   });
 }
 

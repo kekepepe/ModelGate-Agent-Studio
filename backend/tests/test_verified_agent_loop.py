@@ -4,9 +4,9 @@ from dataclasses import dataclass
 
 from src.models.agent import AgentStation
 from src.models.model import Model
-from src.models.workspace import Goal, Task
+from src.models.workspace import ExecutionPlan, Goal, Task
 from src.models.tool import ToolCallRecord
-from src.models.handoff import WorkerSession
+from src.models.handoff import ExecutionLog, WorkerSession
 from src.services import runtime_service
 from src.services.providers.base import ModelResponse
 from src.services.providers.provider_factory import create_provider, set_provider
@@ -83,6 +83,11 @@ def test_failed_test_schedules_bounded_retry(db_session, tmp_path):
     assert task.retry_count == 1
     assert task.status == "pending"
     assert task.verification_status == "failed"
+    decision = db_session.query(ExecutionLog).filter(
+        ExecutionLog.task_id == task.id,
+        ExecutionLog.event_type == "runtime.decision",
+    ).one()
+    assert decision.event_status == "revise_current_task"
 
 
 def test_generic_terminal_success_cannot_satisfy_test_contract(db_session, tmp_path):
@@ -125,3 +130,12 @@ def test_exhausted_retry_restores_checkpoint_and_blocks_coding_task(db_session, 
     assert task.status == "blocked"
     assert "restored latest checkpoints" in (task.blocked_reason or "")
     assert original.read_text() == "answer = 0\n"
+    plans = db_session.query(ExecutionPlan).filter(ExecutionPlan.goal_id == task.goal_id).order_by(ExecutionPlan.version).all()
+    assert [plan.version for plan in plans] == [1, 2]
+    replacement = db_session.query(Task).filter(Task.parent_task_id == task.id).one()
+    assert replacement.status == "pending"
+    decision = db_session.query(ExecutionLog).filter(
+        ExecutionLog.task_id == task.id,
+        ExecutionLog.event_type == "runtime.decision",
+    ).one()
+    assert decision.event_status == "replan_graph"

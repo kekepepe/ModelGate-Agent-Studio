@@ -5,6 +5,7 @@ from sqlalchemy import or_
 from src.models.agent import AgentStation
 from src.schemas.agent import AgentCreate, AgentUpdate
 from src.data.agent_templates import get_template
+from src.services.capability_registry_service import default_capability_profile
 
 
 class AgentServiceError(Exception):
@@ -59,6 +60,7 @@ def create_agent(db: Session, data: AgentCreate) -> AgentStation:
         max_tokens_per_task=merged.get("max_tokens_per_task", 32000),
         max_duration_seconds=merged.get("max_duration_seconds", 900),
         max_consecutive_failures=merged.get("max_consecutive_failures", 3),
+        max_concurrency=merged.get("max_concurrency", 1),
         allow_handoff=merged.get("allow_handoff", False),
         handoff_threshold_tokens=merged.get("handoff_threshold_tokens"),
         is_enabled=True,
@@ -68,6 +70,10 @@ def create_agent(db: Session, data: AgentCreate) -> AgentStation:
     )
     agent.set_backup_model_ids(merged.get("backup_model_ids") or [])
     agent.set_allowed_tools(merged.get("allowed_tools") or [])
+    agent.set_capability_profile(merged.get("capability_profile") or default_capability_profile(merged["role"]))
+    agent.set_workspace_permissions(merged.get("workspace_permissions") or [])
+    agent.set_input_types(merged.get("input_types") or ["text"])
+    agent.set_output_types(merged.get("output_types") or ["text"])
 
     db.add(agent)
     db.commit()
@@ -121,6 +127,14 @@ def update_agent(db: Session, agent_id: str, data: AgentUpdate) -> AgentStation:
             agent.set_backup_model_ids(value)
         elif field == "allowed_tools" and value is not None:
             agent.set_allowed_tools(value)
+        elif field == "capability_profile" and value is not None:
+            agent.set_capability_profile(value)
+        elif field == "workspace_permissions" and value is not None:
+            agent.set_workspace_permissions(value)
+        elif field == "input_types" and value is not None:
+            agent.set_input_types(value)
+        elif field == "output_types" and value is not None:
+            agent.set_output_types(value)
         elif hasattr(agent, field):
             setattr(agent, field, value)
 

@@ -58,8 +58,8 @@ class TestStartGoal:
         assert data["success"] is True
         assert data["data"]["status"] == "planning"
 
-    def test_start_goal_creates_a_serial_cross_role_plan(self, client: TestClient, db_session):
-        """A fully configured Workspace gets a visible Planner → Coder → Reviewer flow."""
+    def test_start_goal_activates_only_needed_serial_capabilities(self, client: TestClient, db_session):
+        """A routine code Goal does not create a redundant Planner Task."""
         from src.models.agent import AgentStation
         from src.models.workspace import Task
         import uuid
@@ -77,32 +77,46 @@ class TestStartGoal:
         assert response.status_code == 200
 
         tasks = db_session.query(Task).filter(Task.goal_id == goal_id).order_by(Task.priority.desc()).all()
-        assert [task.title.split(":", 1)[0] for task in tasks] == ["Plan", "Build", "Review"]
-        assert [task.assigned_agent_id for task in tasks] == [agent.id for agent in agents]
+        assert [task.title.split(":", 1)[0] for task in tasks] == ["Build", "Verify"]
+        assert [task.assigned_agent_id for task in tasks] == [agents[1].id, agents[2].id]
 
     @pytest.mark.parametrize(
-        ("preset", "roles"),
+        ("preset", "title", "available_roles", "expected_roles"),
         [
-            ("code-delivery", ["planner", "coder", "reviewer"]),
-            ("deep-research", ["planner", "research", "summarizer", "reviewer"]),
-            ("document-production", ["planner", "research", "summarizer", "reviewer"]),
+            ("code-delivery", "修复登录 Bug 并运行测试", ["planner", "coder", "reviewer"], ["coder", "reviewer"]),
+            ("deep-research", "调研缓存方案并形成报告", ["planner", "research", "summarizer", "reviewer"], ["research", "summarizer"]),
+            ("document-production", "根据现有材料编写正式文档", ["planner", "research", "summarizer", "reviewer"], ["research", "summarizer"]),
         ],
     )
-    def test_team_preset_generates_matching_agent_flow(self, client: TestClient, db_session, preset, roles):
+    def test_team_preset_supplies_capabilities_without_forcing_a_role_sequence(self, client: TestClient, db_session, preset, title, available_roles, expected_roles):
         from src.models.agent import AgentStation
         from src.models.workspace import Task
         import uuid
 
-        agents = [AgentStation(id=str(uuid.uuid4()), name=role.title(), role=role, default_model_id=f"{role}-model", is_enabled=True) for role in roles]
+        agents = [AgentStation(id=str(uuid.uuid4()), name=role.title(), role=role, default_model_id=f"{role}-model", is_enabled=True) for role in available_roles]
         db_session.add_all(agents)
         db_session.commit()
 
-        goal_id = client.post("/api/v1/goals", json={"title": "Preset goal", "team_preset": preset}).json()["data"]["goal_id"]
+        goal_id = client.post("/api/v1/goals", json={"title": title, "team_preset": preset}).json()["data"]["goal_id"]
         response = client.post(f"/api/v1/goals/{goal_id}/start")
         assert response.status_code == 200, response.text
         tasks = db_session.query(Task).filter(Task.goal_id == goal_id).order_by(Task.priority.desc()).all()
         assigned_roles = [db_session.query(AgentStation).filter(AgentStation.id == task.assigned_agent_id).one().role for task in tasks]
-        assert assigned_roles == roles
+        assert assigned_roles == expected_roles
+
+    def test_simple_goal_does_not_activate_a_template_team(self, client: TestClient, db_session):
+        from src.models.agent import AgentStation
+        from src.models.workspace import ExecutionPlan, Task
+        import uuid
+
+        agents = [AgentStation(id=str(uuid.uuid4()), name=role.title(), role=role, default_model_id=f"{role}-model", is_enabled=True) for role in ["planner", "coder", "reviewer"]]
+        db_session.add_all(agents); db_session.commit()
+        goal_id = client.post("/api/v1/goals", json={"title": "解释什么是幂等性", "team_preset": "code-delivery"}).json()["data"]["goal_id"]
+        assert client.post(f"/api/v1/goals/{goal_id}/start").status_code == 200
+        assert db_session.query(Task).filter(Task.goal_id == goal_id).count() == 1
+        plan = db_session.query(ExecutionPlan).filter(ExecutionPlan.goal_id == goal_id).one()
+        assert plan.task_mode == "direct"
+        assert "did not force a role sequence" in plan.activation_reason
 
     def test_generated_serial_plan_executes_to_completion(self, client: TestClient, db_session):
         """The visible Workspace flow is backed by a runnable Runtime sequence."""
@@ -127,6 +141,15 @@ class TestStartGoal:
 
         goal_id = client.post("/api/v1/goals", json={"title": "运行串行协作计划", "execution_mode": "mock"}).json()["data"]["goal_id"]
         assert client.post(f"/api/v1/goals/{goal_id}/start").status_code == 200
+        planned_workspace = client.get(f"/api/v1/workspace/{goal_id}/state").json()["data"]
+        assert planned_workspace["selection_decisions"]
+        assert all(task["selection_decision"]["candidates"] for task in planned_workspace["tasks"])
+        assert planned_workspace["multi_agent_metrics"]["why_multi_agent"] == planned_workspace["activation_reason"]
+
+        unconfirmed = client.post(f"/api/v1/runtime/execute/{goal_id}")
+        assert unconfirmed.status_code == 400
+        assert "must be confirmed" in unconfirmed.json()["detail"]["error"]["message"]
+        assert client.post(f"/api/v1/goals/{goal_id}/plans/1/confirm").status_code == 200
 
         execution = client.post(f"/api/v1/runtime/execute/{goal_id}")
         assert execution.status_code == 200, execution.text
@@ -139,7 +162,9 @@ class TestStartGoal:
         # Mock-only execution has no file/tool evidence, so Runtime v2 must
         # never present it as verified completion.
         assert [task["status"] for task in workspace["tasks"][:3]] == ["completed_unverified", "completed_unverified", "completed_unverified"]
-        assert all(task["title"].startswith("Replan:") for task in workspace["tasks"][3:])
+        assert all(task["title"].startswith("Revise:") for task in workspace["tasks"][3:]), [
+            (task["title"], task["status"]) for task in workspace["tasks"]
+        ]
         assert [task["flow_position"] for task in workspace["tasks"]] == list(range(1, len(workspace["tasks"]) + 1))
 
     def test_start_goal_not_found(self, client: TestClient):

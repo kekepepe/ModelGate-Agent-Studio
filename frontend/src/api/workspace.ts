@@ -1,6 +1,6 @@
 import axios from 'axios';
 import type { ApiResponse } from '../types/handoff';
-import type { WorkspaceState, WorkspaceTask } from '../types/workspace';
+import type { ExecutionPlan, WorkspaceState, WorkspaceTask } from '../types/workspace';
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000/api/v1';
 
@@ -51,5 +51,47 @@ export async function getTask(taskId: string): Promise<WorkspaceTask> {
 export async function retryTask(taskId: string): Promise<WorkspaceTask> {
   const resp = await client.post<ApiResponse<WorkspaceTask>>(`/tasks/${taskId}/retry`);
   if (!resp.data.success || !resp.data.data) throw new Error(resp.data.error?.message || '重试 Task 失败');
+  return resp.data.data;
+}
+
+export async function confirmPlan(goalId: string, version: number): Promise<ExecutionPlan> {
+  const resp = await client.post<ApiResponse<ExecutionPlan>>(`/goals/${goalId}/plans/${version}/confirm`);
+  if (!resp.data.success || !resp.data.data) throw new Error(resp.data.error?.message || '确认计划失败');
+  return resp.data.data;
+}
+
+export async function updatePlan(goalId: string, plan: ExecutionPlan, reason: string): Promise<unknown> {
+  const resp = await client.post<ApiResponse<unknown>>(`/goals/${goalId}/replan`, {
+    trigger: 'user_change',
+    reason,
+    plan: {
+      plan_id: plan.plan_id,
+      task_mode: plan.task_mode,
+      goal_summary: plan.goal_summary,
+      assumptions: plan.assumptions,
+      required_context: plan.required_context,
+      activation_reason: reason,
+      tasks: plan.tasks.map((task) => ({
+        client_task_id: task.client_task_id,
+        objective: task.objective,
+        task_type: task.task_type,
+        required_capabilities: task.required_capabilities,
+        required_tools: task.required_tools,
+        dependencies: task.dependencies,
+        acceptance_criteria: task.acceptance_criteria,
+        risk_level: task.risk_level,
+        parallel_safe: task.parallel_safe,
+        context_query: task.context_query,
+        approval_required: task.approval_required,
+        workspace_scope: task.workspace_scope,
+        merge_strategy: task.merge_strategy,
+      })),
+      final_acceptance_criteria: plan.final_acceptance_criteria,
+      human_approval_points: plan.human_approval_points,
+      estimated_cost: plan.estimated_cost,
+      fallback_reason: plan.fallback_reason,
+    },
+  });
+  if (!resp.data.success) throw new Error(resp.data.error?.message || '修改计划失败');
   return resp.data.data;
 }

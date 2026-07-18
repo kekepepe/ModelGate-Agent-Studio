@@ -57,3 +57,27 @@ class EvolutionSummary(BaseModel):
 class ApprovalRequest(BaseModel):
     approved: bool = True
     approved_by: str = "user"
+
+
+class KnowledgeSourceCreate(BaseModel):
+    name: str = Field(..., min_length=1, max_length=255)
+    type: str = Field("workspace", pattern="^(workspace|project_document)$")
+    uri: str = Field(..., min_length=1, max_length=4000)
+    workspace_scope: Optional[str] = Field(None, max_length=2000)
+    sync_policy: str = Field("manual", pattern="^(manual|on_start|scheduled)$")
+    metadata: Dict[str, Any] = Field(default_factory=dict)
+
+
+class SourceStatusRequest(BaseModel):
+    status: str = Field(..., pattern="^(active|disabled)$")
+
+
+class RetrievalRequest(BaseModel):
+    query: str = Field(..., min_length=1, max_length=4000)
+    goal_id: Optional[str] = None
+    task_id: Optional[str] = None
+    agent_id: Optional[str] = None
+    token_budget: int = Field(1200, ge=0, le=100000)
+    source_ids: List[str] = Field(default_factory=list)
+    workspace_scope: Optional[str] = None
+    limit: int = Field(20, ge=1, le=100)

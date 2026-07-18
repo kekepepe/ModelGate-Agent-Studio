@@ -70,6 +70,61 @@ describe('TaskDetailPanel', () => {
     expect(screen.getByText('当前 Task 尚未建立可继承上下文。')).toBeInTheDocument()
   })
 
+  it('shows why context was retrieved, its sources and token budget', () => {
+    renderWithProviders(
+      <TaskDetailPanel
+        task={{
+          ...mockTask,
+          context: JSON.stringify({
+            policy: 'approved_memory_skill_keyword_v0',
+            token_count: 128,
+            retrieval_reason: 'Approved project Memory matched the Task query.',
+            source_references: [{ memory_id: 'm-1' }],
+          }),
+          context_runs: [{
+            id: 'r-1', task_id: 't-1', query: 'login architecture', policy: 'hybrid_v1',
+            filters: {}, latency_ms: 8, token_budget: 200, token_count: 80, status: 'completed',
+            items: [
+              { id: 'i-1', rank: 1, score: 0.91, used: true, citation: 'docs/login.md#chunk-0', token_count: 80, source_id: 's-1', source_name: 'Docs', content: 'Login architecture rule.' },
+              { id: 'i-2', rank: 2, score: 0.7, used: false, citation: 'docs/old.md#chunk-0', token_count: 180, source_id: 's-1', source_name: 'Docs' },
+            ],
+          }],
+        }}
+        onClose={vi.fn()}
+      />
+    )
+    fireEvent.click(screen.getByText('Context'))
+    expect(screen.getByText('approved_memory_skill_keyword_v0')).toBeInTheDocument()
+    expect(screen.getByText('128 tokens')).toBeInTheDocument()
+    expect(screen.getByText('1 sources')).toBeInTheDocument()
+    expect(screen.getByText('Approved project Memory matched the Task query.')).toBeInTheDocument()
+    expect(screen.getByText(/Query: login architecture/)).toBeInTheDocument()
+    expect(screen.getByText(/Injected/)).toBeInTheDocument()
+    expect(screen.getByText(/Dropped/)).toBeInTheDocument()
+    expect(screen.getByText('docs/login.md#chunk-0')).toBeInTheDocument()
+    expect(screen.getAllByRole('button', { name: 'Disable source' })).toHaveLength(2)
+  })
+
+  it('shows Agent candidates, eliminations and the fallback entry', () => {
+    renderWithProviders(<TaskDetailPanel task={{
+      ...mockTask,
+      selection_decision: {
+        id: 'selection-1', task_id: 'plan-task-1', required_capabilities: ['code_edit'], required_tools: ['file_write'],
+        selected_agent_id: 'a-1', selected_model_id: 'm-1', backup_model_ids: ['m-2'], score: .91,
+        selection_reason: 'Coder covers all required capabilities and tools.',
+        fallback_entry: { agent_ids: ['a-2'], model_ids: ['m-2'], handoff_allowed: true, reason: 'Handoff without replanning.' },
+        candidates: [
+          { agent_id: 'a-1', agent_name: 'Coder A', role: 'coder', eligible: true, elimination_reasons: [], score: .91, selected_model_id: 'm-1', selected_model_name: 'Code Model', score_breakdown: {} },
+          { agent_id: 'a-2', agent_name: 'Coder B', role: 'coder', eligible: false, elimination_reasons: ['missing tools file_write'], score: .6, selected_model_id: 'm-2', selected_model_name: 'Backup Model', score_breakdown: {} },
+        ],
+      },
+    }} onClose={vi.fn()} />)
+    expect(screen.getByText('Agent / Model selection')).toBeInTheDocument()
+    expect(screen.getByText(/Coder covers all required/)).toBeInTheDocument()
+    expect(screen.getByText('missing tools file_write')).toBeInTheDocument()
+    expect(screen.getByText(/Handoff without replanning/)).toBeInTheDocument()
+  })
+
   it('shows the recorded router decision and recent logs in history', () => {
     renderWithProviders(
       <TaskDetailPanel

@@ -10,6 +10,8 @@ from src.schemas.handoff import (
     HandoffTriggerRequest,
 )
 from src.services import handoff_service
+from src.models.handoff import HandoffRecord
+from src.models.workspace import Task
 
 router = APIRouter(tags=["handoffs"])
 
@@ -114,6 +116,28 @@ def accept_handoff(handoff_id: str, data: HandoffAcceptRequest, db: Session = De
     except handoff_service.HandoffNotFoundError as e:
         _error_response("NOT_FOUND", str(e), 404)
     except handoff_service.HandoffConflictError as e:
+        record = db.query(HandoffRecord).filter(HandoffRecord.id == handoff_id).first()
+        task = db.query(Task).filter(Task.id == record.task_id).first() if record else None
+        if task:
+            from src.services import replan_service, runtime_decision_service
+            decision = runtime_decision_service.decide_failure(
+                task,
+                trigger="handoff_context_missing",
+                reason=str(e),
+                evidence=[{"handoff_id": handoff_id}],
+            )
+            runtime_decision_service.record_decision(db, task, decision)
+            try:
+                replan_service.request_automatic_replan(
+                    db,
+                    task.goal_id,
+                    trigger="handoff_context_missing",
+                    reason=str(e),
+                    task_ids=[task.id],
+                    evidence=[{"handoff_id": handoff_id}],
+                )
+            except replan_service.ReplanError:
+                pass
         _error_response("CONFLICT", str(e), 409)
     except handoff_service.HandoffValidationError as e:
         _error_response("BAD_REQUEST", str(e), 400)
@@ -137,5 +161,4 @@ def update_handoff_result(handoff_id: str, data: HandoffResultRequest, db: Sessi
         _error_response("BAD_REQUEST", str(e), 400)
     except Exception as e:
         _error_response("INTERNAL_ERROR", str(e), 500)
-
 

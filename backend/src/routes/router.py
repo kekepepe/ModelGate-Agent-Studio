@@ -13,8 +13,9 @@ from src.schemas.router import (
     DimensionScore,
     RoutingReason,
     RiskFlag,
+    AgentSelectionRequest,
 )
-from src.services import router_service
+from src.services import agent_selector_service, capability_registry_service, router_service
 
 router = APIRouter(tags=["router"])
 
@@ -136,3 +137,27 @@ def get_routing_rules():
         "role_preferences": rules["role_preferences"],
         "hard_constraints": rules["hard_constraints"],
     })
+
+
+@router.get("/capabilities")
+def get_capability_registry(db: Session = Depends(get_db)):
+    return _success_response({
+        "available_capabilities": capability_registry_service.CAPABILITIES,
+        "agents": capability_registry_service.list_registry(db),
+    })
+
+
+@router.post("/router/select-agent")
+def select_agent(data: AgentSelectionRequest, db: Session = Depends(get_db)):
+    try:
+        result = agent_selector_service.select_agent(db, **data.model_dump())
+        db.commit()
+        return _success_response(result)
+    except agent_selector_service.NoEligibleAgentError as exc:
+        db.rollback()
+        _error_response("NO_ELIGIBLE_AGENT", str(exc), 503)
+
+
+@router.get("/goals/{goal_id}/selection-decisions")
+def get_selection_decisions(goal_id: str, db: Session = Depends(get_db)):
+    return _success_response(agent_selector_service.list_decisions(db, goal_id))

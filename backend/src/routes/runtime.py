@@ -66,6 +66,7 @@ def start_goal_async(goal_id: str, db: Session = Depends(get_db)):
             raise runtime_service.GoalNotReadyError(
                 f"Goal must be planning or running, current: {goal.status}"
             )
+        runtime_service.ensure_plan_confirmed(db, goal_id)
         goal.status = "running"
         db.commit()
         threading.Thread(target=_background_execute_goal, args=(goal_id,), daemon=True).start()

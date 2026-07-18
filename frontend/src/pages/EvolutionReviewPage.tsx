@@ -2,12 +2,13 @@ import { useState } from 'react';
 import { useEvolutionSummary, useApproveMemory, useApproveSkill } from '../hooks/useKnowledge';
 import type { MemoryDraft, SkillDraft } from '../types/knowledge';
 import { MEMORY_TYPE_LABELS } from '../types/knowledge';
+import KnowledgeSourcesPanel from '../components/KnowledgeSourcesPanel';
 
 export default function EvolutionReviewPage() {
   const { data, isLoading } = useEvolutionSummary();
   const approveMemory = useApproveMemory();
   const approveSkill = useApproveSkill();
-  const [tab, setTab] = useState<'memories' | 'skills'>('memories');
+  const [tab, setTab] = useState<'sources' | 'memories' | 'skills'>('sources');
 
   return (
     <div className="max-w-[1200px] mx-auto px-4 sm:px-6 lg:px-8 py-6">
@@ -22,6 +23,12 @@ export default function EvolutionReviewPage() {
 
       <div className="flex gap-4 mb-4">
         <button
+          onClick={() => setTab('sources')}
+          className={`px-3 py-1.5 text-sm rounded-lg border ${tab === 'sources' ? 'bg-stone-800 text-white border-stone-800' : 'bg-white text-stone-600 border-stone-200'}`}
+        >
+          Knowledge Sources
+        </button>
+        <button
           onClick={() => setTab('memories')}
           className={`px-3 py-1.5 text-sm rounded-lg border ${tab === 'memories' ? 'bg-stone-800 text-white border-stone-800' : 'bg-white text-stone-600 border-stone-200'}`}
         >
@@ -35,7 +42,9 @@ export default function EvolutionReviewPage() {
         </button>
       </div>
 
-      {isLoading && (
+      {tab === 'sources' && <KnowledgeSourcesPanel />}
+
+      {tab !== 'sources' && isLoading && (
         <div className="space-y-3">
           <div className="h-20 bg-stone-200 rounded animate-pulse" />
           <div className="h-20 bg-stone-200 rounded animate-pulse" />

@@ -53,8 +53,8 @@ export default function GoalInputPanel({ onGoalCreated, activeGoalId, goalTitle,
         </SidebarSection>
         <SidebarSection icon={<Settings2 size={17} />} title="Run config">
           <dl className="sidebar-config-grid">
-            <dt>Mode</dt><dd>Multi-Agent</dd>
-            <dt>Max Parallel Agents</dt><dd>{preset?.roles.length || 3}</dd>
+            <dt>Mode</dt><dd>Auto · smallest safe path</dd>
+            <dt>Max Parallel Agents</dt><dd>{preset?.executionPolicy.maxParallel || 3}</dd>
             <dt>Model Routing</dt><dd>Auto</dd>
             <dt>Max Tokens (Run)</dt><dd>{(goal?.budget_tokens || 100000).toLocaleString()}</dd>
             <dt>Temperature</dt><dd>0.3</dd>
@@ -69,7 +69,7 @@ export default function GoalInputPanel({ onGoalCreated, activeGoalId, goalTitle,
   return (
     <div className="workspace-setup-panel">
       <div className="workspace-setup-heading"><FileText size={16} /><span>Goal</span></div>
-      {preset ? <p className="workspace-setup-team">{preset.name} · {preset.roles.map((role) => role.label).join(' → ')}</p> : null}
+      {preset ? <p className="workspace-setup-team">{preset.name} · capability pool: {preset.capabilities.join(', ')}</p> : null}
       <textarea value={title} onChange={(event) => setTitle(event.target.value)} placeholder="描述你的目标..." rows={3} disabled={isSubmitting} />
       <input type="text" value={description} onChange={(event) => setDescription(event.target.value)} placeholder="补充说明（可选）" disabled={isSubmitting} />
       {preset?.defaultCriteria?.length ? <ul className="sidebar-criteria workspace-setup-criteria">{preset.defaultCriteria.map((criterion) => <li key={criterion}><Check size={12} />{criterion}</li>)}</ul> : null}

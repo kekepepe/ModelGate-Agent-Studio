@@ -52,4 +52,25 @@ describe('buildWorkspaceViewModel', () => {
     expect(result.stations.find((station) => station.agent.id === 'coder')?.status).toBe('handoff');
     expect(result.stations.find((station) => station.agent.id === 'reviewer')?.status).toBe('handoff');
   });
+
+  it('renders only agents activated by the current plan after a replan', () => {
+    const replannedState: WorkspaceState = {
+      ...state,
+      active_plan: {
+        id: 'plan-v2', plan_id: 'plan', goal_id: 'g-1', version: 2, status: 'active',
+        task_mode: 'single_agent', goal_summary: 'Repair', assumptions: [], required_context: [],
+        activation_reason: 'Only the coder repair remains.', final_acceptance_criteria: [],
+        human_approval_points: [], estimated_cost: {}, planner_type: 'runtime_replan',
+        tasks: [{
+          id: 'pt-2', client_task_id: 'repair', objective: 'Repair', task_type: 'coding',
+          required_capabilities: ['code_edit'], required_tools: [], dependencies: [], acceptance_criteria: [],
+          risk_level: 'medium', parallel_safe: false, context_query: '', approval_required: false,
+          runtime_task_id: 't-2', source: 'replaced',
+        }],
+      },
+    };
+    const result = buildWorkspaceViewModel(replannedState, getTeamPreset('code-delivery'));
+    expect(result.stations.map((station) => station.agent.id)).toEqual(['coder']);
+    expect(result.edges).toEqual([]);
+  });
 });

@@ -7,8 +7,10 @@ from src.models.handoff import ExecutionLog, HandoffRecord, WorkerSession
 from src.models.model import Model
 from src.models.quota import QuotaRecord
 from src.models.workspace import Goal, Task
-from src.models.workspace import Artifact, VerificationResult
+from src.models.workspace import Artifact, ExecutionPlan, PlanChange, PlanTask, VerificationResult
 from src.models.tool import ToolCallRecord
+from src.models.knowledge import KnowledgeChunk, KnowledgeDocument, KnowledgeSource, RetrievalRun, RetrievedContextItem
+from src.models.selection import AgentSelectionDecision
 
 
 class WorkspaceNotFoundError(Exception):
@@ -40,6 +42,34 @@ def get_workspace_state(db: Session, goal_id: str) -> Dict:
         .order_by(HandoffRecord.created_at.asc())
         .all()
     )
+    plans = (
+        db.query(ExecutionPlan)
+        .filter(ExecutionPlan.goal_id == goal_id)
+        .order_by(ExecutionPlan.version.asc())
+        .all()
+    )
+    active_plan = next((plan for plan in reversed(plans) if plan.status == "active"), None)
+    active_plan_tasks = (
+        db.query(PlanTask)
+        .filter(PlanTask.plan_version_id == active_plan.id)
+        .order_by(PlanTask.created_at.asc(), PlanTask.client_task_id.asc())
+        .all()
+        if active_plan else []
+    )
+    plan_changes = (
+        db.query(PlanChange)
+        .filter(PlanChange.goal_id == goal_id)
+        .order_by(PlanChange.created_at.asc())
+        .all()
+    )
+    retrieval_runs = db.query(RetrievalRun).filter(
+        RetrievalRun.goal_id == goal_id
+    ).order_by(RetrievalRun.created_at.asc()).all()
+    retrieval_payload = _serialize_retrieval_runs(db, retrieval_runs)
+    retrieval_by_task: Dict[str, List[Dict]] = {}
+    for run in retrieval_payload:
+        if run["task_id"]:
+            retrieval_by_task.setdefault(run["task_id"], []).append(run)
 
     task_ids = {task.id for task in tasks}
     artifacts_by_task: Dict[str, List[Artifact]] = {}
@@ -93,6 +123,11 @@ def get_workspace_state(db: Session, goal_id: str) -> Dict:
     for handoff in handoffs:
         handoffs_by_task.setdefault(handoff["task_id"], []).append(handoff)
 
+    selection_decisions = [item.to_dict() for item in db.query(AgentSelectionDecision).filter(
+        AgentSelectionDecision.goal_id == goal_id,
+    ).order_by(AgentSelectionDecision.created_at.asc()).all()]
+    selection_by_plan_task = {item["task_id"]: item for item in selection_decisions}
+
     task_data = []
     for flow_position, task in enumerate(tasks, start=1):
         item = task.to_dict()
@@ -111,6 +146,7 @@ def get_workspace_state(db: Session, goal_id: str) -> Dict:
         item["model_name"] = models.get(worker.model_id) if worker else None
         item["quota"] = quota_by_model.get(worker.model_id) if worker else None
         item["routing_decision"] = routing_decision
+        item["selection_decision"] = selection_by_plan_task.get(task.plan_task_id)
         item["context"] = worker.current_context if worker else None
         item["recent_logs"] = [_serialize_workspace_log(log, models, agent_labels) for log in task_logs]
         artifacts = artifacts_by_task.get(task.id, [])
@@ -118,12 +154,39 @@ def get_workspace_state(db: Session, goal_id: str) -> Dict:
         tool_calls = tools_by_task.get(task.id, [])
         item["artifacts"] = [_serialize_artifact(artifact) for artifact in artifacts]
         item["verification_results"] = [_serialize_verification(verification) for verification in verifications]
+        item["context_runs"] = retrieval_by_task.get(task.id, [])
         item["recent_tool_calls"] = [_serialize_tool_call(call) for call in tool_calls]
         item["latest_tool_call"] = item["recent_tool_calls"][0] if item["recent_tool_calls"] else None
         item["changed_files"] = sorted({path for call in tool_calls for path in call.get_result().get("changed_files", [])})
         latest_test = next((call for call in tool_calls if call.tool_name in {"test_runner", "lint_run", "typecheck_run", "build_run"}), None)
         item["test_status"] = latest_test.status if latest_test else None
         task_data.append(item)
+
+    runtime_id_by_client = {
+        task.client_task_id: task.runtime_task_id
+        for task in active_plan_tasks
+        if task.runtime_task_id
+    }
+    task_edges = [
+        {
+            "source": runtime_id_by_client[dependency],
+            "target": task.runtime_task_id,
+            "source_client_task_id": dependency,
+            "target_client_task_id": task.client_task_id,
+        }
+        for task in active_plan_tasks
+        if task.runtime_task_id
+        for dependency in task._get_json("dependencies")
+        if dependency in runtime_id_by_client
+    ]
+    parallel_task_ids = [
+        task.runtime_task_id for task in active_plan_tasks
+        if task.parallel_safe and task.runtime_task_id
+    ]
+    from src.services import verifier_service
+    completion_evidence = verifier_service.evaluate_goal_completion(db, goal, emit_event=False)
+    from src.services import multi_agent_metrics_service
+    multi_agent_metrics = multi_agent_metrics_service.calculate(active_plan, active_plan_tasks, tasks)
 
     return {
         "goal": goal.to_dict() if goal else None,
@@ -159,6 +222,30 @@ def get_workspace_state(db: Session, goal_id: str) -> Dict:
             for w in workers
         ],
         "handoffs": handoffs,
+        "active_plan": active_plan.to_dict(active_plan_tasks) if active_plan else None,
+        "plan_versions": [
+            {
+                "id": plan.id,
+                "plan_id": plan.plan_id,
+                "version": plan.version,
+                "status": plan.status,
+                "task_mode": plan.task_mode,
+                "activation_reason": plan.activation_reason,
+                "planner_type": plan.planner_type,
+                "created_at": plan.created_at.isoformat() if plan.created_at else None,
+            }
+            for plan in plans
+        ],
+        "task_mode": active_plan.task_mode if active_plan else None,
+        "activation_reason": active_plan.activation_reason if active_plan else None,
+        "task_edges": task_edges,
+        "parallel_groups": ([{"id": f"plan-v{active_plan.version}-parallel", "task_ids": parallel_task_ids}]
+                            if active_plan and len(parallel_task_ids) >= 2 else []),
+        "replan_events": [change.to_dict() for change in plan_changes if change.change_type == "replan"],
+        "completion_evidence": completion_evidence,
+        "context_runs": retrieval_payload,
+        "selection_decisions": selection_decisions,
+        "multi_agent_metrics": multi_agent_metrics,
     }
 
 
@@ -237,3 +324,39 @@ def _serialize_tool_call(call: ToolCallRecord) -> Dict:
         "latency_ms": call.latency_ms, "error_message": call.error_message,
         "result": call.get_result(),
     }
+
+
+def _serialize_retrieval_runs(db: Session, runs: List[RetrievalRun]) -> List[Dict]:
+    if not runs:
+        return []
+    run_ids = [run.id for run in runs]
+    items = db.query(RetrievedContextItem).filter(
+        RetrievedContextItem.retrieval_run_id.in_(run_ids)
+    ).order_by(RetrievedContextItem.retrieval_run_id.asc(), RetrievedContextItem.rank.asc()).all()
+    chunk_ids = {item.chunk_id for item in items if item.chunk_id}
+    chunks = {chunk.id: chunk for chunk in db.query(KnowledgeChunk).filter(KnowledgeChunk.id.in_(chunk_ids)).all()} if chunk_ids else {}
+    document_ids = {chunk.document_id for chunk in chunks.values()}
+    documents = {doc.id: doc for doc in db.query(KnowledgeDocument).filter(KnowledgeDocument.id.in_(document_ids)).all()} if document_ids else {}
+    source_ids = {item.source_id for item in items}
+    sources = {source.id: source for source in db.query(KnowledgeSource).filter(KnowledgeSource.id.in_(source_ids)).all()} if source_ids else {}
+    by_run: Dict[str, List[Dict]] = {}
+    for item in items:
+        chunk = chunks.get(item.chunk_id)
+        document = documents.get(chunk.document_id) if chunk else None
+        source = sources.get(item.source_id)
+        by_run.setdefault(item.retrieval_run_id, []).append({
+            "id": item.id, "rank": item.rank, "score": item.score, "used": item.used,
+            "citation": item.citation, "token_count": item.token_count,
+            "source_id": item.source_id, "source_name": source.name if source else None,
+            "chunk_id": item.chunk_id, "path": document.path if document else None,
+            "content": chunk.content if chunk else None,
+        })
+    return [{
+        "id": run.id, "goal_id": run.goal_id, "task_id": run.task_id,
+        "agent_id": run.agent_id, "query": run.query, "policy": run.policy,
+        "filters": run.get_filters(), "latency_ms": run.latency_ms,
+        "token_budget": run.token_budget, "status": run.status,
+        "token_count": sum(item["token_count"] for item in by_run.get(run.id, []) if item["used"]),
+        "items": by_run.get(run.id, []),
+        "created_at": run.created_at.isoformat() if run.created_at else None,
+    } for run in runs]

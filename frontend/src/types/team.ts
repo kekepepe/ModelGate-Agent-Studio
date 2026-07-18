@@ -12,6 +12,13 @@ export type TeamPreset = {
   category: string;
   accent: 'blue' | 'green' | 'purple' | 'amber';
   roles: TeamRolePreset[];
+  capabilities: string[];
+  executionPolicy: {
+    preferSingleAgent: boolean;
+    maxParallel: number;
+    independentReview: 'high_risk' | 'always' | 'on_demand';
+    isolationRequiredForParallelWrites: boolean;
+  };
   defaultGoal: string;
   defaultCriteria: string[];
 };
@@ -28,6 +35,8 @@ export const TEAM_PRESETS: TeamPreset[] = [
       { role: 'coder', label: 'Coder', purpose: '实现与运行验证', modelHint: 'Code model' },
       { role: 'reviewer', label: 'Reviewer', purpose: '独立检查质量与风险', modelHint: 'Review model' },
     ],
+    capabilities: ['planning', 'code_read', 'code_edit', 'test', 'review'],
+    executionPolicy: { preferSingleAgent: true, maxParallel: 2, independentReview: 'high_risk', isolationRequiredForParallelWrites: true },
     defaultGoal: '完成一个可验证的代码交付',
     defaultCriteria: ['功能按要求实现', '测试与构建通过', '代码经过独立审查'],
   },
@@ -43,6 +52,8 @@ export const TEAM_PRESETS: TeamPreset[] = [
       { role: 'summarizer', label: 'Synthesizer', purpose: '综合结论与结构', modelHint: 'Writing model' },
       { role: 'reviewer', label: 'Reviewer', purpose: '检查来源与遗漏', modelHint: 'Review model' },
     ],
+    capabilities: ['planning', 'research', 'data_analysis', 'document_write', 'review'],
+    executionPolicy: { preferSingleAgent: true, maxParallel: 3, independentReview: 'on_demand', isolationRequiredForParallelWrites: true },
     defaultGoal: '完成一份来源清晰、结论可追溯的调研报告',
     defaultCriteria: ['关键判断有证据支持', '区分事实、推断与风险', '给出可执行结论'],
   },
@@ -58,6 +69,8 @@ export const TEAM_PRESETS: TeamPreset[] = [
       { role: 'summarizer', label: 'Writer', purpose: '形成完整正文', modelHint: 'Writing model' },
       { role: 'reviewer', label: 'Reviewer', purpose: '检查一致性与可交付性', modelHint: 'Review model' },
     ],
+    capabilities: ['planning', 'research', 'document_write', 'review'],
+    executionPolicy: { preferSingleAgent: true, maxParallel: 2, independentReview: 'on_demand', isolationRequiredForParallelWrites: true },
     defaultGoal: '根据现有材料完成一份正式交付文档',
     defaultCriteria: ['结构符合目标用途', '内容有材料依据', '格式和表述可直接交付'],
   },
@@ -72,6 +85,8 @@ export const TEAM_PRESETS: TeamPreset[] = [
       { role: 'coder', label: 'Executor', purpose: '完成主要任务', modelHint: 'Choose model' },
       { role: 'reviewer', label: 'Reviewer', purpose: '审查最终产出', modelHint: 'Choose model' },
     ],
+    capabilities: ['planning', 'research', 'code_read', 'code_edit', 'test', 'review', 'document_write'],
+    executionPolicy: { preferSingleAgent: true, maxParallel: 3, independentReview: 'high_risk', isolationRequiredForParallelWrites: true },
     defaultGoal: '',
     defaultCriteria: ['达到自定义完成标准'],
   },

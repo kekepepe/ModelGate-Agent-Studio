@@ -849,43 +849,73 @@ P2 Capability Selection + On-demand Multi-Agent
 
 ### 第一批：P0 主闭环
 
-- [ ] 定义 `ExecutionPlan` / `PlanTask` / `PlanChange` Schema。
-- [ ] 增加 Plan JSON Schema 校验和 DAG 校验。
-- [ ] 将当前关键词规划降级为 Rule Fallback。
-- [ ] 实现模型驱动 Orchestrator。
-- [ ] 保存 Plan Version、原始输出和激活理由。
-- [ ] 扩展 Scheduler 的动态 Task 和阻塞处理。
-- [ ] 建立统一 Replan 决策协议。
-- [ ] 新增 Verifier Completion Gate。
-- [ ] Workspace 显示 task_mode、Plan Version 和激活理由。
-- [ ] Card / Pixel 只显示真实激活工位。
-- [ ] 完成六个 P0 自动化验收场景。
+- [x] 定义 `ExecutionPlan` / `PlanTask` / `PlanChange` Schema。
+- [x] 增加 Plan JSON Schema 校验和 DAG 校验。
+- [x] 将当前关键词规划降级为 Rule Fallback。
+- [x] 实现模型驱动 Orchestrator。
+- [x] 保存 Plan Version、原始输出和激活理由。
+- [x] 扩展 Scheduler 的动态 Task 和阻塞处理。
+- [x] 建立统一 Replan 决策协议。
+- [x] 新增 Verifier Completion Gate。
+- [x] Workspace 显示 task_mode、Plan Version 和激活理由。
+- [x] Card / Pixel 只显示真实激活工位。
+- [x] 完成六个 P0 自动化验收场景。
+
+> 2026-07-18 P0-1 落地证据：新增不可变 Plan Version、PlanTask、PlanChange 持久化对象；Runtime Task 保存 `plan_version_id`、`plan_task_id` 与 `plan_source`；规则规划被封装为显式 `RuleBasedPlanningFallback` 并记录 `plan.fallback_used`；Plan Contract 会拒绝重复/悬空/循环依赖、无完成条件的写任务、无合并策略的并行写冲突及无审批或 Reviewer 的高风险任务。对应自动化测试位于 `backend/tests/test_planning_contract.py`。
+
+> 2026-07-18 P0-2 落地证据：`ModelOrchestrator` 使用 Planner 的已启用模型生成结构化 JSON，规划输入包含 Goal、完成标准、Team Policy、可用 capability、工具权限、预算和初始审核知识；最多进行 3 次 JSON/Schema 修复，保存原始输出和修复记录；模型、Provider、能力或工具不可用时显式进入 Rule Fallback。对应测试位于 `backend/tests/test_model_orchestrator.py`。
+
+> 2026-07-18 P0-3 落地证据：运行时 Scheduler 会二次校验 DAG，阻断悬空和循环依赖；支持 `ready / skipped / waiting_approval / cancelled` 状态、人工批准、无 Ready Task 的明确阻塞原因、Goal 级 `max_parallel_tasks` 限制和逐次调度事件。统一 Replan 已补齐 Task 的插入、替换、取消及依赖重映射，Runtime 只调度当前激活 Plan 的 Task；旧版并行写任务导入时明确采用隔离 worktree 合并策略。对应测试位于 `backend/tests/test_scheduler_service.py` 和 `backend/tests/test_replan_protocol.py`。
+
+> 2026-07-18 P0-4 落地证据：新增统一 `complete / revise_current_task / replan_graph / handoff / ask_user / blocked` 决策契约；工具或 Provider 失败、验证失败、Workspace 合并冲突、预算耗尽、用户修改和 Handoff 上下文不一致均进入同一决策记录路径。Replan 创建不可变的新 Plan Version，保存原因与证据，区分保留、取消、新增和替换 Task，并复用仍有效的已验证 Task；Supervisor 不再直接追加 `Replan:` Task。对应测试位于 `backend/tests/test_replan_protocol.py`、`backend/tests/test_supervisor_replan.py`、`backend/tests/test_runtime_model_health.py`、`backend/tests/test_verified_agent_loop.py` 和 `backend/tests/test_handoff_workspace_consistency.py`。
+
+> 2026-07-18 P0-5 落地证据：新增统一 Verifier Completion Gate；确定性 Task 只有在 Worker 输出、必要 Artifact、Completion Contract、全部 VerificationResult 以及高风险审批或下游独立验证同时成立时才能进入 `completed_verified`。规则覆盖 `diff_exists / tests_pass / lint_pass / typecheck_pass / build_pass / file_exists / command_exit_code / user_approval`；验证通过后 Artifact 标记为 `verified`。Goal 只在当前激活 Plan 的必要 Task 通过门禁后进入 `completed`，否则进入 `revision_required / waiting_approval / blocked`；Runtime、Supervisor 和真实 Runtime Handoff 均不能绕过该门禁。Workspace API 与 Plan 区同步展示 Completion Evidence。对应测试位于 `backend/tests/test_completion_gate.py`、`backend/tests/test_verification_rules.py`、`backend/tests/test_verified_agent_loop.py` 和 `frontend/src/components/__tests__/PlanOverviewPanel.test.tsx`。
+
+> 2026-07-18 P0-6 落地证据：Workspace State 已返回 `active_plan / plan_versions / task_mode / activation_reason / task_edges / parallel_groups / replan_events / completion_evidence`；Plan 区展示模式、版本、激活理由、模型或规则来源、Replan 次数、最近 Plan Diff 和完成门禁。初始 Plan 会保持未确认状态，同步、异步和单步执行入口均拒绝绕过；用户可在 Plan 区确认、逐 Task 修改目标后生成新版本并确认，或把并行计划降级为串行。Card Flow 与 Pixel Office 通过统一 ViewModel 只渲染当前激活 Plan 的 Task 和 Agent；Agent Detail 已展示激活 Task、模型、当前 Context、检索原因、轻量 Policy、来源数量、Token 估算、真实 Tool Call、Verification Evidence 与 Replan/Handoff/运行 History。P1 将把当前 `approved_memory_skill_keyword_v0` 替换成正式 KnowledgeSource/Chunk/RetrievalRun 管线，但 P0 所需的可见性已完成。对应测试位于 `backend/tests/test_planning_contract.py`、`backend/tests/test_workspace_api.py`、`backend/tests/test_context_memory_traceability.py`、`frontend/src/components/__tests__/PlanOverviewPanel.test.tsx`、`frontend/src/components/__tests__/TaskDetailPanel.test.tsx` 和 `frontend/src/utils/__tests__/workspaceViewModel.test.ts`。
+
+> 2026-07-18 P0 六场景与退出门槛证据：集中验收文件 `backend/tests/test_p0_acceptance_scenarios.py` 覆盖 direct 函数解释、README 单句修改、Coder → Verifier 登录 Bug、Research → Coder → Verifier、Planner → 并行前后端 → Merge → Verifier，以及 Reviewer 触发不可变新 Plan Version。该验收同时纠正了 Rule Fallback 的四个真实路径缺陷：简单 Bug 不再冗余创建 Planner、调研后不会漏掉 Coder、并行分支必须经过 Merge、README 修改不会误判为 direct。direct / single / sequential / parallel 四种模式均由同一 Planning Contract 和 Scheduler 路径产生；Workspace 动态工位测试、Plan/Replan/调度事件测试及 Completion Gate 测试分别证明退出门槛 3–5。P0 最终全量回归为后端 306 项、前端 164 项，前端生产构建通过。
 
 ### 第二批：P1 共享 RAG
 
-- [ ] 定义 KnowledgeSource、Document、Chunk、RetrievalRun。
-- [ ] 实现文档同步、Checksum 和增量更新。
-- [ ] 实现关键词 + 向量混合检索 Adapter。
-- [ ] 实现 Retrieval Policy 和 Context Budget。
-- [ ] Orchestrator 规划前检索。
-- [ ] Worker 执行前任务级检索。
-- [ ] Verifier / Replan 检索历史证据和 Skill。
-- [ ] Workspace Context Tab 展示来源和引用。
-- [ ] 建立错误 Memory 禁用和使用反馈。
-- [ ] 完成权限、过期、空结果、预算和引用测试。
+- [x] 定义 KnowledgeSource、Document、Chunk、RetrievalRun。
+- [x] 实现文档同步、Checksum 和增量更新。
+- [x] 实现关键词 + 向量混合检索 Adapter。
+- [x] 实现 Retrieval Policy 和 Context Budget。
+- [x] Orchestrator 规划前检索。
+- [x] Worker 执行前任务级检索。
+- [x] Verifier / Replan 检索历史证据和 Skill。
+- [x] Workspace Context Tab 展示来源和引用。
+- [x] 建立错误 Memory 禁用和使用反馈。
+- [x] 完成权限、过期、空结果、预算和引用测试。
+
+> 2026-07-18 P1 数据底座落地证据：新增 `KnowledgeSource / KnowledgeDocument / KnowledgeChunk / RetrievalRun / RetrievedContextItem / ContextPackageSnapshot` 持久化对象与 `015_create_knowledge_retrieval.sql`。所有关联和常用过滤列建立索引；`(source_id, path)`、`(document_id, chunk_index)` 与 `(retrieval_run_id, rank)` 唯一约束分别保证增量文档、Chunk 和排序证据的幂等性。文档列表使用聚合查询批量统计 Chunk，避免随文档数增长产生 N+1 查询。对应测试位于 `backend/tests/test_knowledge_models.py` 和 `backend/tests/test_knowledge_retrieval.py`。
+
+> 2026-07-18 P1 同步与检索闭环证据：新增受 Workspace Root 约束的 `knowledge_source_service`，只同步允许的文本类型，忽略隐藏/构建目录和超限文件，以 checksum 区分新增、更新、未变和删除；更新时事务内批量重建 Chunk，删除时软禁用 Document/Chunk。`retrieval_service` 使用可替换 Embedding Adapter，将关键词重合、Hash Embedding 余弦、路径和精确短语信号融合并轻量 Rerank；所有候选都保存 rank/score/used/citation/token_count，Context Budget 只决定注入而不抹掉审计记录。Orchestrator 在存在活跃 Source 时做低预算规划前检索，Worker 依据 Task capability 门控任务级检索并保存 ContextPackageSnapshot；无 Source 或 simple direct 不产生强制 RAG。新增 Source/Sync/Documents/Chunks/Status、Context Retrieve 和 Goal Context Runs API。对应测试位于 `backend/tests/test_knowledge_retrieval.py`、`backend/tests/test_context_memory_traceability.py` 和 `backend/tests/test_model_orchestrator.py`。
+
+> 2026-07-18 P1 验证、治理与可视化证据：Replan Context 会按失败原因重新检索相关 Chunk 和已批准 Skill，并同时保留真实 VerificationResult 与失败 ToolCallRecord；错误 Memory 被拒绝后不能重新进入 Context Package，实际加载的 Skill 会依据最终验证结果累计成功/失败反馈。Workspace Context Tab 展示 query、policy、latency、token budget、全部候选、score、citation，以及 `Injected / Dropped` 决策，并允许禁用错误 Source 后 Retry。Evolution Review 新增 Knowledge Sources 管理，可连接 Workspace 内目录或文档、同步、查看权限 Scope/更新时间/错误、展开文档与 Chunk。权限越界、过期/拒绝 Memory、空结果、稳定预算和引用均有直接测试。P1 最终全量回归为后端 314 项、前端 166 项，前端生产构建通过。
 
 ### 第三批：P2 按需 Multi-Agent
 
-- [ ] 建立 Capability Registry。
-- [ ] 实现 Agent / Model 候选评分。
-- [ ] Team Template 改为能力集合和执行政策。
-- [ ] 加强并行安全和冲突预检。
-- [ ] 合并冲突生成 Resolution Task。
-- [ ] Handoff、Retry、Revise、Replan 明确分离。
-- [ ] Supervisor 按风险和复杂度启用。
-- [ ] Workspace 动态工位、分支、汇合和计划变更。
-- [ ] 统计 Multi-Agent 收益与协调成本。
-- [ ] 完成单 Agent / 串行 / 并行对比基准。
+- [x] 建立 Capability Registry。
+- [x] 实现 Agent / Model 候选评分。
+- [x] Team Template 改为能力集合和执行政策。
+- [x] 加强并行安全和冲突预检。
+- [x] 合并冲突生成 Resolution Task。
+- [x] Handoff、Retry、Revise、Replan 明确分离。
+- [x] Supervisor 按风险和复杂度启用。
+- [x] Workspace 动态工位、分支、汇合和计划变更。
+- [x] 统计 Multi-Agent 收益与协调成本。
+- [x] 完成单 Agent / 串行 / 并行对比基准。
+
+> 2026-07-18 P2 Capability Registry 与联合选择落地证据：Agent 现可声明 capability 熟练度、主备模型、工具白名单、Workspace Scope、输入输出类型、最大并发、Token/步骤/失败阈值，以及历史成功率、成本和耗时；新增 `016_add_capability_registry.sql`、Capability Registry API 和 Agent 配置界面。`agent_selector_service` 对能力、工具、Scope、输入输出、并发、模型启用状态、Context Window 和 Quota 执行硬过滤，再按能力、模型适配、工具、上下文、历史成功率、成本、延迟、额度、风险和负载联合评分；每次选择持久化全部候选、淘汰原因、最终 Agent/模型、备用模型及 Handoff 入口。对应测试位于 `backend/tests/test_agent_selector.py`，Workspace 选择解释测试位于 `backend/tests/test_workspace_api.py` 和 `frontend/src/components/__tests__/TaskDetailPanel.test.tsx`。
+
+> 2026-07-18 P2 最小安全团队与按需治理落地证据：Team Template 已由固定角色流水线改为 capability 集合和 `preferSingleAgent / maxParallelTasks / independentReview / isolatedWorktrees` 执行政策，规则 Fallback 不再从模板展开固定任务。Plan 持久化前会记录 distinct capability、独立验收 Task、并行写 Scope、冲突预检、隔离要求、确定性合并顺序和协调 Token 上界；简单 Goal 保持 direct 或 single-agent，只有能力分工、独立验证、并行收益或风险审查需要时才启用 Multi-Agent。Supervisor Policy 对高风险、并行、失败/重试、Handoff、Replan、独立审查和主观标准按需启用，低风险确定性任务显式跳过。对应测试位于 `backend/tests/test_planning_contract.py`、`backend/tests/test_p0_acceptance_scenarios.py` 和 `backend/tests/test_supervisor_policy.py`。
+
+> 2026-07-18 P2 并行安全与恢复闭环落地证据：并行 Task 由 Selector 结合 Agent `max_concurrency` 分配；容量不足时计划会明确降级为串行而不是伪造并行。并行写任务强制独立 worktree/Workspace Scope、静态冲突预检和可复现合并顺序；真实合并冲突进入统一 Runtime Decision，并生成带证据的 Resolution Replan/Task。Retry 保留当前计划和 Worker，Handoff 更换责任主体但继承 Context/Scope/Evidence，Revise 处理目标不变的局部修订，Replan 创建不可变新 Plan Version；四者在事件与 Workspace 状态中保持独立。对应测试位于 `backend/tests/test_parallel_planning.py`、`backend/tests/test_scheduler_service.py`、`backend/tests/test_replan_protocol.py`、`backend/tests/test_handoff_workspace_consistency.py` 和 `backend/tests/test_verified_agent_loop.py`。
+
+> 2026-07-18 P2 可观测性、指标与基准落地证据：Workspace State 将当前 Plan、真实 Task 分支/汇合、动态激活 Agent、Handoff/Replan 和逐 Task Selection Decision 作为同一 Runtime 真相源；顶栏展示模式、真实激活 Agent 数、运行中并行度和协调 Token，最终总结解释启用原因、协调成本、潜在并行节省及扣除协调耗时后的净收益。`multi_agent_metrics_service` 基于已记录 Task 的 duration/token 给出 single-agent、sequential multi-agent、parallel multi-agent 三种口径对比，并明确标注这是基于同次运行记录的估算，不冒充真实 A/B 重放。`backend/tests/test_multi_agent_metrics.py` 固定验证串行基线 1800ms、并行估算 1000ms、协调耗时 400ms、净收益 400ms 及三模式 Token/耗时口径；Workspace/最终总结前端测试验证展示来自真实 API 状态。
+
+> 2026-07-18 P2 七项验收与最终回归证据：简单任务和单文件修改不激活冗余 Agent；独立前后端分支会分配给不同且有容量的 Coder 并安全汇合；高风险或主观验收按政策启用独立 Reviewer/Supervisor；模型或 Quota 不可用保留 Handoff 入口；额外 Token、协调耗时和并行收益均进入 Workspace 与 Final Summary；Card/Pixel 的工位和连线继续由实际激活 Plan/Task/Handoff 状态派生。P0–P2 最终全量回归为后端 325 项、前端 168 项，前端生产构建通过。
 
 ---
 

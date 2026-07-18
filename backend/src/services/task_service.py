@@ -77,6 +77,40 @@ def retry_task(db: Session, task_id: str) -> Dict:
     return get_task(db, task.id)
 
 
+def skip_task(db: Session, task_id: str, reason: str = "Skipped by user") -> Dict:
+    task = _task_or_raise(db, task_id)
+    if task.status in {"running", "completed", "completed_verified", "completed_unverified", "skipped"}:
+        raise TaskTransitionError(f"Task cannot be skipped from status: {task.status}")
+    task.status, task.blocked_reason = "skipped", reason
+    task.updated_at = datetime.now(timezone.utc)
+    db.commit()
+    log_service.create_log(db, {
+        "goal_id": task.goal_id,
+        "task_id": task.id,
+        "event_type": "task.skipped",
+        "event_status": "completed",
+        "output_summary": reason,
+    })
+    return get_task(db, task.id)
+
+
+def approve_task(db: Session, task_id: str) -> Dict:
+    task = _task_or_raise(db, task_id)
+    if task.status != "waiting_approval":
+        raise TaskTransitionError(f"Task cannot be approved from status: {task.status}")
+    task.status, task.blocked_reason = "pending", None
+    task.updated_at = datetime.now(timezone.utc)
+    db.commit()
+    log_service.create_log(db, {
+        "goal_id": task.goal_id,
+        "task_id": task.id,
+        "event_type": "task.approved",
+        "event_status": "completed",
+        "output_summary": "Human approval recorded; Task returned to the scheduler",
+    })
+    return get_task(db, task.id)
+
+
 def split_task(db: Session, task_id: str, titles: List[str]) -> List[Dict]:
     parent = _task_or_raise(db, task_id)
     if parent.status in {"running", "completed", "completed_verified", "cancelled"}:

@@ -84,6 +84,9 @@ class TestExecuteTaskStep:
         # Verify agent state
         db_session.refresh(coder)
         assert coder.total_tasks_completed == 1
+        assert coder.total_tasks_failed == 0
+        assert coder.average_tokens_per_task == task.tokens_used
+        assert coder.average_duration_ms == task.duration_ms
         assert coder.status == "idle"
 
         # Verify worker session
@@ -174,5 +177,5 @@ class TestExecuteGoalPipeline:
         db_session.add(goal)
         db_session.commit()
         result = runtime_service.execute_goal_pipeline(db_session, goal.id)
-        assert result["status"] == "completed"
+        assert result["status"] == "blocked"
         assert result["tasks_completed"] == 0

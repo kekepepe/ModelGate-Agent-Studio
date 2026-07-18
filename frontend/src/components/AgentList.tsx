@@ -42,7 +42,9 @@ export default function AgentList({ agents, onSelect }: AgentListProps) {
             </div>
             <div className="flex items-center gap-3 text-xs text-stone-400">
               <span>模型: {agent.default_model_id}</span>
+              <span>并发: {agent.max_concurrency}</span>
             </div>
+            {agent.capabilities && agent.capabilities.length > 0 && <div className="mt-1 flex flex-wrap gap-1">{agent.capabilities.slice(0, 5).map((capability) => <span key={capability} className="rounded bg-stone-100 px-1.5 py-0.5 text-[10px] text-stone-500">{capability}</span>)}</div>}
           </div>
 
           <div className="flex items-center gap-4 shrink-0">

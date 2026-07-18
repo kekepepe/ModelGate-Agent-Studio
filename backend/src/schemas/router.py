@@ -77,3 +77,16 @@ class RoutingRulesResponse(BaseModel):
     weights: dict
     role_preferences: dict
     hard_constraints: List[str]
+
+
+class AgentSelectionRequest(BaseModel):
+    task_id: str
+    goal_id: Optional[str] = None
+    task_type: str = "general"
+    risk_level: str = Field("low", pattern="^(low|medium|high)$")
+    required_capabilities: List[str] = Field(default_factory=list)
+    required_tools: List[str] = Field(default_factory=list)
+    workspace_scope: Optional[str] = None
+    input_type: str = "text"
+    output_type: str = "text"
+    context_length_estimate: int = Field(8000, ge=0)

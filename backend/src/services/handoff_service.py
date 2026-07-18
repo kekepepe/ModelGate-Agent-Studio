@@ -512,7 +512,28 @@ def update_handoff_result(
     )
 
     task = _get_task(db, handoff.task_id)
-    if task and result_after_handoff == "success":
+    if isinstance(task, Task) and result_after_handoff == "success":
+        from src.services import verifier_service
+
+        if result_note:
+            task.output = result_note
+        verification = verifier_service.verify_task_contract(db, task)
+        task.verification_status = verification["status"]
+        if verification["status"] == "passed":
+            task.status = "completed_verified"
+            task.blocked_reason = None
+        elif task.task_type in verifier_service.DETERMINISTIC_TASK_TYPES or task._get_json("acceptance_criteria"):
+            task.status = "revision_required"
+            task.blocked_reason = "Handoff reported success without passing the Completion Contract."
+        elif (task.output or "").strip():
+            task.status = "completed_unverified"
+            task.blocked_reason = None
+        else:
+            task.status = "revision_required"
+            task.blocked_reason = "Handoff reported success without a result artifact or output."
+    elif task and result_after_handoff == "success":
+        # Compatibility-only demo HandoffTask records are not executable
+        # Runtime Tasks and therefore do not carry Completion Contracts.
         task.status = "completed"
     elif task and result_after_handoff == "failed":
         task.status = "failed"

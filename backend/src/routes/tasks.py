@@ -3,7 +3,7 @@ from sqlalchemy.orm import Session
 
 from src.core.database import get_db
 from src.services import task_service
-from src.schemas.workspace import TaskCancelRequest, TaskSplitRequest
+from src.schemas.workspace import TaskCancelRequest, TaskSkipRequest, TaskSplitRequest
 
 router = APIRouter(tags=["tasks"])
 
@@ -43,6 +43,26 @@ def cancel_task(task_id: str, data: TaskCancelRequest, db: Session = Depends(get
 def retry_task(task_id: str, db: Session = Depends(get_db)):
     try:
         return _success(task_service.retry_task(db, task_id))
+    except task_service.TaskNotFoundError as exc:
+        _error("NOT_FOUND", str(exc), 404)
+    except task_service.TaskTransitionError as exc:
+        _error("BAD_REQUEST", str(exc), 400)
+
+
+@router.post("/tasks/{task_id}/skip")
+def skip_task(task_id: str, data: TaskSkipRequest, db: Session = Depends(get_db)):
+    try:
+        return _success(task_service.skip_task(db, task_id, data.reason))
+    except task_service.TaskNotFoundError as exc:
+        _error("NOT_FOUND", str(exc), 404)
+    except task_service.TaskTransitionError as exc:
+        _error("BAD_REQUEST", str(exc), 400)
+
+
+@router.post("/tasks/{task_id}/approve")
+def approve_task(task_id: str, db: Session = Depends(get_db)):
+    try:
+        return _success(task_service.approve_task(db, task_id))
     except task_service.TaskNotFoundError as exc:
         _error("NOT_FOUND", str(exc), 404)
     except task_service.TaskTransitionError as exc:

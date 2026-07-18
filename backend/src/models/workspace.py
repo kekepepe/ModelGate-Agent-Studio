@@ -1,7 +1,7 @@
 import uuid
 from datetime import datetime, timezone
 
-from sqlalchemy import Boolean, Column, DateTime, Float, Integer, String, Text, event
+from sqlalchemy import Boolean, Column, DateTime, Float, Integer, String, Text, UniqueConstraint, event
 
 from src.core.database import Base
 
@@ -21,6 +21,7 @@ class Goal(Base):
     budget_tokens = Column(Integer, nullable=False, default=100000)
     budget_cost_usd = Column(Float, nullable=True)
     max_duration_seconds = Column(Integer, nullable=False, default=3600)
+    max_parallel_tasks = Column(Integer, nullable=False, default=3)
     created_at = Column(DateTime, nullable=False, default=lambda: datetime.now(timezone.utc))
     updated_at = Column(DateTime, nullable=False, default=lambda: datetime.now(timezone.utc))
 
@@ -38,6 +39,7 @@ class Goal(Base):
             "budget_tokens": self.budget_tokens,
             "budget_cost_usd": self.budget_cost_usd,
             "max_duration_seconds": self.max_duration_seconds,
+            "max_parallel_tasks": self.max_parallel_tasks,
             "created_at": self.created_at.isoformat() if self.created_at else None,
             "updated_at": self.updated_at.isoformat() if self.updated_at else None,
         }
@@ -68,6 +70,9 @@ class Task(Base):
     verification_status = Column(String(50), nullable=True)
     blocked_reason = Column(Text, nullable=True)
     parent_task_id = Column(String(36), nullable=True, index=True)
+    plan_version_id = Column(String(36), nullable=True, index=True)
+    plan_task_id = Column(String(36), nullable=True, index=True)
+    plan_source = Column(String(30), nullable=True)
     created_at = Column(DateTime, nullable=False, default=lambda: datetime.now(timezone.utc))
     updated_at = Column(DateTime, nullable=False, default=lambda: datetime.now(timezone.utc))
 
@@ -95,6 +100,9 @@ class Task(Base):
             "verification_status": self.verification_status,
             "blocked_reason": self.blocked_reason,
             "parent_task_id": self.parent_task_id,
+            "plan_version_id": self.plan_version_id,
+            "plan_task_id": self.plan_task_id,
+            "plan_source": self.plan_source,
             "created_at": self.created_at.isoformat() if self.created_at else None,
             "updated_at": self.updated_at.isoformat() if self.updated_at else None,
         }
@@ -110,6 +118,181 @@ class Task(Base):
     def set_json(self, field: str, value) -> None:
         import json
         setattr(self, field, json.dumps(value))
+
+
+class ExecutionPlan(Base):
+    """One immutable, validated version of a Goal's execution plan."""
+
+    __tablename__ = "execution_plans"
+    __table_args__ = (
+        UniqueConstraint("goal_id", "version", name="uq_execution_plan_goal_version"),
+        UniqueConstraint("plan_id", "version", name="uq_execution_plan_id_version"),
+    )
+
+    id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    plan_id = Column(String(36), nullable=False, index=True)
+    goal_id = Column(String(36), nullable=False, index=True)
+    version = Column(Integer, nullable=False)
+    status = Column(String(30), nullable=False, default="validated", index=True)
+    task_mode = Column(String(40), nullable=False)
+    goal_summary = Column(Text, nullable=False)
+    assumptions = Column(Text, nullable=False, default="[]")
+    required_context = Column(Text, nullable=False, default="[]")
+    activation_reason = Column(Text, nullable=False)
+    final_acceptance_criteria = Column(Text, nullable=False, default="[]")
+    human_approval_points = Column(Text, nullable=False, default="[]")
+    estimated_cost = Column(Text, nullable=False, default="{}")
+    fallback_reason = Column(Text, nullable=True)
+    planner_type = Column(String(30), nullable=False, default="rule_fallback")
+    raw_output = Column(Text, nullable=True)
+    repair_records = Column(Text, nullable=False, default="[]")
+    created_at = Column(DateTime, nullable=False, default=lambda: datetime.now(timezone.utc))
+    confirmed_at = Column(DateTime, nullable=True)
+
+    def _get_json(self, field: str, default):
+        import json
+        value = getattr(self, field, None)
+        try:
+            return json.loads(value) if value else default
+        except (json.JSONDecodeError, TypeError):
+            return default
+
+    def set_json(self, field: str, value) -> None:
+        import json
+        setattr(self, field, json.dumps(value, ensure_ascii=False))
+
+    def to_dict(self, tasks=None) -> dict:
+        payload = {
+            "id": self.id,
+            "plan_id": self.plan_id,
+            "goal_id": self.goal_id,
+            "version": self.version,
+            "status": self.status,
+            "task_mode": self.task_mode,
+            "goal_summary": self.goal_summary,
+            "assumptions": self._get_json("assumptions", []),
+            "required_context": self._get_json("required_context", []),
+            "activation_reason": self.activation_reason,
+            "final_acceptance_criteria": self._get_json("final_acceptance_criteria", []),
+            "human_approval_points": self._get_json("human_approval_points", []),
+            "estimated_cost": self._get_json("estimated_cost", {}),
+            "fallback_reason": self.fallback_reason,
+            "planner_type": self.planner_type,
+            "raw_output": self.raw_output,
+            "repair_records": self._get_json("repair_records", []),
+            "created_at": self.created_at.isoformat() if self.created_at else None,
+            "confirmed_at": self.confirmed_at.isoformat() if self.confirmed_at else None,
+        }
+        if tasks is not None:
+            payload["tasks"] = [task.to_dict() for task in tasks]
+        return payload
+
+
+class PlanTask(Base):
+    """A plan-level task whose client ID remains stable inside one plan version."""
+
+    __tablename__ = "plan_tasks"
+    __table_args__ = (
+        UniqueConstraint("plan_version_id", "client_task_id", name="uq_plan_task_client_id"),
+    )
+
+    id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    plan_version_id = Column(String(36), nullable=False, index=True)
+    client_task_id = Column(String(100), nullable=False)
+    objective = Column(Text, nullable=False)
+    task_type = Column(String(30), nullable=False)
+    required_capabilities = Column(Text, nullable=False, default="[]")
+    required_tools = Column(Text, nullable=False, default="[]")
+    dependencies = Column(Text, nullable=False, default="[]")
+    acceptance_criteria = Column(Text, nullable=False, default="[]")
+    risk_level = Column(String(20), nullable=False, default="low")
+    parallel_safe = Column(Boolean, nullable=False, default=False)
+    context_query = Column(Text, nullable=False, default="")
+    approval_required = Column(Boolean, nullable=False, default=False)
+    workspace_scope = Column(Text, nullable=True)
+    merge_strategy = Column(Text, nullable=True)
+    runtime_task_id = Column(String(36), nullable=True, index=True)
+    source = Column(String(30), nullable=False, default="created")
+    created_at = Column(DateTime, nullable=False, default=lambda: datetime.now(timezone.utc))
+
+    def _get_json(self, field: str):
+        import json
+        try:
+            return json.loads(getattr(self, field, None) or "[]")
+        except (json.JSONDecodeError, TypeError):
+            return []
+
+    def set_json(self, field: str, value) -> None:
+        import json
+        setattr(self, field, json.dumps(value, ensure_ascii=False))
+
+    def to_dict(self) -> dict:
+        return {
+            "id": self.id,
+            "plan_version_id": self.plan_version_id,
+            "client_task_id": self.client_task_id,
+            "objective": self.objective,
+            "task_type": self.task_type,
+            "required_capabilities": self._get_json("required_capabilities"),
+            "required_tools": self._get_json("required_tools"),
+            "dependencies": self._get_json("dependencies"),
+            "acceptance_criteria": self._get_json("acceptance_criteria"),
+            "risk_level": self.risk_level,
+            "parallel_safe": self.parallel_safe,
+            "context_query": self.context_query,
+            "approval_required": self.approval_required,
+            "workspace_scope": self.workspace_scope,
+            "merge_strategy": self.merge_strategy,
+            "runtime_task_id": self.runtime_task_id,
+            "source": self.source,
+            "created_at": self.created_at.isoformat() if self.created_at else None,
+        }
+
+
+class PlanChange(Base):
+    """Auditable diff metadata connecting two immutable plan versions."""
+
+    __tablename__ = "plan_changes"
+
+    id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    goal_id = Column(String(36), nullable=False, index=True)
+    from_plan_version_id = Column(String(36), nullable=True, index=True)
+    to_plan_version_id = Column(String(36), nullable=False, index=True)
+    change_type = Column(String(30), nullable=False, default="created")
+    reason = Column(Text, nullable=False)
+    evidence = Column(Text, nullable=False, default="[]")
+    retained_task_ids = Column(Text, nullable=False, default="[]")
+    cancelled_task_ids = Column(Text, nullable=False, default="[]")
+    added_task_ids = Column(Text, nullable=False, default="[]")
+    replaced_task_ids = Column(Text, nullable=False, default="[]")
+    created_at = Column(DateTime, nullable=False, default=lambda: datetime.now(timezone.utc))
+
+    def _get_json(self, field: str):
+        import json
+        try:
+            return json.loads(getattr(self, field, None) or "[]")
+        except (json.JSONDecodeError, TypeError):
+            return []
+
+    def set_json(self, field: str, value) -> None:
+        import json
+        setattr(self, field, json.dumps(value, ensure_ascii=False))
+
+    def to_dict(self) -> dict:
+        return {
+            "id": self.id,
+            "goal_id": self.goal_id,
+            "from_plan_version_id": self.from_plan_version_id,
+            "to_plan_version_id": self.to_plan_version_id,
+            "change_type": self.change_type,
+            "reason": self.reason,
+            "evidence": self._get_json("evidence"),
+            "retained_task_ids": self._get_json("retained_task_ids"),
+            "cancelled_task_ids": self._get_json("cancelled_task_ids"),
+            "added_task_ids": self._get_json("added_task_ids"),
+            "replaced_task_ids": self._get_json("replaced_task_ids"),
+            "created_at": self.created_at.isoformat() if self.created_at else None,
+        }
 
 
 class Artifact(Base):

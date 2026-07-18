@@ -1,4 +1,4 @@
-from typing import List, Optional
+from typing import Dict, List, Optional
 from datetime import datetime
 from pydantic import BaseModel, Field, field_validator
 
@@ -18,6 +18,11 @@ class AgentCreate(BaseModel):
     default_model_id: Optional[str] = Field(default=None, min_length=1)
     backup_model_ids: Optional[List[str]] = Field(default_factory=list)
     allowed_tools: Optional[List[str]] = Field(default_factory=list)
+    capability_profile: Optional[Dict[str, float]] = Field(default_factory=dict)
+    workspace_permissions: Optional[List[str]] = Field(default_factory=list)
+    input_types: Optional[List[str]] = Field(default_factory=lambda: ["text"])
+    output_types: Optional[List[str]] = Field(default_factory=lambda: ["text"])
+    max_concurrency: Optional[int] = Field(1, ge=1, le=20)
     system_prompt: Optional[str] = ""
     output_format: Optional[str] = "markdown"
     max_steps_per_task: Optional[int] = 10
@@ -51,6 +56,13 @@ class AgentCreate(BaseModel):
             raise ValueError("handoff_threshold_tokens must be at least 1000")
         return v
 
+    @field_validator("capability_profile")
+    @classmethod
+    def validate_capability_profile(cls, value: Optional[Dict[str, float]]) -> Optional[Dict[str, float]]:
+        if value is not None and any(score < 0 or score > 1 for score in value.values()):
+            raise ValueError("capability proficiency must be between 0 and 1")
+        return value
+
 
 class AgentUpdate(BaseModel):
     name: Optional[str] = Field(None, min_length=1, max_length=255)
@@ -59,6 +71,11 @@ class AgentUpdate(BaseModel):
     default_model_id: Optional[str] = None
     backup_model_ids: Optional[List[str]] = None
     allowed_tools: Optional[List[str]] = None
+    capability_profile: Optional[Dict[str, float]] = None
+    workspace_permissions: Optional[List[str]] = None
+    input_types: Optional[List[str]] = None
+    output_types: Optional[List[str]] = None
+    max_concurrency: Optional[int] = Field(None, ge=1, le=20)
     system_prompt: Optional[str] = None
     output_format: Optional[str] = None
     max_steps_per_task: Optional[int] = None
@@ -91,6 +108,13 @@ class AgentUpdate(BaseModel):
             raise ValueError("handoff_threshold_tokens must be at least 1000")
         return v
 
+    @field_validator("capability_profile")
+    @classmethod
+    def validate_capability_profile(cls, value: Optional[Dict[str, float]]) -> Optional[Dict[str, float]]:
+        if value is not None and any(score < 0 or score > 1 for score in value.values()):
+            raise ValueError("capability proficiency must be between 0 and 1")
+        return value
+
 
 class AgentStatusUpdate(BaseModel):
     is_enabled: bool
@@ -106,6 +130,11 @@ class AgentResponse(BaseModel):
     default_model_id: str
     backup_model_ids: List[str]
     allowed_tools: List[str]
+    capability_profile: Dict[str, float]
+    workspace_permissions: List[str]
+    input_types: List[str]
+    output_types: List[str]
+    max_concurrency: int
     system_prompt: str
     output_format: Optional[str]
     max_steps_per_task: int
@@ -120,6 +149,8 @@ class AgentResponse(BaseModel):
     total_tasks_failed: int
     total_handoffs_initiated: int
     average_tokens_per_task: Optional[int]
+    average_duration_ms: Optional[int]
+    average_cost_usd: Optional[float]
     created_at: Optional[str]
     updated_at: Optional[str]
 
@@ -134,6 +165,8 @@ class AgentListItem(BaseModel):
     is_enabled: bool
     current_task_id: Optional[str]
     total_tasks_completed: int
+    capabilities: List[str] = Field(default_factory=list)
+    max_concurrency: int = 1
     created_at: Optional[str]
 
 

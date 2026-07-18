@@ -24,6 +24,7 @@ def ensure_runtime_v2_schema() -> None:
             "team_preset": "VARCHAR(100)",
             "budget_tokens": "INTEGER NOT NULL DEFAULT 100000", "budget_cost_usd": "FLOAT",
             "max_duration_seconds": "INTEGER NOT NULL DEFAULT 3600",
+            "max_parallel_tasks": "INTEGER NOT NULL DEFAULT 3",
         },
         "tasks": {
             "task_type": "VARCHAR(50) NOT NULL DEFAULT 'general'", "required_capabilities": "TEXT NOT NULL DEFAULT '[]'",
@@ -31,6 +32,7 @@ def ensure_runtime_v2_schema() -> None:
             "acceptance_criteria": "TEXT NOT NULL DEFAULT '[]'", "risk_level": "VARCHAR(20) NOT NULL DEFAULT 'low'",
             "retry_count": "INTEGER NOT NULL DEFAULT 0", "max_retries": "INTEGER NOT NULL DEFAULT 2",
             "verification_status": "VARCHAR(50)", "blocked_reason": "TEXT", "parent_task_id": "VARCHAR(36)",
+            "plan_version_id": "VARCHAR(36)", "plan_task_id": "VARCHAR(36)", "plan_source": "VARCHAR(30)",
         },
         "worker_sessions": {
             "workspace_scope": "TEXT", "step_count": "INTEGER NOT NULL DEFAULT 0",
@@ -40,6 +42,10 @@ def ensure_runtime_v2_schema() -> None:
             "max_tokens_per_task": "INTEGER NOT NULL DEFAULT 32000",
             "max_duration_seconds": "INTEGER NOT NULL DEFAULT 900",
             "max_consecutive_failures": "INTEGER NOT NULL DEFAULT 3",
+            "capability_profile": "TEXT NOT NULL DEFAULT '{}'", "workspace_permissions": "TEXT NOT NULL DEFAULT '[]'",
+            "input_types": "TEXT NOT NULL DEFAULT '[\"text\"]'", "output_types": "TEXT NOT NULL DEFAULT '[\"text\"]'",
+            "max_concurrency": "INTEGER NOT NULL DEFAULT 1", "average_duration_ms": "INTEGER",
+            "average_cost_usd": "FLOAT",
         },
         "tool_call_records": {"result_data": "TEXT NOT NULL DEFAULT '{}'"},
         "memory_drafts": {"expires_at": "DATETIME"},

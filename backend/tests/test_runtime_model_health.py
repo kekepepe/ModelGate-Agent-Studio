@@ -3,7 +3,7 @@ import uuid
 from src.models.agent import AgentStation
 from src.models.handoff import ExecutionLog
 from src.models.model import Model
-from src.models.workspace import Goal, Task
+from src.models.workspace import ExecutionPlan, Goal, Task
 from src.services import runtime_service
 from src.services.providers.provider_factory import create_provider, set_provider
 
@@ -28,3 +28,9 @@ def test_runtime_stops_before_model_call_when_live_health_is_unhealthy(db_sessio
     assert result["status"] in {"failed", "handoff"}
     event = db_session.query(ExecutionLog).filter(ExecutionLog.task_id == task.id, ExecutionLog.event_type == "model_health").one()
     assert event.event_status == "failed"
+    decision = db_session.query(ExecutionLog).filter(
+        ExecutionLog.task_id == task.id,
+        ExecutionLog.event_type == "runtime.decision",
+    ).one()
+    assert decision.event_status == "replan_graph"
+    assert db_session.query(ExecutionPlan).filter(ExecutionPlan.goal_id == goal.id).count() == 2

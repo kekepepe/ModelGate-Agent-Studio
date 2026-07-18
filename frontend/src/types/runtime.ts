@@ -55,4 +55,5 @@ export interface FinalSummary {
   models: Array<{ id: string; name: string; cost_level?: number | null }>;
   handoff_count: number;
   cost: { currency_estimate?: number | null; available: boolean; note: string };
+  multi_agent: import('./workspace').MultiAgentMetrics;
 }

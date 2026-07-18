@@ -30,7 +30,7 @@ DEFAULT_GOAL_PLAN = (
 def create_goal(db: Session, title: str, description: Optional[str] = None, execution_mode: Optional[str] = None,
                 workspace_root: Optional[str] = None, budget_tokens: int = 100000,
                 budget_cost_usd: Optional[float] = None, max_duration_seconds: int = 3600,
-                team_preset: Optional[str] = None) -> Goal:
+                team_preset: Optional[str] = None, max_parallel_tasks: int = 3) -> Goal:
     goal = Goal(
         id=str(uuid.uuid4()),
         title=title,
@@ -42,6 +42,7 @@ def create_goal(db: Session, title: str, description: Optional[str] = None, exec
         budget_tokens=budget_tokens,
         budget_cost_usd=budget_cost_usd,
         max_duration_seconds=max_duration_seconds,
+        max_parallel_tasks=max_parallel_tasks,
     )
     db.add(goal)
     db.commit()

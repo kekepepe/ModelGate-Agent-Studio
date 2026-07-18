@@ -38,21 +38,26 @@ const COMPLETE_STATUSES = new Set(['completed', 'completed_verified', 'completed
 const ROLE_ORDER = ['planner', 'research', 'coder', 'summarizer', 'reviewer', 'supervisor'];
 
 export function buildWorkspaceViewModel(state: WorkspaceState, preset: TeamPreset): WorkspaceViewModel {
-  const taskAgentIds = new Set(state.tasks.map((task) => task.assigned_agent_id).filter(Boolean));
+  const activeTaskIds = new Set(
+    state.active_plan?.tasks.map((task) => task.runtime_task_id).filter(Boolean) || [],
+  );
+  const graphTasks = activeTaskIds.size > 0
+    ? state.tasks.filter((task) => activeTaskIds.has(task.id))
+    : state.tasks;
+  const taskAgentIds = new Set(graphTasks.map((task) => task.assigned_agent_id).filter(Boolean));
   const handoffAgentIds = new Set(state.handoffs.flatMap((handoff) => [handoff.from_agent_id, handoff.to_agent_id]));
-  const presetRoles = new Set(preset.roles.map((role) => role.role));
 
   const visibleAgents = state.agents
-    .filter((agent) => taskAgentIds.has(agent.id) || handoffAgentIds.has(agent.id) || presetRoles.has(agent.role))
+    .filter((agent) => taskAgentIds.has(agent.id) || handoffAgentIds.has(agent.id))
     .toSorted((left, right) => {
-      const leftTaskOrder = minimumTaskOrder(state.tasks, left.id);
-      const rightTaskOrder = minimumTaskOrder(state.tasks, right.id);
+      const leftTaskOrder = minimumTaskOrder(graphTasks, left.id);
+      const rightTaskOrder = minimumTaskOrder(graphTasks, right.id);
       if (leftTaskOrder !== rightTaskOrder) return leftTaskOrder - rightTaskOrder;
       return roleOrder(left.role, preset) - roleOrder(right.role, preset);
     });
 
   const stations = visibleAgents.map((agent, index): StationViewModel => {
-    const tasks = state.tasks
+    const tasks = graphTasks
       .filter((task) => task.assigned_agent_id === agent.id)
       .toSorted((left, right) => (left.flow_position || 0) - (right.flow_position || 0));
     const worker = pickWorker(state.workers, agent.id);
@@ -69,8 +74,8 @@ export function buildWorkspaceViewModel(state: WorkspaceState, preset: TeamPrese
     };
   });
 
-  const tasksById = new Map(state.tasks.map((task) => [task.id, task]));
-  const orderedTasks = state.tasks.toSorted((left, right) => (left.flow_position || 0) - (right.flow_position || 0));
+  const tasksById = new Map(graphTasks.map((task) => [task.id, task]));
+  const orderedTasks = graphTasks.toSorted((left, right) => (left.flow_position || 0) - (right.flow_position || 0));
   const edges: TaskEdgeViewModel[] = [];
 
   orderedTasks.forEach((task, index) => {

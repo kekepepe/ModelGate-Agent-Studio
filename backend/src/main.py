@@ -7,6 +7,7 @@ from src.routes import agents, router as router_routes, quota as quota_routes, h
 from src.data.models import MODEL_SEEDS
 from src.models.model import Model
 from src.models.agent import AgentStation
+from src.models import selection as selection_models
 from src.models import handoff as handoff_models
 from src.models import supervisor as supervisor_models
 from src.models import tool as tool_models

@@ -146,7 +146,12 @@ export default function FinalOutputPanel({
             <SummaryItem label="未完成" value={`${finalSummary.incomplete.length} 项`} />
             <SummaryItem label="使用模型" value={finalSummary.models.map((model) => model.name).join('、') || '暂无'} />
             <SummaryItem label="交接次数" value={`${finalSummary.handoff_count} 次`} />
+            <SummaryItem label="执行模式" value={finalSummary.multi_agent.mode.replaceAll('_', ' ')} />
+            <SummaryItem label="协调 Token" value={finalSummary.multi_agent.coordination_tokens.toLocaleString()} />
+            <SummaryItem label="并行节省估算" value={`${finalSummary.multi_agent.potential_parallel_saving_ms.toLocaleString()} ms`} />
+            <SummaryItem label="净时间收益估算" value={`${finalSummary.multi_agent.estimated_net_time_benefit_ms.toLocaleString()} ms`} />
           </dl>
+          <p className="mt-3 rounded-md bg-white/70 p-2 text-xs leading-5 text-stone-600">为什么使用该模式：{finalSummary.multi_agent.why_multi_agent}</p>
           {finalSummary.quality.summary && (
             <p className="mt-3 rounded-md bg-white/70 p-2 text-xs leading-5 text-stone-600">
               {finalSummary.quality.summary}
@@ -158,6 +163,7 @@ export default function FinalOutputPanel({
             </p>
           )}
           <p className="mt-2 text-[11px] leading-4 text-stone-500">成本：{finalSummary.cost.note}</p>
+          <p className="mt-1 text-[11px] leading-4 text-stone-500">收益口径：{finalSummary.multi_agent.measurement_note}</p>
         </section>
       )}
     </div>
