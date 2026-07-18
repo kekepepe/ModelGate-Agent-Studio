@@ -13,7 +13,8 @@ export default function StudioPage() {
   const navigate = useNavigate();
 
   const openWorkspace = (preset: TeamPreset) => {
-    navigate(`/workspace?team=${preset.id}`);
+    window.localStorage.setItem('modelgate:last-team', preset.id);
+    navigate(`/workspace/new?team=${preset.id}`);
   };
 
   return (
@@ -46,7 +47,7 @@ export default function StudioPage() {
             <h2 className="text-sm font-semibold text-stone-800">最近运行</h2>
             <p className="mt-1 text-xs text-stone-500">完成首个 Goal 后，这里会显示团队版本、运行状态和最近产物。</p>
           </div>
-          <button type="button" onClick={() => navigate('/dashboard')} className="text-xs font-medium text-blue-700 hover:text-blue-900">
+          <button type="button" onClick={() => navigate('/workspace')} className="text-xs font-medium text-blue-700 hover:text-blue-900">
             查看运行概览
           </button>
         </div>

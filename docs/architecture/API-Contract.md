@@ -81,6 +81,8 @@ GET /api/v1/xxx?page=1&page_size=20
 
 ## 一、Goal 相关接口
 
+> Workspace 的当前 Run 路由与聚合接口以 [Workspace统一导航路由与Run-API.md](Workspace统一导航路由与Run-API.md) 为准。创建 Goal 的实际响应已增加稳定 `run_id`，具体 Run 使用 `/workspace/runs/{runId}` 恢复。
+
 ### 1.1 创建 Goal
 
 ```

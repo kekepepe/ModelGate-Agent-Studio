@@ -1,9 +1,9 @@
-import { lazy, Suspense, useCallback, useMemo, useState } from 'react';
-import { useSearchParams } from 'react-router-dom';
-import { useWorkspaceState, useTaskDetail, useExecuteGoal, usePauseGoal, useResumeGoal, useRuntimeEvents, useRuntimeStatus, useStopGoal, useRetryTask, useConfirmPlan, useUpdatePlan } from '../hooks/useWorkspace';
+import { lazy, Suspense, useMemo, useState } from 'react';
+import { useParams, useSearchParams } from 'react-router-dom';
+import { useTaskDetail, useExecuteGoal, usePauseGoal, useResumeGoal, useRuntimeEvents, useRuntimeStatus, useStopGoal, useRetryTask, useConfirmPlan, useUpdatePlan } from '../hooks/useWorkspace';
+import { useExportRun, useRunWorkspace } from '../hooks/useRuns';
 import { useAgents } from '../hooks/useAgents';
 import { useAcceptHandoff, useHandoff, useTriggerHandoff, useUpdateHandoffResult } from '../hooks/useHandoffs';
-import TopStatusBar from '../components/TopStatusBar';
 import GoalInputPanel from '../components/GoalInputPanel';
 import PlanOverviewPanel from '../components/PlanOverviewPanel';
 import TaskTree from '../components/TaskTree';
@@ -16,17 +16,24 @@ import type { WorkspaceTask } from '../types/workspace';
 import type { HandoffReason, HandoffResult } from '../types/handoff';
 import { getTeamPreset } from '../types/team';
 import { buildWorkspaceViewModel, type WorkspaceViewMode } from '../utils/workspaceViewModel';
+import WorkspaceRunHeader from '../components/workspace/WorkspaceRunHeader';
+import RunNotFoundState from '../components/workspace/RunNotFoundState';
 
 const PixelOfficeRenderer = lazy(() => import('../components/PixelOfficeRenderer'));
 
 export default function WorkspacePage() {
+  const { runId = '' } = useParams();
   const [searchParams, setSearchParams] = useSearchParams();
-  const teamPreset = getTeamPreset(searchParams.get('team'));
-  const [goalId, setGoalId] = useState<string | null>(() => searchParams.get('goal'));
   const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
-  const [viewMode, setViewMode] = useState<WorkspaceViewMode>(() => window.localStorage.getItem('modelgate-workspace-view') === 'pixel' ? 'pixel' : 'card');
+  const [viewMode, setViewMode] = useState<WorkspaceViewMode>(() => {
+    const requested = searchParams.get('view');
+    const persisted = window.localStorage.getItem(`workspace:view:${runId}`);
+    return requested === 'pixel' || (!requested && persisted === 'pixel') ? 'pixel' : 'card';
+  });
 
-  const { data: state, isLoading } = useWorkspaceState(goalId);
+  const { data: state, isLoading, error: workspaceError, refetch } = useRunWorkspace(runId);
+  const goalId = state?.goal?.id || null;
+  const teamPreset = getTeamPreset(state?.goal?.team_preset);
   const { data: taskDetail, isLoading: isTaskLoading } = useTaskDetail(selectedTaskId);
   const { data: runtimeStatus } = useRuntimeStatus(goalId);
   useRuntimeEvents(goalId);
@@ -37,6 +44,7 @@ export default function WorkspacePage() {
   const pauseGoal = usePauseGoal();
   const resumeGoal = useResumeGoal();
   const stopGoal = useStopGoal();
+  const exportRun = useExportRun();
   const retryTask = useRetryTask();
   const triggerHandoff = useTriggerHandoff();
   const acceptHandoff = useAcceptHandoff();
@@ -63,29 +71,24 @@ export default function WorkspacePage() {
     });
   }, [state]);
 
-  const handleGoalCreated = useCallback((newGoalId: string) => {
-    setGoalId(newGoalId);
-    setSearchParams((current) => {
-      const next = new URLSearchParams(current);
-      next.set('goal', newGoalId);
-      return next;
-    }, { replace: true });
-  }, [setSearchParams]);
-
   const agents = agentsData?.items || [];
   const activeHandoffTask = handoffTaskId ? state?.tasks.find((task) => task.id === handoffTaskId) : null;
   const selectedTask = mergeTaskDetail(taskDetail || null, state?.tasks.find((task) => task.id === selectedTaskId) || null);
   const handleModeChange = (mode: WorkspaceViewMode) => {
     setViewMode(mode);
-    window.localStorage.setItem('modelgate-workspace-view', mode);
+    window.localStorage.setItem(`workspace:view:${runId}`, mode);
+    setSearchParams((current) => {
+      const next = new URLSearchParams(current);
+      next.set('view', mode);
+      return next;
+    }, { replace: true });
   };
-  const handleExport = () => {
-    if (!state?.goal) return;
-    const payload = JSON.stringify({ goal: state.goal, team: teamPreset.name, tasks: state.tasks, handoffs: state.handoffs }, null, 2);
-    const url = URL.createObjectURL(new Blob([payload], { type: 'application/json' }));
+  const handleExport = async () => {
+    const exported = await exportRun.mutateAsync(runId);
+    const url = URL.createObjectURL(new Blob([exported.content], { type: 'application/json' }));
     const anchor = document.createElement('a');
     anchor.href = url;
-    anchor.download = `modelgate-${state.goal.id}-summary.json`;
+    anchor.download = exported.file_name;
     anchor.click();
     URL.revokeObjectURL(url);
   };
@@ -101,13 +104,20 @@ export default function WorkspacePage() {
     });
   };
 
+  if (isLoading && !state) {
+    return <div className="workspace-run-skeleton"><div /><div /><div /></div>;
+  }
+  if (workspaceError || !state?.goal) {
+    return <RunNotFoundState runId={runId} onRetry={() => refetch()} />;
+  }
+
   return (
     <div className="workspace-shell flex min-h-0 flex-1 flex-col">
-      <TopStatusBar
-        goal={state?.goal || null}
+      <WorkspaceRunHeader
+        runId={runId}
+        goal={state.goal}
         tasks={activeTasks}
         teamName={teamPreset.name}
-        showWhenEmpty
         mode={viewMode}
         onModeChange={handleModeChange}
         onExecute={goalId ? () => executeGoal.mutate(goalId) : undefined}
@@ -115,15 +125,14 @@ export default function WorkspacePage() {
         onResume={goalId ? () => resumeGoal.mutate(goalId) : undefined}
         onStop={goalId && !['completed', 'failed', 'cancelled'].includes(state?.goal?.status || '') ? () => stopGoal.mutate(goalId) : undefined}
         onExport={handleExport}
-        isBusy={executeGoal.isPending || pauseGoal.isPending || resumeGoal.isPending || stopGoal.isPending}
-        taskMode={state?.task_mode}
+        isBusy={executeGoal.isPending || pauseGoal.isPending || resumeGoal.isPending || stopGoal.isPending || exportRun.isPending}
         metrics={state?.multi_agent_metrics}
       />
 
       <div className="workspace-body flex min-h-0 flex-1 overflow-hidden">
         <aside className="workspace-sidebar">
           <GoalInputPanel
-            onGoalCreated={handleGoalCreated}
+            onGoalCreated={() => undefined}
             activeGoalId={goalId}
             goalTitle={state?.goal?.title || null}
             goal={state?.goal || null}
@@ -164,7 +173,7 @@ export default function WorkspacePage() {
         </aside>
 
         <main className="workspace-main">
-          {isLoading && goalId ? <div className="workspace-loading-overlay">Loading workspace state…</div> : null}
+          {isLoading && goalId ? <div className="workspace-loading-overlay">Refreshing workspace state…</div> : null}
           {viewMode === 'card' ? <CardFlowRenderer viewModel={viewModel} selectedTaskId={selectedTaskId} onSelectTask={setSelectedTaskId} onOpenHandoff={setSelectedHandoffId} /> : <Suspense fallback={<div className="workspace-loading-overlay">Preparing Pixel Office…</div>}>
             <PixelOfficeRenderer viewModel={viewModel} onSelectTask={setSelectedTaskId} onRequestHandoff={setHandoffTaskId} onOpenHandoff={setSelectedHandoffId} onPause={state?.goal?.status === 'running' && goalId ? () => pauseGoal.mutate(goalId) : undefined} />
           </Suspense>}

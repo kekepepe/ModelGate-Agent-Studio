@@ -8,10 +8,10 @@ import type { KnowledgeSourceInput } from '../types/knowledge';
 const EVOLUTION_KEY = 'evolution-summary';
 const SOURCES_KEY = 'knowledge-sources';
 
-export function useEvolutionSummary(goalId?: string) {
+export function useEvolutionSummary(goalId?: string, runId?: string) {
   return useQuery({
-    queryKey: [EVOLUTION_KEY, goalId],
-    queryFn: () => getEvolutionSummary(goalId),
+    queryKey: [EVOLUTION_KEY, goalId, runId],
+    queryFn: () => getEvolutionSummary(goalId, runId),
     refetchInterval: 10000,
   });
 }

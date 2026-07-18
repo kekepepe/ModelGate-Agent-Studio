@@ -1,11 +1,15 @@
 import { useState } from 'react';
+import { Link, useSearchParams } from 'react-router-dom';
 import { useEvolutionSummary, useApproveMemory, useApproveSkill } from '../hooks/useKnowledge';
 import type { MemoryDraft, SkillDraft } from '../types/knowledge';
 import { MEMORY_TYPE_LABELS } from '../types/knowledge';
 import KnowledgeSourcesPanel from '../components/KnowledgeSourcesPanel';
 
 export default function EvolutionReviewPage() {
-  const { data, isLoading } = useEvolutionSummary();
+  const [searchParams] = useSearchParams();
+  const runId = searchParams.get('runId');
+  const goalId = searchParams.get('goalId') || undefined;
+  const { data, isLoading } = useEvolutionSummary(goalId, runId || undefined);
   const approveMemory = useApproveMemory();
   const approveSkill = useApproveSkill();
   const [tab, setTab] = useState<'sources' | 'memories' | 'skills'>('sources');
@@ -20,6 +24,8 @@ export default function EvolutionReviewPage() {
           </p>
         </div>
       </div>
+
+      {runId ? <div className="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-lg border border-blue-200 bg-blue-50 px-3 py-2 text-sm text-blue-800"><span>当前筛选 Run：<span className="font-mono">{runId}</span>{goalId ? ` · Goal ${goalId}` : ''}</span><Link to={`/workspace/runs/${runId}`} className="font-medium underline">返回当前 Workspace</Link></div> : null}
 
       <div className="flex gap-4 mb-4">
         <button

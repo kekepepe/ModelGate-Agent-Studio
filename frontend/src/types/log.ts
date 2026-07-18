@@ -70,6 +70,7 @@ export interface ExecutionLog {
 }
 
 export interface LogFilters {
+  run_id?: string;
   goal_id?: string;
   task_id?: string;
   agent_id?: string;

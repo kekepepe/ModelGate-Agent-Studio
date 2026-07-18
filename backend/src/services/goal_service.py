@@ -32,6 +32,10 @@ def create_goal(db: Session, title: str, description: Optional[str] = None, exec
                 team_preset: Optional[str] = None, max_parallel_tasks: int = 3) -> Goal:
     goal = Goal(
         id=str(uuid.uuid4()),
+        # Allocate the public Run identity when the Goal is created. RuntimeRun
+        # is still created lazily when execution starts, but the browser URL is
+        # now stable throughout planning, execution and review.
+        run_id=str(uuid.uuid4()),
         title=title,
         description=description,
         team_preset=team_preset,
@@ -80,4 +84,4 @@ def start_goal(db: Session, goal_id: str) -> Dict[str, str]:
     db.commit()
     db.refresh(goal)
 
-    return {"goal_id": goal.id, "status": goal.status}
+    return {"goal_id": goal.id, "run_id": goal.run_id, "status": goal.status}

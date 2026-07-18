@@ -8,7 +8,7 @@ from sqlalchemy.orm import Session
 from src.models.agent import AgentStation
 from src.models.handoff import ExecutionLog, HandoffTask
 from src.models.model import Model
-from src.models.workspace import Task
+from src.models.workspace import Goal, Task
 from src.services.security_service import redact_data
 
 
@@ -66,6 +66,7 @@ def get_log(db: Session, log_id: str) -> Dict[str, Any]:
 
 def list_logs(
     db: Session,
+    run_id: Optional[str] = None,
     goal_id: Optional[str] = None,
     task_id: Optional[str] = None,
     agent_id: Optional[str] = None,
@@ -81,6 +82,9 @@ def list_logs(
 ) -> Dict[str, Any]:
     query = db.query(ExecutionLog)
 
+    if run_id and not goal_id:
+        run_goal = db.query(Goal).filter(Goal.run_id == run_id).first()
+        goal_id = run_goal.id if run_goal else "__missing_run__"
     if goal_id:
         query = query.filter(ExecutionLog.goal_id == goal_id)
     if task_id:

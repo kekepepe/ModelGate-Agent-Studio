@@ -266,11 +266,11 @@ def execute_goal_pipeline(db: Session, goal_id: str) -> Dict[str, Any]:
 
 def _get_or_start_run(db: Session, goal: Goal) -> RuntimeRun:
     run = db.query(RuntimeRun).filter(RuntimeRun.id == goal.run_id).first() if goal.run_id else None
-    if run and run.status in {"running", "paused"}:
+    if run and run.status not in {"completed", "failed", "cancelled", "stopped"}:
         run.status = "running"
         return run
     run = RuntimeRun(
-        id=str(uuid.uuid4()), goal_id=goal.id, execution_mode=goal.execution_mode, status="running",
+        id=goal.run_id or str(uuid.uuid4()), goal_id=goal.id, execution_mode=goal.execution_mode, status="running",
         budget_tokens=goal.budget_tokens, budget_cost_usd=goal.budget_cost_usd,
         max_duration_seconds=goal.max_duration_seconds,
     )
@@ -300,12 +300,19 @@ def _run_resource_limit_error(db: Session, run: RuntimeRun) -> Optional[str]:
 
 def pause_goal_run(db: Session, goal_id: str) -> Dict[str, Any]:
     goal = goal_service.get_goal(db, goal_id)
-    if goal.status not in {"planning", "running"} or not goal.run_id:
+    if goal.status not in {"planning", "running", "reviewing"} or not goal.run_id:
         raise GoalNotReadyError(f"Goal cannot be paused from status: {goal.status}")
+    previous_status = goal.status
     run = db.query(RuntimeRun).filter(RuntimeRun.id == goal.run_id).first()
     if not run:
-        raise GoalNotReadyError("No active runtime run exists")
-    goal.status, run.status = "paused", "paused"
+        run = RuntimeRun(
+            id=goal.run_id, goal_id=goal.id, execution_mode=goal.execution_mode, status="paused",
+            budget_tokens=goal.budget_tokens, budget_cost_usd=goal.budget_cost_usd,
+            max_duration_seconds=goal.max_duration_seconds,
+        )
+        db.add(run)
+    goal.status = "paused"
+    run.status = "paused_planning" if previous_status == "planning" else "paused"
     db.query(WorkerSession).filter(WorkerSession.goal_id == goal.id, WorkerSession.status == "running").update({"status": "paused"})
     db.commit()
     log_service.create_log(db, {"goal_id": goal.id, "event_type": "run.paused", "event_status": "completed", "output_summary": f"Run {run.id} paused"})
@@ -320,13 +327,14 @@ def resume_goal_run(db: Session, goal_id: str) -> Dict[str, Any]:
     run = db.query(RuntimeRun).filter(RuntimeRun.id == goal.run_id).first()
     if not run:
         raise GoalNotReadyError("No paused runtime run exists")
-    goal.status, run.status = "running", "running"
+    next_status = "planning" if run.status == "paused_planning" else "running"
+    goal.status, run.status = next_status, next_status
     db.query(Task).filter(Task.goal_id == goal.id, Task.status == "running").update({"status": "pending"})
     db.query(WorkerSession).filter(WorkerSession.goal_id == goal.id, WorkerSession.status == "paused").update({"status": "idle"})
     db.commit()
     log_service.create_log(db, {"goal_id": goal.id, "event_type": "run.resumed", "event_status": "completed", "output_summary": f"Run {run.id} resumed"})
     db.commit()
-    return {"goal_id": goal.id, "run_id": run.id, "status": "running"}
+    return {"goal_id": goal.id, "run_id": run.id, "status": next_status}
 
 
 def stop_goal_run(db: Session, goal_id: str) -> Dict[str, Any]:

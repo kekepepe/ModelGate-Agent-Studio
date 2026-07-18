@@ -4,6 +4,7 @@ from sqlalchemy.orm import Session
 
 from src.core.database import get_db
 from src.schemas.knowledge import ApprovalRequest, KnowledgeSourceCreate, RetrievalRequest, SourceStatusRequest
+from src.models.workspace import Goal
 from src.services import curator_service, knowledge_source_service, retrieval_service
 
 router = APIRouter(tags=["knowledge"])
@@ -27,8 +28,11 @@ def generate_memories(goal_id: str, db: Session = Depends(get_db)):
 
 
 @router.get("/knowledge/evolution")
-def get_evolution_summary(goal_id: Optional[str] = Query(None), db: Session = Depends(get_db)):
+def get_evolution_summary(goal_id: Optional[str] = Query(None), run_id: Optional[str] = Query(None), db: Session = Depends(get_db)):
     try:
+        if run_id and not goal_id:
+            goal = db.query(Goal).filter(Goal.run_id == run_id).first()
+            goal_id = goal.id if goal else "__missing_run__"
         return _success(curator_service.get_evolution_summary(db, goal_id))
     except Exception as e:
         raise _error("INTERNAL_ERROR", str(e), 500)

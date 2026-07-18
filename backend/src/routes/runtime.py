@@ -102,7 +102,8 @@ def pause_goal(goal_id: str, db: Session = Depends(get_db)):
 def resume_goal(goal_id: str, db: Session = Depends(get_db)):
     try:
         result = runtime_service.resume_goal_run(db, goal_id)
-        threading.Thread(target=_background_execute_goal, args=(goal_id,), daemon=True).start()
+        if result["status"] == "running":
+            threading.Thread(target=_background_execute_goal, args=(goal_id,), daemon=True).start()
         return _success(result)
     except goal_service.GoalNotFoundError as e:
         _error("NOT_FOUND", str(e), 404)

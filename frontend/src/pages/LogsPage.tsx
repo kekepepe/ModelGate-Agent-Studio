@@ -1,4 +1,5 @@
 import { useRef, useState } from 'react';
+import { Link, useSearchParams } from 'react-router-dom';
 import { useLogsQuery, useLogDetailQuery, useTaskTimelineQuery } from '../hooks/useLogs';
 import type { ExecutionLog, LogFilters as LogFiltersType } from '../types/log';
 import LogListItem from '../components/LogListItem';
@@ -7,7 +8,14 @@ import LogDetailDrawer from '../components/LogDetailDrawer';
 import TaskTimeline from '../components/TaskTimeline';
 
 export default function LogsPage() {
-  const [filters, setFilters] = useState<LogFiltersType>({ page: 1, page_size: 20 });
+  const [searchParams] = useSearchParams();
+  const contextRunId = searchParams.get('runId');
+  const contextGoalId = searchParams.get('goalId');
+  const [filters, setFilters] = useState<LogFiltersType>(() => ({
+    page: 1, page_size: 20,
+    run_id: contextRunId || undefined,
+    goal_id: contextGoalId || undefined,
+  }));
   const [selectedLogId, setSelectedLogId] = useState<string | null>(null);
   const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
   const [viewMode, setViewMode] = useState<'list' | 'timeline'>('list');
@@ -64,6 +72,8 @@ export default function LogsPage() {
           </button>
         </div>
       </div>
+
+      {contextRunId ? <div className="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-lg border border-blue-200 bg-blue-50 px-3 py-2 text-sm text-blue-800"><span>当前筛选 Run：<span className="font-mono">{contextRunId}</span></span><Link to={`/workspace/runs/${contextRunId}`} className="font-medium underline">返回当前 Workspace</Link></div> : null}
 
       {viewMode === 'list' && (
         <>

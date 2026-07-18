@@ -17,10 +17,11 @@ class InvalidStateTransition(ValueError):
 GOAL_TRANSITIONS: Dict[str, Set[str]] = {
     "idle": {"planning", "cancelled"},
     "draft": {"planning", "cancelled"},
-    "planning": {"waiting_confirmation", "running", "replanning", "blocked", "failed", "cancelled"},
+    "planning": {"waiting_confirmation", "running", "paused", "replanning", "blocked", "failed", "cancelled"},
     "waiting_confirmation": {"running", "replanning", "cancelled"},
     "running": {"paused", "waiting_approval", "revision_required", "replanning", "blocked", "handoff", "completed", "failed", "cancelled"},
-    "paused": {"running", "cancelled"},
+    "reviewing": {"paused", "revision_required", "replanning", "completed", "failed", "cancelled"},
+    "paused": {"planning", "running", "cancelled"},
     "waiting_approval": {"running", "blocked", "cancelled"},
     "revision_required": {"running", "replanning", "failed", "cancelled"},
     "replanning": {"planning", "waiting_confirmation", "running", "completed", "blocked", "failed", "cancelled"},

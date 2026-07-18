@@ -1,5 +1,57 @@
 @import "tailwindcss";
 
+.app-shell-run-main {
+  display: flex;
+  height: calc(100vh - 3.5rem);
+  min-height: 0;
+  overflow: hidden;
+}
+
+.run-header-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.375rem;
+  border: 1px solid #e7e5e4;
+  border-radius: 0.5rem;
+  padding: 0.4rem 0.65rem;
+  color: #57534e;
+  font-size: 0.75rem;
+  font-weight: 500;
+}
+
+.run-header-link:hover {
+  background: #fafaf9;
+  color: #1c1917;
+}
+
+.workspace-run-skeleton {
+  display: grid;
+  width: 100%;
+  grid-template-columns: 18rem 1fr;
+  grid-template-rows: 8.5rem 1fr;
+  gap: 1px;
+  background: #e7e5e4;
+}
+
+.workspace-run-skeleton > div {
+  background: #fff;
+  animation: pulse 1.8s ease-in-out infinite;
+}
+
+.workspace-run-skeleton > div:first-child {
+  grid-column: 1 / -1;
+}
+
+.workspace-run-skeleton > div:nth-child(2) {
+  background: #fafaf9;
+}
+
+@media (max-width: 1024px) {
+  .workspace-run-skeleton {
+    grid-template-columns: 14rem 1fr;
+  }
+}
+
 @theme {
   --color-stone-50: #fafaf9;
   --color-stone-100: #f5f5f4;

@@ -28,7 +28,7 @@ def create_goal(data: GoalCreate, db: Session = Depends(get_db)):
             data.budget_tokens, data.budget_cost_usd, data.max_duration_seconds,
             data.team_preset, data.max_parallel_tasks,
         )
-        return _success({"goal_id": goal.id, "status": goal.status}, 201)
+        return _success({"goal_id": goal.id, "run_id": goal.run_id, "status": goal.status}, 201)
     except Exception as e:
         _error("INTERNAL_ERROR", str(e), 500)
 

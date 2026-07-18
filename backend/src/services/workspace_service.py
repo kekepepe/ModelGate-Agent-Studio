@@ -1,12 +1,16 @@
-from typing import Dict, List
+import json
+import uuid
+from math import ceil
+from typing import Dict, List, Optional
 
+from sqlalchemy import or_
 from sqlalchemy.orm import Session
 
 from src.models.agent import AgentStation
 from src.models.handoff import ExecutionLog, HandoffRecord, WorkerSession
 from src.models.model import Model
 from src.models.quota import QuotaRecord
-from src.models.workspace import Goal, Task
+from src.models.workspace import Goal, RuntimeRun, Task
 from src.models.workspace import Artifact, ExecutionPlan, PlanChange, PlanTask, VerificationResult, WorkspaceWorktree
 from src.models.tool import ToolCallRecord
 from src.models.knowledge import KnowledgeChunk, KnowledgeDocument, KnowledgeSource, RetrievalRun, RetrievedContextItem
@@ -15,6 +19,140 @@ from src.models.selection import AgentSelectionDecision
 
 class WorkspaceNotFoundError(Exception):
     pass
+
+
+ACTIVE_STATUSES = {"idle", "planning", "ready", "running", "paused", "waiting", "waiting_approval", "replanning", "revision_required", "blocked", "handoff", "reviewing"}
+COMPLETED_STATUSES = {"completed", "done"}
+FAILED_STATUSES = {"failed", "error"}
+STOPPED_STATUSES = {"cancelled", "stopped"}
+
+
+def resolve_goal_for_run(db: Session, run_id: str) -> Goal:
+    """Resolve both the new public Run ID and legacy Goal-based URLs."""
+    goal = db.query(Goal).filter(or_(Goal.run_id == run_id, Goal.id == run_id)).first()
+    if not goal:
+        raise WorkspaceNotFoundError(f"Run '{run_id}' not found")
+    return goal
+
+
+def get_run_workspace_state(db: Session, run_id: str) -> Dict:
+    return get_workspace_state(db, resolve_goal_for_run(db, run_id).id)
+
+
+def list_runs(
+    db: Session,
+    status: Optional[str] = None,
+    team_id: Optional[str] = None,
+    search: Optional[str] = None,
+    page: int = 1,
+    page_size: int = 50,
+) -> Dict:
+    query = db.query(Goal)
+    if status:
+        requested = {item.strip() for item in status.split(",") if item.strip()}
+        expanded = set()
+        for item in requested:
+            expanded |= {
+                "active": ACTIVE_STATUSES,
+                "completed": COMPLETED_STATUSES,
+                "failed": FAILED_STATUSES,
+                "stopped": STOPPED_STATUSES,
+            }.get(item, {item})
+        query = query.filter(Goal.status.in_(expanded))
+    if team_id:
+        query = query.filter(Goal.team_preset == team_id)
+    if search:
+        like = f"%{search}%"
+        query = query.filter(or_(Goal.title.ilike(like), Goal.description.ilike(like)))
+
+    total = query.count()
+    goals = query.order_by(Goal.updated_at.desc()).offset((page - 1) * page_size).limit(page_size).all()
+    return {
+        "items": [_serialize_run_summary(db, goal) for goal in goals],
+        "total": total,
+        "page": page,
+        "page_size": page_size,
+        "total_pages": ceil(total / page_size) if page_size else 0,
+    }
+
+
+def get_run(db: Session, run_id: str) -> Dict:
+    return _serialize_run_summary(db, resolve_goal_for_run(db, run_id))
+
+
+def list_run_assets(db: Session, run_id: str) -> Dict:
+    goal = resolve_goal_for_run(db, run_id)
+    task_ids = [row[0] for row in db.query(Task.id).filter(Task.goal_id == goal.id).all()]
+    records = db.query(Artifact).filter(Artifact.task_id.in_(task_ids)).order_by(Artifact.created_at.desc()).all() if task_ids else []
+    return {
+        "run": _serialize_run_summary(db, goal),
+        "items": [{
+            "id": item.id, "run_id": item.run_id or goal.run_id, "task_id": item.task_id,
+            "type": item.type, "path": item.path, "checksum": item.checksum,
+            "verification_status": item.verification_status,
+            "created_at": item.created_at.isoformat() if item.created_at else None,
+        } for item in records],
+    }
+
+
+def export_run_snapshot(db: Session, run_id: str) -> Dict:
+    goal = resolve_goal_for_run(db, run_id)
+    state = get_workspace_state(db, goal.id)
+    tasks = db.query(Task).filter(Task.goal_id == goal.id).order_by(Task.updated_at.desc()).all()
+    public_run_id = goal.run_id or goal.id
+    content = json.dumps({
+        "run_id": public_run_id,
+        "goal": state["goal"],
+        "tasks": state["tasks"],
+        "handoffs": state["handoffs"],
+        "export_status": "completed" if goal.status in COMPLETED_STATUSES else "in_progress_snapshot",
+    }, ensure_ascii=False, indent=2)
+    artifact = Artifact(
+        id=str(uuid.uuid4()), run_id=public_run_id,
+        task_id=tasks[0].id if tasks else goal.id,
+        type="run_snapshot", path=f"exports/modelgate-{public_run_id}-snapshot.json",
+        verification_status="snapshot",
+        metadata_json=json.dumps({"goal_id": goal.id, "goal_status": goal.status}, ensure_ascii=False),
+    )
+    db.add(artifact)
+    db.commit()
+    return {
+        "artifact_id": artifact.id,
+        "file_name": f"modelgate-{public_run_id}-snapshot.json",
+        "content": content,
+        "snapshot": goal.status not in COMPLETED_STATUSES,
+    }
+
+
+def _serialize_run_summary(db: Session, goal: Goal) -> Dict:
+    tasks = db.query(Task).filter(Task.goal_id == goal.id).all()
+    workers = db.query(WorkerSession).filter(WorkerSession.goal_id == goal.id).all()
+    completed = sum(task.status in {"completed", "completed_verified", "completed_unverified"} for task in tasks)
+    total_tokens = sum(task.tokens_used or 0 for task in tasks)
+    runtime = db.query(RuntimeRun).filter(RuntimeRun.id == goal.run_id).first() if goal.run_id else None
+    active_agents = len({worker.agent_id for worker in workers if worker.status in {"running", "handoff_required"}})
+    return {
+        "run_id": goal.run_id or goal.id,
+        "goal_id": goal.id,
+        "name": goal.title,
+        "goal_summary": goal.description or goal.title,
+        "team_id": goal.team_preset,
+        "status": goal.status,
+        "runtime_status": runtime.status if runtime else None,
+        "current_stage": next((task.title for task in tasks if task.status in {"running", "assigned", "handoff", "waiting_tool", "verifying"}), "Planning" if goal.status in {"idle", "planning"} else goal.status),
+        "active_agents": active_agents,
+        "completed_tasks": completed,
+        "total_tasks": len(tasks),
+        "progress": round(completed / len(tasks) * 100) if tasks else 0,
+        "total_tokens_used": total_tokens,
+        "token_budget": goal.budget_tokens,
+        "quota_percent": min(100, round(total_tokens / max(goal.budget_tokens or 1, 1) * 100)),
+        "handoff_count": db.query(HandoffRecord).filter(HandoffRecord.goal_id == goal.id).count(),
+        "error_count": db.query(ExecutionLog).filter(ExecutionLog.goal_id == goal.id, ExecutionLog.event_status.in_(["failed", "error"])).count(),
+        "artifact_count": db.query(Artifact).filter(Artifact.task_id.in_([task.id for task in tasks])).count() if tasks else 0,
+        "created_at": goal.created_at.isoformat() if goal.created_at else None,
+        "updated_at": goal.updated_at.isoformat() if goal.updated_at else None,
+    }
 
 
 def get_workspace_state(db: Session, goal_id: str) -> Dict:

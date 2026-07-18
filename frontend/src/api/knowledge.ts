@@ -18,9 +18,8 @@ export async function generateMemories(goalId: string): Promise<EvolutionSummary
   return unwrap(resp, { memory_drafts: [], skill_drafts: [], total_memories: 0, total_skills: 0, pending_review: 0 });
 }
 
-export async function getEvolutionSummary(goalId?: string): Promise<EvolutionSummary> {
-  const params = goalId ? `?goal_id=${goalId}` : '';
-  const resp = await client.get<ApiResponse<EvolutionSummary>>(`/knowledge/evolution${params}`);
+export async function getEvolutionSummary(goalId?: string, runId?: string): Promise<EvolutionSummary> {
+  const resp = await client.get<ApiResponse<EvolutionSummary>>('/knowledge/evolution', { params: { goal_id: goalId, run_id: runId } });
   return unwrap(resp, { memory_drafts: [], skill_drafts: [], total_memories: 0, total_skills: 0, pending_review: 0 });
 }
 

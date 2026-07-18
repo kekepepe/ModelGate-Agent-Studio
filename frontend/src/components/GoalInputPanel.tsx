@@ -5,7 +5,7 @@ import type { TeamPreset } from '../types/team';
 import type { Goal } from '../types/workspace';
 
 interface GoalInputPanelProps {
-  onGoalCreated: (goalId: string) => void;
+  onGoalCreated: (goalId: string, runId: string) => void;
   activeGoalId?: string | null;
   goalTitle?: string | null;
   goal?: Goal | null;
@@ -33,9 +33,9 @@ export default function GoalInputPanel({ onGoalCreated, activeGoalId, goalTitle,
     try {
       const result = await createGoal.mutateAsync({ title: title.trim(), description: description.trim() || undefined, executionMode, budgetTokens, maxDurationSeconds, teamPreset: preset?.id });
       const startResult = await startGoal.mutateAsync(result.goal_id);
-      onGoalCreated(startResult.goal_id);
-    } catch {
-      setError('创建失败，请重试');
+      onGoalCreated(startResult.goal_id, startResult.run_id || result.run_id);
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : '创建失败，请重试');
     }
   };
 

@@ -16,8 +16,8 @@ function unwrap<T>(resp: { data: ApiResponse<T> }, fallback: T): T {
   return resp.data.data || fallback;
 }
 
-export async function createGoal(title: string, description?: string, executionMode: 'live' | 'sandbox' | 'dry_run' | 'mock' = 'live', budgetTokens = 100000, budgetCostUsd?: number, maxDurationSeconds = 3600, teamPreset?: string): Promise<{ goal_id: string; status: string }> {
-  const resp = await client.post<ApiResponse<{ goal_id: string; status: string }>>('/goals', {
+export async function createGoal(title: string, description?: string, executionMode: 'live' | 'sandbox' | 'dry_run' | 'mock' = 'live', budgetTokens = 100000, budgetCostUsd?: number, maxDurationSeconds = 3600, teamPreset?: string): Promise<{ goal_id: string; run_id: string; status: string }> {
+  const resp = await client.post<ApiResponse<{ goal_id: string; run_id: string; status: string }>>('/goals', {
     title, description, execution_mode: executionMode, budget_tokens: budgetTokens,
     budget_cost_usd: budgetCostUsd, max_duration_seconds: maxDurationSeconds, team_preset: teamPreset,
   });
@@ -27,8 +27,8 @@ export async function createGoal(title: string, description?: string, executionM
   return resp.data.data;
 }
 
-export async function startGoal(goalId: string): Promise<{ goal_id: string; status: string }> {
-  const resp = await client.post<ApiResponse<{ goal_id: string; status: string }>>(`/goals/${goalId}/start`);
+export async function startGoal(goalId: string): Promise<{ goal_id: string; run_id: string; status: string }> {
+  const resp = await client.post<ApiResponse<{ goal_id: string; run_id: string; status: string }>>(`/goals/${goalId}/start`);
   if (!resp.data.success || !resp.data.data) {
     throw new Error(resp.data.error?.message || '启动 Goal 失败');
   }

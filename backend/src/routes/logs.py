@@ -33,6 +33,7 @@ def create_log(data: ExecutionLogCreate, db: Session = Depends(get_db)):
 
 @router.get("/logs")
 def list_logs(
+    run_id: Optional[str] = Query(None),
     goal_id: Optional[str] = Query(None),
     task_id: Optional[str] = Query(None),
     agent_id: Optional[str] = Query(None),
@@ -50,6 +51,7 @@ def list_logs(
     try:
         result = log_service.list_logs(
             db=db,
+            run_id=run_id,
             goal_id=goal_id,
             task_id=task_id,
             agent_id=agent_id,

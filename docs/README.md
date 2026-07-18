@@ -10,7 +10,7 @@
 
 如果你是第一次接触本项目，建议按以下顺序阅读：
 
-1. **[roadmap/2026-07-14-下一阶段产品与开发总方案.md](roadmap/2026-07-14-下一阶段产品与开发总方案.md)** — 当前产品方向、Workspace 主入口与 Handoff 收拢方案（15 分钟）
+1. **[roadmap/2026-07-18-Workspace统一导航与信息架构重构开发计划.md](roadmap/2026-07-18-Workspace统一导航与信息架构重构开发计划.md)** — 当前 Workspace 统一导航、Overview 与稳定 Run URL 方案（15 分钟）
 2. **[product/overview.md](product/overview.md)** — 产品定位、愿景、目标用户（5 分钟）
 3. **[roadmap.md](roadmap.md)** — V0 → MVP → V1 的历史产品路线图（5 分钟）
 4. **[mvp/MVP-功能优先级裁剪.md](mvp/MVP-功能优先级裁剪.md)** — MVP 范围与 MoSCoW 优先级（10 分钟）
@@ -54,6 +54,7 @@
 | 文件 | 说明 |
 |------|------|
 | [API-Contract.md](architecture/API-Contract.md) | 前后端接口通用约定（Base URL、响应格式、分页） |
+| [Workspace统一导航路由与Run-API.md](architecture/Workspace统一导航路由与Run-API.md) | Workspace 路由、稳定 runId、恢复与跨模块 API |
 | [数据结构与数据库Schema.md](architecture/数据结构与数据库Schema.md) | **权威数据结构总览**：从所有 PRD 提取的统一对象定义和状态枚举 |
 
 **注意**：`数据结构与数据库Schema.md` 已按 PRD 重写。如与 PRD 冲突，以 PRD 为准，Schema 文档会同步更新。
@@ -135,4 +136,4 @@
 
 ---
 
-> 最后更新：2026-07-14
+> 最后更新：2026-07-18
