@@ -5,12 +5,8 @@ from sqlalchemy.orm import Session
 from src.core.database import get_db
 from src.schemas.quota import (
     RecordUsageRequest,
-    RecordUsageResponse,
     UpdateQuotaRequest,
     UpdateStatusRequest,
-    QuotaOverviewResponse,
-    QuotaStatusResponse,
-    QuotaRecordResponse,
 )
 from src.services import quota_service
 

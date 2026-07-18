@@ -3,13 +3,12 @@ import os
 import tempfile
 import uuid
 
-import pytest
 
 from src.models.agent import AgentStation
 from src.models.handoff import ExecutionLog
 from src.models.workspace import Goal, Task, WorkspaceCheckpoint
 from src.services import tool_service
-from src.services.tool_service import ToolExecutor, ToolPolicyError, seed_builtin_tools
+from src.services.tool_service import ToolExecutor, seed_builtin_tools
 from src.services.workspace_service import get_workspace_state
 
 
@@ -33,7 +32,11 @@ def test_file_write_creates_checkpoint_and_restore_reverts(db_session):
         executor = ToolExecutor()
         write = asyncio.run(executor.execute(db_session, "file_write", {"path": "sample.py", "content": "value = 2\n"}, goal.id, task.id, agent.id, "worker"))
         assert write.status == "completed"
-        event = db_session.query(ExecutionLog).filter(ExecutionLog.task_id == task.id, ExecutionLog.tool_name == "file_write").one()
+        event = db_session.query(ExecutionLog).filter(
+            ExecutionLog.task_id == task.id,
+            ExecutionLog.tool_name == "file_write",
+            ExecutionLog.event_type == "tool.completed",
+        ).one()
         assert event.event_status == "completed"
         checkpoint = db_session.query(WorkspaceCheckpoint).filter(WorkspaceCheckpoint.task_id == task.id).one()
         assert checkpoint.content == "value = 1\n"
@@ -48,7 +51,11 @@ def test_workspace_tool_rejects_path_escape(db_session):
         denied = asyncio.run(ToolExecutor().execute(db_session, "file_write", {"path": "../outside.txt", "content": "no"}, goal.id, task.id, agent.id, "worker"))
         assert denied.status == "denied"
         assert "escapes" in (denied.error_message or "")
-        event = db_session.query(ExecutionLog).filter(ExecutionLog.task_id == task.id, ExecutionLog.tool_name == "file_write").one()
+        event = db_session.query(ExecutionLog).filter(
+            ExecutionLog.task_id == task.id,
+            ExecutionLog.tool_name == "file_write",
+            ExecutionLog.event_type == "tool.failed",
+        ).one()
         assert event.event_status == "denied"
 
 
@@ -140,7 +147,7 @@ def test_workspace_state_surfaces_real_tool_evidence(db_session):
         db_session.commit()
         executor = ToolExecutor()
         asyncio.run(executor.execute(db_session, "file_write", {"path": "evidence.py", "content": "value = 1\n"}, goal.id, task.id, agent.id, "worker"))
-        asyncio.run(executor.execute(db_session, "test_runner", {"command": "python3 -c 'print(1)'"}, goal.id, task.id, agent.id, "worker"))
+        asyncio.run(executor.execute(db_session, "test_runner", {"command": "python3 -m unittest evidence"}, goal.id, task.id, agent.id, "worker"))
         item = get_workspace_state(db_session, goal.id)["tasks"][0]
         assert item["latest_tool_call"]["tool_name"] == "test_runner"
         assert item["test_status"] == "completed"

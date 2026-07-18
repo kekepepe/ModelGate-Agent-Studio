@@ -1,4 +1,3 @@
-from datetime import datetime
 from typing import Any, Dict, List, Optional
 from pydantic import BaseModel, Field
 
@@ -97,6 +96,7 @@ class WorkspaceState(BaseModel):
     tasks: List[TaskResponse] = Field(default_factory=list)
     agents: List[AgentState] = Field(default_factory=list)
     workers: List[WorkerState] = Field(default_factory=list)
+    worktrees: List[Dict[str, Any]] = Field(default_factory=list)
     active_plan: Optional[Dict[str, Any]] = None
     plan_versions: List[Dict[str, Any]] = Field(default_factory=list)
     task_mode: Optional[str] = None

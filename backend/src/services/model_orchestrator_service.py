@@ -15,6 +15,7 @@ from src.schemas.planning import ExecutionPlanContract
 from src.services import agent_selector_service, context_service, log_service
 from src.services.providers.base import ModelRequest
 from src.services.providers.provider_factory import get_provider
+from src.services.providers.provider_config import provider_model_name
 
 
 class ModelPlanningUnavailable(RuntimeError):
@@ -59,8 +60,9 @@ class ModelOrchestrator:
         except Exception as exc:
             raise ModelPlanningUnavailable(str(exc)) from exc
 
+        remote_model_name = provider_model_name("planner", model.model_name)
         if goal.execution_mode != "mock" and hasattr(provider, "health_check"):
-            health = asyncio.run(provider.health_check(model.model_name))
+            health = asyncio.run(provider.health_check(remote_model_name))
             if not health.get("healthy"):
                 raise ModelPlanningUnavailable(health.get("message") or "Planner model is unhealthy")
 
@@ -74,12 +76,13 @@ class ModelOrchestrator:
         for attempt in range(1, self.max_attempts + 1):
             request = ModelRequest(
                 provider=model.provider,
-                model=model.id,
+                model=remote_model_name,
                 messages=messages,
                 temperature=0.1,
                 max_tokens=8192,
                 metadata={
-                    "provider_model_name": model.model_name,
+                    "provider_model_name": remote_model_name,
+                    "model_record_id": model.id,
                     "phase": "planning",
                     "goal_id": goal.id,
                     "attempt": attempt,
@@ -105,7 +108,13 @@ class ModelOrchestrator:
                         "total_tokens": response.total_tokens,
                     },
                     "latency_ms": response.latency_ms,
-                    "metadata": {"phase": "planning", "attempt": attempt, "task_mode": contract.task_mode},
+                    "metadata": {
+                        "phase": "planning",
+                        "attempt": attempt,
+                        "task_mode": contract.task_mode,
+                        "provider_model_name": remote_model_name,
+                        "provider_request_id": response.request_id,
+                    },
                 })
                 return ModelPlanningResult(contract, agents, last_output, repair_records, model.id)
             except (json.JSONDecodeError, ValidationError, ValueError, ModelPlanningFailed) as exc:

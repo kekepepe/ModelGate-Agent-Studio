@@ -1,6 +1,6 @@
 import { lazy, Suspense, useCallback, useMemo, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import { useWorkspaceState, useTaskDetail, useExecuteGoal, usePauseGoal, useResumeGoal, useRuntimeEvents, useStopGoal, useRetryTask, useConfirmPlan, useUpdatePlan } from '../hooks/useWorkspace';
+import { useWorkspaceState, useTaskDetail, useExecuteGoal, usePauseGoal, useResumeGoal, useRuntimeEvents, useRuntimeStatus, useStopGoal, useRetryTask, useConfirmPlan, useUpdatePlan } from '../hooks/useWorkspace';
 import { useAgents } from '../hooks/useAgents';
 import { useAcceptHandoff, useHandoff, useTriggerHandoff, useUpdateHandoffResult } from '../hooks/useHandoffs';
 import TopStatusBar from '../components/TopStatusBar';
@@ -28,6 +28,7 @@ export default function WorkspacePage() {
 
   const { data: state, isLoading } = useWorkspaceState(goalId);
   const { data: taskDetail, isLoading: isTaskLoading } = useTaskDetail(selectedTaskId);
+  const { data: runtimeStatus } = useRuntimeStatus(goalId);
   useRuntimeEvents(goalId);
   const { data: agentsData } = useAgents({ page_size: 100 });
   const executeGoal = useExecuteGoal();
@@ -170,7 +171,13 @@ export default function WorkspacePage() {
         </main>
       </div>
 
-      <BottomConsole goalId={goalId} tasks={activeTasks} handoffs={state?.handoffs || []} />
+      <BottomConsole
+        goalId={goalId}
+        tasks={activeTasks}
+        handoffs={state?.handoffs || []}
+        runtimeStatus={runtimeStatus}
+        onOpenTask={setSelectedTaskId}
+      />
 
       <AgentDetailModal
         task={selectedTask}

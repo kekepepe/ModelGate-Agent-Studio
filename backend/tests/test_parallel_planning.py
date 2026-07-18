@@ -7,6 +7,7 @@ from src.models.model import Model
 from src.models.workspace import Task
 from src.services import runtime_service
 from src.services.orchestrator_service import plan_goal, ready_tasks
+from src.services.state_machine_service import transition_task
 
 
 def test_frontend_backend_goal_creates_parallel_isolated_tasks(db_session):
@@ -28,8 +29,9 @@ def test_frontend_backend_goal_creates_parallel_isolated_tasks(db_session):
     assert set(merge._get_json("dependencies")) == {task.id for task in coding}
     assert verifier._get_json("dependencies") == [merge.id]
 
-    planner.status = "completed"
-    db_session.commit()
+    transition_task(db_session, planner, "assigned", summary="Fixture assignment")
+    transition_task(db_session, planner, "running", summary="Fixture execution")
+    transition_task(db_session, planner, "completed", summary="Fixture completion")
     assert {task.id for task in ready_tasks(db_session, goal.id)} == {task.id for task in coding}
 
 

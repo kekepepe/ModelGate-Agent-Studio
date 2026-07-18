@@ -1,5 +1,4 @@
 from typing import List, Optional
-from datetime import datetime
 from pydantic import BaseModel, Field, field_validator, ConfigDict
 
 MODEL_CONTEXT_TOKEN_OPTIONS = {128 * 1024, 256 * 1024, 512 * 1024, 1024 * 1024}

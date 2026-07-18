@@ -6,11 +6,10 @@ token counts, and latency. Records call history for test assertions.
 
 import asyncio
 import random
-import time
-from dataclasses import dataclass, field
-from typing import Callable, Dict, Optional
+from dataclasses import dataclass
+from typing import Any, AsyncIterator, Callable, Dict, Optional
 
-from src.services.providers.base import ModelRequest, ModelResponse
+from src.services.providers.base import ModelRequest, ModelResponse, ModelStreamEvent
 
 
 @dataclass
@@ -105,6 +104,24 @@ class MockModelProvider:
         )
         self._call_history.append({"request": request, "response": resp})
         return resp
+
+    async def health_check(self, model: str) -> Dict[str, Any]:
+        return {"healthy": True, "message": "Explicit Mock mode", "model": model}
+
+    async def stream(self, request: ModelRequest) -> AsyncIterator[ModelStreamEvent]:
+        response = await self.generate(request)
+        if response.content:
+            yield ModelStreamEvent(type="token", content=response.content)
+        yield ModelStreamEvent(
+            type="done",
+            raw={
+                "usage": {
+                    "prompt_tokens": response.input_tokens,
+                    "completion_tokens": response.output_tokens,
+                    "total_tokens": response.total_tokens,
+                }
+            },
+        )
 
     def _default_output(self, prompt: str, model_id: str, system_prompt: Optional[str]) -> str:
         preview = prompt[:100].replace("\n", " ")

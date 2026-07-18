@@ -1,8 +1,6 @@
-import json
 import uuid
-from datetime import datetime, timezone
 from math import ceil
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, Optional
 
 from sqlalchemy import or_
 from sqlalchemy.orm import Session
@@ -10,6 +8,8 @@ from sqlalchemy.orm import Session
 from src.models.agent import AgentStation
 from src.models.handoff import ExecutionLog, HandoffTask
 from src.models.model import Model
+from src.models.workspace import Task
+from src.services.security_service import redact_data
 
 
 class LogNotFoundError(Exception):
@@ -20,7 +20,8 @@ class LogValidationError(Exception):
     pass
 
 
-def create_log(db: Session, data: Dict[str, Any]) -> ExecutionLog:
+def create_log(db: Session, data: Dict[str, Any], *, commit: bool = True) -> ExecutionLog:
+    data = redact_data(data)
     log = ExecutionLog(
         id=str(uuid.uuid4()),
         goal_id=data.get("goal_id"),
@@ -48,8 +49,11 @@ def create_log(db: Session, data: Dict[str, Any]) -> ExecutionLog:
     if data.get("routing_info"):
         log.set_routing_info(data["routing_info"])
     db.add(log)
-    db.commit()
-    db.refresh(log)
+    if commit:
+        db.commit()
+        db.refresh(log)
+    else:
+        db.flush()
     return log
 
 
@@ -183,7 +187,9 @@ def _agent_name(db: Session, agent_id: Optional[str]) -> Optional[str]:
 def _task_title(db: Session, task_id: Optional[str]) -> Optional[str]:
     if not task_id:
         return None
-    task = db.query(HandoffTask).filter(HandoffTask.id == task_id).first()
+    task = db.query(Task).filter(Task.id == task_id).first()
+    if not task:
+        task = db.query(HandoffTask).filter(HandoffTask.id == task_id).first()
     return task.title if task else None
 
 

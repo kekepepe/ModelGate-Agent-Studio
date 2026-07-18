@@ -1,4 +1,3 @@
-import pytest
 
 
 def _create_agent(client, name, role, model_id="claude-opus-4-7"):

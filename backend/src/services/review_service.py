@@ -8,7 +8,6 @@ After all tasks complete, generates a review assessing:
   5. Whether revision or supplementary tasks are needed
 """
 
-import json
 import uuid
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
@@ -18,7 +17,7 @@ from sqlalchemy.orm import Session
 from src.models.agent import AgentStation
 from src.models.handoff import ExecutionLog
 from src.models.supervisor import SupervisorReview
-from src.models.workspace import Goal, Task
+from src.models.workspace import Goal
 from src.models.model import Model
 from src.services import log_service
 from src.services.providers import get_provider
@@ -90,19 +89,21 @@ def generate_review(db: Session, goal_id: str, run_id: Optional[str] = None) -> 
         model_id = supervisor.default_model_id if supervisor else "model-gpt-4-turbo"
         model = db.query(Model).filter(Model.id == model_id).first()
         provider = get_provider(model=model, execution_mode=goal.execution_mode)
+        from src.services.providers.provider_config import provider_model_name
+        remote_model_name = provider_model_name("supervisor", model.model_name if model else model_id)
         req = ModelRequest(
             provider=model.provider if model else "unknown",
-            model=model_id,
+            model=remote_model_name,
             messages=[
                 {"role": "system", "content": "You are a Supervisor Agent reviewing task execution results."},
                 {"role": "user", "content": review_prompt},
             ],
-            metadata={"provider_model_name": model.model_name if model else model_id},
+            metadata={"provider_model_name": remote_model_name, "model_record_id": model_id},
         )
         loop = asyncio.new_event_loop()
         response = loop.run_until_complete(provider.generate(req))
         loop.close()
-    except Exception as e:
+    except Exception:
         # Fallback: generate a basic review without model call
         response_content = f"Review generated without model call.\nCompleted: {len(completed)}/{len(tasks)} tasks.\nFailed: {len(failed)} tasks.\nErrors: {len(errors)}.\nHandoffs: {len(handoffs)}."
         response_tokens = 0
@@ -115,6 +116,26 @@ def generate_review(db: Session, goal_id: str, run_id: Optional[str] = None) -> 
         review_agent_id = supervisor.id if supervisor else None
         review_model_id = model_id
         response_latency = response.latency_ms
+        log_service.create_log(db, {
+            "goal_id": goal_id,
+            "agent_id": review_agent_id,
+            "model_id": review_model_id,
+            "event_type": "model_call",
+            "event_status": "completed",
+            "input_summary": "Supervisor completion review",
+            "output_summary": response_content[:200],
+            "token_usage": {
+                "input_tokens": response.input_tokens,
+                "output_tokens": response.output_tokens,
+                "total_tokens": response.total_tokens,
+            },
+            "latency_ms": response.latency_ms,
+            "metadata": {
+                "phase": "supervisor_review",
+                "provider_model_name": remote_model_name,
+                "provider_request_id": response.request_id,
+            },
+        })
 
     # Parse structured result from response
     verification_failures = [task for task in tasks if task.task_type in {"coding", "merge", "verification"} and task.status != "completed_verified"]

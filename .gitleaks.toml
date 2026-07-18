@@ -1,0 +1,12 @@
+title = "ModelGate Agent Studio secret scanning"
+
+[extend]
+useDefault = true
+
+[[allowlists]]
+description = "Synthetic credentials used only to prove runtime redaction"
+paths = [
+  '''backend/tests/test_security_boundaries\.py''',
+  '''backend/tests/test_fault_injection\.py''',
+]
+

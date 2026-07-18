@@ -125,6 +125,39 @@ describe('TaskDetailPanel', () => {
     expect(screen.getByText(/Handoff without replanning/)).toBeInTheDocument()
   })
 
+  it('keeps 100 selection candidates inspectable in a bounded scroll region', () => {
+    const candidates = Array.from({ length: 100 }, (_, index) => ({
+      agent_id: `candidate-${index + 1}`,
+      agent_name: `Candidate ${index + 1}`,
+      role: 'coder',
+      eligible: true,
+      score: 1 - index / 200,
+      selected_model_id: `model-${index + 1}`,
+      selected_model_name: `Model ${index + 1}`,
+      elimination_reasons: [],
+      score_breakdown: {},
+    }))
+    renderWithProviders(<TaskDetailPanel task={{
+      ...mockTask,
+      selection_decision: {
+        id: 'selection-large',
+        task_id: 'task-1',
+        required_capabilities: ['code_edit'],
+        required_tools: ['file_write'],
+        selected_agent_id: 'candidate-1',
+        selected_model_id: 'model-1',
+        backup_model_ids: [],
+        score: 1,
+        selection_reason: 'Large candidate rendering fixture.',
+        fallback_entry: { agent_ids: [], model_ids: [], handoff_allowed: false, reason: 'No fallback.' },
+        candidates,
+      },
+    }} onClose={vi.fn()} />)
+
+    expect(screen.getByText('Candidate 1 · Model 1')).toBeInTheDocument()
+    expect(screen.getByText('Candidate 100 · Model 100')).toBeInTheDocument()
+  })
+
   it('shows the recorded router decision and recent logs in history', () => {
     renderWithProviders(
       <TaskDetailPanel

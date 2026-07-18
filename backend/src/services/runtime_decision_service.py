@@ -44,7 +44,13 @@ def decide_failure(
     )
 
 
-def record_decision(db: Session, task: Task, decision: RuntimeDecisionContract) -> None:
+def record_decision(
+    db: Session,
+    task: Task,
+    decision: RuntimeDecisionContract,
+    *,
+    commit: bool = True,
+) -> None:
     log_service.create_log(db, {
         "goal_id": task.goal_id,
         "task_id": task.id,
@@ -52,7 +58,7 @@ def record_decision(db: Session, task: Task, decision: RuntimeDecisionContract) 
         "event_status": decision.action,
         "output_summary": decision.reason,
         "metadata": decision.model_dump(),
-    })
+    }, commit=commit)
 
 
 def record_goal_decision(db: Session, goal_id: str, decision: RuntimeDecisionContract) -> None:

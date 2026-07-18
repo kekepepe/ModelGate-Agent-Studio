@@ -7,11 +7,12 @@ Supports two provider types:
 Configuration via environment variables or explicit set_provider().
 """
 
-import os
 from typing import Optional
 
 from src.services.providers.base import ModelProvider
 from src.services.providers.mock_provider import MockModelProvider
+from src.services.providers.provider_config import execution_mode as configured_execution_mode
+from src.services.providers.provider_config import provider_api_base, provider_api_key
 
 
 _provider: Optional[ModelProvider] = None
@@ -31,7 +32,7 @@ def get_provider(model=None, execution_mode: Optional[str] = None) -> ModelProvi
     global _provider
     if _provider is not None:
         return _provider
-    mode = (execution_mode or os.environ.get("EXECUTION_MODE", "live")).lower()
+    mode = execution_mode.lower() if execution_mode else configured_execution_mode()
     if mode == "mock":
         return create_provider("mock")
     if mode not in {"live", "sandbox", "dry_run"}:
@@ -40,13 +41,13 @@ def get_provider(model=None, execution_mode: Optional[str] = None) -> ModelProvi
         raise ProviderConfigurationError("No selected live model is available")
     if not getattr(model, "is_enabled", False):
         raise ProviderConfigurationError(f"Model '{getattr(model, 'display_name', model.id)}' is disabled")
-    api_key = getattr(model, "api_key", None) or os.environ.get("OPENAI_API_KEY")
+    api_key = provider_api_key(getattr(model, "api_key", None))
     if not api_key:
         raise ProviderConfigurationError(
             f"Live execution requires an API key for enabled model '{getattr(model, 'display_name', model.id)}'. "
             "Configure it in Model Manager or explicitly select Mock mode."
         )
-    return create_provider("openai", api_key=api_key, base_url=getattr(model, "api_base_url", None))
+    return create_provider("openai", api_key=api_key, base_url=provider_api_base(getattr(model, "api_base_url", None)))
 
 
 def set_provider(provider: ModelProvider) -> None:
@@ -86,11 +87,11 @@ def _configure_mock_defaults(provider: MockModelProvider) -> None:
     provider.configure_model(
         model_id="model-gpt-4-turbo",
         output_text_fn=lambda prompt, sys: (
-            f"[GPT-4 Turbo Plan]\n"
-            f"Analyzed goal and created task breakdown:\n"
-            f"- Task 1: Core implementation\n"
-            f"- Task 2: Review and testing\n\n"
-            f"Estimated effort: moderate."
+            "[GPT-4 Turbo Plan]\n"
+            "Analyzed goal and created task breakdown:\n"
+            "- Task 1: Core implementation\n"
+            "- Task 2: Review and testing\n\n"
+            "Estimated effort: moderate."
         ),
         input_tokens=200,
         output_tokens=300,
@@ -99,10 +100,10 @@ def _configure_mock_defaults(provider: MockModelProvider) -> None:
     provider.configure_model(
         model_id="model-claude-opus",
         output_text_fn=lambda prompt, sys: (
-            f"[Claude 3 Opus]\n"
-            f"Executed coding task successfully.\n"
-            f"```python\ndef solve():\n    # Implementation\n    return result\n```\n"
-            f"All tests passing."
+            "[Claude 3 Opus]\n"
+            "Executed coding task successfully.\n"
+            "```python\ndef solve():\n    # Implementation\n    return result\n```\n"
+            "All tests passing."
         ),
         input_tokens=250,
         output_tokens=400,
@@ -111,9 +112,9 @@ def _configure_mock_defaults(provider: MockModelProvider) -> None:
     provider.configure_model(
         model_id="model-claude-3-haiku",
         output_text_fn=lambda prompt, sys: (
-            f"[Claude 3 Haiku]\n"
-            f"Summary generated.\n"
-            f"Key findings: task completed with expected quality."
+            "[Claude 3 Haiku]\n"
+            "Summary generated.\n"
+            "Key findings: task completed with expected quality."
         ),
         input_tokens=150,
         output_tokens=200,
@@ -122,9 +123,9 @@ def _configure_mock_defaults(provider: MockModelProvider) -> None:
     provider.configure_model(
         model_id="model-deepseek-coder",
         output_text_fn=lambda prompt, sys: (
-            f"[DeepSeek Coder]\n"
-            f"Generated implementation:\n"
-            f"```typescript\nfunction main() {{\n  // solution\n}}\n```"
+            "[DeepSeek Coder]\n"
+            "Generated implementation:\n"
+            "```typescript\nfunction main() {\n  // solution\n}\n```"
         ),
         input_tokens=200,
         output_tokens=350,

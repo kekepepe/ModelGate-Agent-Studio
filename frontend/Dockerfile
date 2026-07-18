@@ -1,10 +1,10 @@
 # Stage 1: Build
-FROM node:20-alpine AS builder
+FROM node:22.23.1-alpine AS builder
 
 WORKDIR /app
 
-COPY package.json package-lock.json* ./
-RUN npm install
+COPY package.json package-lock.json ./
+RUN npm ci
 
 COPY . .
 

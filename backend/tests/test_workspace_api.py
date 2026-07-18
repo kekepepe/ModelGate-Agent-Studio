@@ -57,6 +57,12 @@ class TestStartGoal:
         data = resp2.json()
         assert data["success"] is True
         assert data["data"]["status"] == "planning"
+        from src.models.handoff import ExecutionLog
+        event_types = {
+            event.event_type
+            for event in db_session.query(ExecutionLog).filter(ExecutionLog.goal_id == goal_id).all()
+        }
+        assert {"plan.generating", "plan.created"}.issubset(event_types)
 
     def test_start_goal_activates_only_needed_serial_capabilities(self, client: TestClient, db_session):
         """A routine code Goal does not create a redundant Planner Task."""

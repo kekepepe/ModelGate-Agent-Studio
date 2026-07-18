@@ -263,7 +263,6 @@ function ModelFormModal({ model, onSave, onCancel, isSubmitting, error }: ModelF
     speed_level: model?.speed_level || 3,
     is_enabled: model?.is_enabled ?? true,
     is_default: model?.is_default ?? false,
-    api_key: '',
     api_base_url: model?.api_base_url || '',
   });
 
@@ -343,18 +342,10 @@ function ModelFormModal({ model, onSave, onCancel, isSubmitting, error }: ModelF
             />
           </div>
 
-          <div>
-            <label className="block text-xs font-medium text-stone-600 mb-1">API Key</label>
-            <input
-              type="password"
-              value={form.api_key || ''}
-              onChange={(e) => handleChange('api_key', e.target.value)}
-              className="w-full px-3 py-2 text-sm border border-stone-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-stone-300"
-              placeholder={isEdit && !form.api_key ? '留空则不修改' : '输入 API Key'}
-            />
-            {isEdit && model?.has_api_key && (
-              <p className="text-xs text-stone-400 mt-1">已设置 API Key，留空则不修改</p>
-            )}
+          <div className="rounded-lg border border-blue-200 bg-blue-50 p-3 text-xs text-blue-800">
+            API Key 不在浏览器或数据库中录入。请在后端运行环境配置
+            <code className="mx-1 rounded bg-blue-100 px-1">PROVIDER_API_KEY</code>
+            或 <code className="rounded bg-blue-100 px-1">OPENAI_API_KEY</code>。
           </div>
 
           <div>

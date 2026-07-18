@@ -1,12 +1,11 @@
 import uuid
-from datetime import datetime, timezone
 from typing import Dict, Optional
 
 from sqlalchemy.orm import Session
 
-from src.models.agent import AgentStation
-from src.models.workspace import Goal, Task
+from src.models.workspace import Goal
 from src.core.config import settings
+from src.services.state_machine_service import transition_goal
 
 
 class GoalNotFoundError(Exception):
@@ -62,8 +61,15 @@ def start_goal(db: Session, goal_id: str) -> Dict[str, str]:
     if goal.status != "idle":
         raise GoalValidationError(f"Goal must be idle to start, current status: {goal.status}")
 
-    goal.status = "planning"
-    goal.updated_at = datetime.now(timezone.utc)
+    transition_goal(db, goal, "planning", summary="Goal entered planning", event_status="planning")
+
+    from src.services import log_service
+    log_service.create_log(db, {
+        "goal_id": goal.id,
+        "event_type": "plan.generating",
+        "event_status": "started",
+        "output_summary": "Generating a validated ExecutionPlan",
+    })
 
     from src.services.orchestrator_service import plan_goal
     tasks = plan_goal(db, goal)

@@ -9,7 +9,7 @@ import json
 import time
 import uuid
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, List, Optional
 
 from sqlalchemy.orm import Session
@@ -20,13 +20,13 @@ from src.models.agent import AgentStation
 from src.models.handoff import ExecutionLog, HandoffRecord, WorkerSession
 from src.models.model import Model
 from src.models.workspace import Goal, PlanTask, RuntimeRun, Task
+from src.core.config import settings
 from src.services import (
     goal_service,
     handoff_service,
     log_service,
     quota_service,
     router_service,
-    task_service,
 )
 from src.services.providers import get_provider
 from src.services.providers.base import ModelRequest
@@ -68,6 +68,8 @@ ROLE_TO_TASK_TYPE = {
 def execute_goal_pipeline(db: Session, goal_id: str) -> Dict[str, Any]:
     """Execute the full goal pipeline: Plan -> Execute Tasks -> Complete."""
     goal = goal_service.get_goal(db, goal_id)
+    from src.services.recovery_service import recover_interrupted_tasks
+    recover_interrupted_tasks(db, goal_id)
     if goal.status not in ("planning", "running"):
         raise GoalNotReadyError(f"Goal must be planning or running, current: {goal.status}")
     ensure_plan_confirmed(db, goal_id)
@@ -189,6 +191,14 @@ def execute_goal_pipeline(db: Session, goal_id: str) -> Dict[str, Any]:
         goal.status = completion_gate["goal_status"]
         goal.final_verification_status = completion_gate["status"]
     goal.updated_at = datetime.now(timezone.utc)
+    if goal.status == "completed":
+        log_service.create_log(db, {
+            "goal_id": goal.id,
+            "event_type": "goal.completed",
+            "event_status": "completed",
+            "output_summary": "Goal passed its Completion Gate",
+            "metadata": {"verification_status": goal.final_verification_status},
+        }, commit=False)
     db.commit()
 
     # Phase 4: Supervisor Review (policy-gated, never a ceremonial fixed step)
@@ -374,7 +384,7 @@ def _execute_parallel_tasks(db: Session, task_ids: List[str]) -> List[tuple[str,
 def _merge_parallel_worktrees(db: Session, task_ids: List[str]) -> set[str]:
     """Merge worker diffs serially; materialize conflicts as resolution work."""
     from src.models.workspace import WorkspaceWorktree
-    from src.services.worktree_service import WorktreeError, merge_worktree
+    from src.services.worktree_service import merge_worktree
     conflicted = set()
     for task_id in task_ids:
         record = db.query(WorkspaceWorktree).filter(WorkspaceWorktree.task_id == task_id).first()
@@ -385,7 +395,13 @@ def _merge_parallel_worktrees(db: Session, task_ids: List[str]) -> set[str]:
         log_service.create_log(db, {
             "goal_id": task.goal_id, "task_id": task.id, "event_type": "worktree_merged",
             "event_status": result["status"], "output_summary": result["message"],
-            "metadata": {"worktree": record.path, "changed": result["changed"]},
+            "metadata": {
+                "worktree_id": record.id, "worktree": record.path,
+                "branch": record.branch_name, "commit_sha": record.commit_sha,
+                "merge_commit_sha": record.merge_commit_sha,
+                "conflict_files": json.loads(record.conflict_files or "[]"),
+                "changed": result["changed"],
+            },
         })
         if result["status"] == "conflict":
             conflicted.add(task.id)
@@ -456,6 +472,14 @@ def _execute_single_task(db: Session, task: Task) -> Dict[str, Any]:
     if task.status in {"pending", "ready"}:
         task.status = "assigned"
         task.updated_at = datetime.now(timezone.utc)
+        log_service.create_log(db, {
+            "goal_id": task.goal_id,
+            "task_id": task.id,
+            "agent_id": task.assigned_agent_id,
+            "event_type": "task.assigned",
+            "event_status": "completed",
+            "output_summary": "Task assigned to an enabled Agent",
+        }, commit=False)
         db.commit()
 
     # 2. Get agent
@@ -523,6 +547,8 @@ def _execute_single_task(db: Session, task: Task) -> Dict[str, Any]:
     # 5. Get model info
     model = db.query(Model).filter(Model.id == selected_model_id).first()
     model_name = model.display_name if model else selected_model_id
+    from src.services.providers.provider_config import provider_model_name
+    remote_model_name = provider_model_name(agent.role, model.model_name if model else selected_model_id)
 
     # 6. Build traceable execution context before the worker starts. Handoff
     # context remains authoritative for a resumed worker; otherwise retrieve
@@ -534,7 +560,33 @@ def _execute_single_task(db: Session, task: Task) -> Dict[str, Any]:
         workspace_scope = None
         if "parallel_safe" in task._get_json("required_capabilities"):
             from src.services.worktree_service import create_worktree
-            worktree = create_worktree(db, goal, task)
+            try:
+                worktree = create_worktree(db, goal, task)
+            except Exception as exc:
+                task.status = "blocked"
+                task.blocked_reason = f"Worktree creation failed: {exc}"
+                agent.status = "idle"
+                agent.current_task_id = None
+                log_service.create_log(db, {
+                    "goal_id": task.goal_id,
+                    "task_id": task.id,
+                    "agent_id": agent.id,
+                    "event_type": "worktree_created",
+                    "event_status": "failed",
+                    "error_message": task.blocked_reason,
+                }, commit=False)
+                db.commit()
+                return {
+                    "task_id": task.id,
+                    "status": "blocked",
+                    "output": None,
+                    "tokens_used": 0,
+                    "duration_ms": int((time.time() - start_ts) * 1000),
+                    "model_name": None,
+                    "worker_id": None,
+                    "quota_status": None,
+                    "is_handoff": False,
+                }
             workspace_scope = worktree.path
         worker = WorkerSession(
             id=str(uuid.uuid4()),
@@ -551,6 +603,16 @@ def _execute_single_task(db: Session, task: Task) -> Dict[str, Any]:
         from src.services.context_service import persist_context_snapshot
         persist_context_snapshot(db, worker.id, task.plan_version_id, context_package)
         task.assigned_worker_id = worker.id
+        log_service.create_log(db, {
+            "goal_id": task.goal_id,
+            "task_id": task.id,
+            "agent_id": agent.id,
+            "worker_id": worker.id,
+            "model_id": selected_model_id,
+            "event_type": "worker.started",
+            "event_status": "started",
+            "output_summary": "Worker session created with persisted execution context",
+        }, commit=False)
         log_service.create_log(db, {
             "goal_id": task.goal_id, "task_id": task.id, "agent_id": agent.id, "worker_id": worker.id,
             "event_type": "memory_retrieved", "event_status": "completed",
@@ -572,7 +634,7 @@ def _execute_single_task(db: Session, task: Task) -> Dict[str, Any]:
         try:
             import asyncio
             provider = get_provider(model=model, execution_mode=execution_mode)
-            health = asyncio.run(provider.health_check(model.model_name)) if hasattr(provider, "health_check") else {"healthy": True}
+            health = asyncio.run(provider.health_check(remote_model_name)) if hasattr(provider, "health_check") else {"healthy": True}
             log_service.create_log(db, {
                 "goal_id": task.goal_id, "task_id": task.id, "agent_id": agent.id,
                 "worker_id": worker.id, "model_id": selected_model_id,
@@ -587,6 +649,7 @@ def _execute_single_task(db: Session, task: Task) -> Dict[str, Any]:
 
     # 7. Transition: assigned -> running
     task.status = "running"
+    task.lease_expires_at = datetime.now(timezone.utc) + timedelta(seconds=settings.task_lease_seconds)
     task.updated_at = datetime.now(timezone.utc)
     if agent.status != "running":
         agent.status = "running"
@@ -602,7 +665,7 @@ def _execute_single_task(db: Session, task: Task) -> Dict[str, Any]:
         "event_status": "started",
         "input_summary": task.description or task.title,
         "metadata": {"task_type": task_type, "step": "execution"},
-    })
+    }, commit=False)
     log_service.create_log(db, {
         "goal_id": task.goal_id,
         "task_id": task.id,
@@ -618,7 +681,6 @@ def _execute_single_task(db: Session, task: Task) -> Dict[str, Any]:
     tools_payload = None
     if allowed_tool_names:
         from src.models.tool import ToolDefinition as ToolDefORM
-        from src.services.tool_service import BUILTIN_TOOLS
         tool_defs = db.query(ToolDefORM).filter(
             ToolDefORM.name.in_(allowed_tool_names),
             ToolDefORM.is_enabled == True,
@@ -646,12 +708,14 @@ def _execute_single_task(db: Session, task: Task) -> Dict[str, Any]:
 
     try:
         import asyncio
-        messages = []
+        from src.services.security_service import RUNTIME_SECURITY_POLICY, untrusted_context_message
+
+        messages = [{"role": "system", "content": RUNTIME_SECURITY_POLICY}]
         if agent.system_prompt:
             messages.append({"role": "system", "content": agent.system_prompt})
         if worker.current_context:
-            messages.append({"role": "system", "content": f"Verified execution context:\n{worker.current_context}"})
-        messages.append({"role": "user", "content": task.description or task.title})
+            messages.append({"role": "user", "content": untrusted_context_message("execution context", worker.current_context)})
+        messages.append({"role": "user", "content": untrusted_context_message("task", task.description or task.title)})
 
         for _ in range(max_tool_loops + 1):
             limit_error = _resource_limit_error(agent, total_input_tokens + total_output_tokens, start_ts)
@@ -660,13 +724,13 @@ def _execute_single_task(db: Session, task: Task) -> Dict[str, Any]:
             provider = get_provider(model=model, execution_mode=goal_service.get_goal(db, task.goal_id).execution_mode)
             req = ModelRequest(
                 provider=model.provider if model else "unknown",
-                model=selected_model_id,
+                model=remote_model_name,
                 messages=messages,
                 tools=tools_payload,
-                metadata={"provider_model_name": model.model_name if model else selected_model_id},
+                metadata={"provider_model_name": remote_model_name, "model_record_id": selected_model_id},
             )
             execution_mode = goal_service.get_goal(db, task.goal_id).execution_mode
-            if not tools_payload and execution_mode != "mock" and hasattr(provider, "stream"):
+            if execution_mode != "mock" and hasattr(provider, "stream"):
                 response = _stream_model_response(db, provider, req, task, worker, selected_model_id)
             else:
                 response = asyncio.run(provider.generate(req))
@@ -708,7 +772,11 @@ def _execute_single_task(db: Session, task: Task) -> Dict[str, Any]:
                     "score_breakdown": [],
                     "is_user_override": False,
                 },
-                "metadata": {"provider": model.provider if model else "unknown", "provider_request_id": response.request_id},
+                "metadata": {
+                    "provider": model.provider if model else "unknown",
+                    "provider_model_name": remote_model_name,
+                    "provider_request_id": response.request_id,
+                },
             })
 
             if response.finish_reason == "tool_calls" and response.tool_calls:
@@ -741,24 +809,15 @@ def _execute_single_task(db: Session, task: Task) -> Dict[str, Any]:
                             "task_id": task.id,
                             "agent_id": agent.id,
                             "worker_id": worker.id,
-                            "event_type": "tool_call",
+                            "event_type": "tool.failed",
                             "event_status": "failed",
                             "tool_name": tool_name,
                             "error_message": str(e),
                         })
                     if call_record:
-                        log_service.create_log(db, {
-                            "goal_id": task.goal_id,
-                            "task_id": task.id,
-                            "agent_id": agent.id,
-                            "worker_id": worker.id,
-                            "event_type": "tool_call",
-                            "event_status": call_record.status,
-                            "tool_name": tool_name,
-                            "output_summary": (call_record.tool_output or "")[:200],
-                            "latency_ms": call_record.latency_ms,
-                            "error_message": call_record.error_message,
-                        })
+                        # ToolExecutor owns canonical tool.started/completed/failed
+                        # events.  Do not duplicate them here or inflate failure
+                        # and latency metrics for the same invocation.
                         if call_record.status == "completed":
                             consecutive_tool_failures = 0
                             worker.failure_count = 0
@@ -800,8 +859,50 @@ def _execute_single_task(db: Session, task: Task) -> Dict[str, Any]:
     # promoted by a model sentence alone.
     from src.schemas.planning import RuntimeDecisionContract
     from src.services import runtime_decision_service
-    verification = _verify_task(db, task)
+    log_service.create_log(db, {
+        "goal_id": task.goal_id,
+        "task_id": task.id,
+        "agent_id": agent.id,
+        "worker_id": worker.id,
+        "event_type": "verification.started",
+        "event_status": "started",
+        "output_summary": "Evaluating the persisted Completion Contract",
+    })
+    try:
+        verification = _verify_task(db, task)
+    except Exception as exc:
+        db.rollback()
+        task = db.query(Task).filter(Task.id == task.id).one()
+        agent = db.query(AgentStation).filter(AgentStation.id == agent.id).one()
+        worker = db.query(WorkerSession).filter(WorkerSession.id == worker.id).one()
+        return _handle_task_failure(
+            db,
+            task,
+            agent,
+            worker,
+            f"Verification persistence failed: {exc}",
+            routing,
+        )
     task.verification_status = verification["status"]
+    if verification["status"] == "passed":
+        verification_event = "verification.passed"
+        verification_event_status = "completed"
+    elif verification["status"] == "unverified":
+        verification_event = "verification.completed_unverified"
+        verification_event_status = "completed"
+    else:
+        verification_event = "verification.failed"
+        verification_event_status = "failed"
+    log_service.create_log(db, {
+        "goal_id": task.goal_id,
+        "task_id": task.id,
+        "agent_id": agent.id,
+        "worker_id": worker.id,
+        "event_type": verification_event,
+        "event_status": verification_event_status,
+        "output_summary": f"Completion Contract verification: {verification['status']}",
+        "metadata": {"result_count": len(verification.get("results", []))},
+    }, commit=False)
     completion_decision = None
     should_auto_replan = False
     if verification["status"] == "passed":
@@ -865,6 +966,7 @@ def _execute_single_task(db: Session, task: Task) -> Dict[str, Any]:
         )
         should_auto_replan = completion_decision.action == "replan_graph"
     task.output = final_content
+    task.lease_expires_at = None
     task.tokens_used = total_tokens
     task.duration_ms = elapsed_ms
     task.updated_at = datetime.now(timezone.utc)
@@ -881,7 +983,7 @@ def _execute_single_task(db: Session, task: Task) -> Dict[str, Any]:
     # 13. Update agent
     agent.status = "idle"
     agent.current_task_id = None
-    if task.status in {"completed", "completed_verified"}:
+    if task.status.startswith("completed"):
         previous_completed = agent.total_tasks_completed or 0
         agent.average_tokens_per_task = round(
             ((agent.average_tokens_per_task or 0) * previous_completed + total_tokens) / (previous_completed + 1)
@@ -912,7 +1014,7 @@ def _execute_single_task(db: Session, task: Task) -> Dict[str, Any]:
         "latency_ms": elapsed_ms,
         "quota_status": quota_result.get("updated_status", "unknown") if quota_result else "unknown",
         "metadata": {"tool_call_count": tool_call_count},
-    })
+    }, commit=False)
     log_service.create_log(db, {
         "goal_id": task.goal_id,
         "task_id": task.id,
@@ -920,10 +1022,27 @@ def _execute_single_task(db: Session, task: Task) -> Dict[str, Any]:
         "event_type": "task_status_change",
         "event_status": "transition",
         "output_summary": f"Task {task.status}. Tokens: {total_tokens}, Duration: {elapsed_ms}ms, Tool calls: {tool_call_count}",
-    })
-    db.commit()
+    }, commit=False)
+    if task.status in {"completed_verified", "completed_unverified"}:
+        log_service.create_log(db, {
+            "goal_id": task.goal_id,
+            "task_id": task.id,
+            "agent_id": agent.id,
+            "worker_id": worker.id,
+            "event_type": f"task.{task.status}",
+            "event_status": "completed",
+            "output_summary": f"Task entered {task.status} after Completion Contract evaluation",
+        }, commit=False)
     if completion_decision:
-        runtime_decision_service.record_decision(db, task, completion_decision)
+        runtime_decision_service.record_decision(db, task, completion_decision, commit=False)
+    try:
+        # VerificationResult, Task state, Artifact verification status, worker,
+        # agent, quota-independent runtime events and the decision become
+        # visible together.  A write failure cannot publish partial completion.
+        db.commit()
+    except Exception:
+        db.rollback()
+        raise
     if should_auto_replan:
         from src.services import replan_service
         try:
@@ -954,14 +1073,30 @@ def _execute_single_task(db: Session, task: Task) -> Dict[str, Any]:
 
 
 def _stream_model_response(db: Session, provider, request: ModelRequest, task: Task, worker: WorkerSession, model_id: str) -> ModelResponse:
-    """Persist real token chunks for tool-free tasks without fabricating them."""
+    """Persist real token and tool-call deltas without fabricating progress."""
     import asyncio
     import time
 
     async def collect():
-        chunks, request_id = [], None
+        chunks, request_id, usage = [], None, {}
+        tool_call_parts = {}
+        finish_reason = "stop"
+        log_service.create_log(db, {
+            "goal_id": task.goal_id,
+            "task_id": task.id,
+            "agent_id": worker.agent_id,
+            "worker_id": worker.id,
+            "model_id": model_id,
+            "event_type": "model.streaming",
+            "event_status": "started",
+            "output_summary": "Provider streaming started",
+        })
         async for event in provider.stream(request):
             request_id = event.request_id or request_id
+            if event.raw and event.raw.get("usage"):
+                usage = event.raw["usage"]
+            if event.raw and event.raw.get("finish_reason"):
+                finish_reason = event.raw["finish_reason"]
             if event.type == "token" and event.content:
                 chunks.append(event.content)
                 log_service.create_log(db, {
@@ -970,13 +1105,46 @@ def _stream_model_response(db: Session, provider, request: ModelRequest, task: T
                     "event_status": "running", "output_summary": event.content[:200],
                     "metadata": {"provider_request_id": request_id},
                 })
-        return "".join(chunks), request_id
+            if event.type == "tool_call_delta" and event.raw:
+                choice = (event.raw.get("choices") or [{}])[0]
+                finish_reason = choice.get("finish_reason") or finish_reason
+                for delta in (choice.get("delta") or {}).get("tool_calls") or []:
+                    index = delta["index"]
+                    part = tool_call_parts.setdefault(index, {
+                        "id": "", "type": "function", "function": {"name": "", "arguments": ""},
+                    })
+                    part["id"] += delta.get("id") or ""
+                    part["type"] = delta.get("type") or part["type"]
+                    function = delta.get("function") or {}
+                    part["function"]["name"] += function.get("name") or ""
+                    part["function"]["arguments"] += function.get("arguments") or ""
+        tool_calls = [tool_call_parts[index] for index in sorted(tool_call_parts)] or None
+        if tool_calls:
+            finish_reason = "tool_calls"
+        log_service.create_log(db, {
+            "goal_id": task.goal_id,
+            "task_id": task.id,
+            "agent_id": worker.agent_id,
+            "worker_id": worker.id,
+            "model_id": model_id,
+            "event_type": "model.streaming",
+            "event_status": "completed",
+            "output_summary": "Provider streaming completed",
+            "metadata": {"provider_request_id": request_id},
+        })
+        return "".join(chunks), request_id, usage, finish_reason, tool_calls
 
     started = time.time()
-    content, request_id = asyncio.run(collect())
+    content, request_id, usage, finish_reason, tool_calls = asyncio.run(collect())
     return ModelResponse(
-        content=content, input_tokens=0, output_tokens=0, total_tokens=0,
-        latency_ms=int((time.time() - started) * 1000), request_id=request_id,
+        content=content,
+        input_tokens=usage.get("prompt_tokens", 0),
+        output_tokens=usage.get("completion_tokens", 0),
+        total_tokens=usage.get("total_tokens", 0),
+        latency_ms=int((time.time() - started) * 1000),
+        finish_reason=finish_reason,
+        tool_calls=tool_calls,
+        request_id=request_id,
     )
 
 
@@ -1158,7 +1326,7 @@ def _handle_quota_intercept(
         }
 
     try:
-        result = handoff_service.trigger_handoff(
+        handoff_service.trigger_handoff(
             db=db,
             task_id=task.id,
             to_agent_id=target_agent.id,

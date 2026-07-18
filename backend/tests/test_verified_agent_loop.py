@@ -1,6 +1,5 @@
 import uuid
 import json
-from dataclasses import dataclass
 
 from src.models.agent import AgentStation
 from src.models.model import Model
@@ -49,7 +48,7 @@ def test_agent_write_test_and_verified_completion(db_session, tmp_path):
     task = _coding_task(db_session, tmp_path)
     provider = ScriptedProvider([
         {"tool_calls": [_tool_call("file_write", json.dumps({"path": "fixed.py", "content": "answer = 42\n"}))]},
-        {"tool_calls": [_tool_call("test_runner", json.dumps({"command": "python3 -c \"assert __import__('fixed').answer == 42\""}))]},
+        {"tool_calls": [_tool_call("test_runner", json.dumps({"command": "python3 -m unittest fixed"}))]},
         {"content": "Fixed the bug and verified the command."},
     ])
     set_provider(provider)
@@ -64,13 +63,27 @@ def test_agent_write_test_and_verified_completion(db_session, tmp_path):
     worker = db_session.query(WorkerSession).filter(WorkerSession.task_id == task.id).one()
     assert worker.step_count == 3
     assert worker.next_action == "completed"
+    event_types = {
+        item.event_type
+        for item in db_session.query(ExecutionLog).filter(ExecutionLog.task_id == task.id).all()
+    }
+    assert {
+        "task.assigned",
+        "worker.started",
+        "tool.started",
+        "tool.completed",
+        "artifact.created",
+        "verification.started",
+        "verification.passed",
+        "task.completed_verified",
+    }.issubset(event_types)
 
 
 def test_failed_test_schedules_bounded_retry(db_session, tmp_path):
     task = _coding_task(db_session, tmp_path)
     provider = ScriptedProvider([
-        {"tool_calls": [_tool_call("file_write", json.dumps({"path": "fixed.py", "content": "answer = 42\n"}))]},
-        {"tool_calls": [_tool_call("test_runner", json.dumps({"command": "python3 -c 'assert False'"}))]},
+        {"tool_calls": [_tool_call("file_write", json.dumps({"path": "fixed.py", "content": "answer =\n"}))]},
+        {"tool_calls": [_tool_call("test_runner", json.dumps({"command": "python3 -m unittest fixed"}))]},
         {"content": "The test was attempted."},
     ])
     set_provider(provider)
@@ -97,7 +110,7 @@ def test_generic_terminal_success_cannot_satisfy_test_contract(db_session, tmp_p
     db_session.commit()
     provider = ScriptedProvider([
         {"tool_calls": [_tool_call("file_write", json.dumps({"path": "fixed.py", "content": "answer = 42\n"}))]},
-        {"tool_calls": [_tool_call("terminal_execute", json.dumps({"command": "python3 -c 'print(1)'"}))]},
+        {"tool_calls": [_tool_call("terminal_execute", json.dumps({"command": "python3 -m unittest fixed"}))]},
         {"content": "The shell command succeeded."},
     ])
     set_provider(provider)

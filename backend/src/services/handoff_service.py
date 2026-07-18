@@ -1,6 +1,6 @@
 from datetime import datetime, timezone
 from math import ceil
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, Optional, Tuple
 import uuid
 import hashlib
 import os
@@ -11,10 +11,11 @@ from sqlalchemy.orm import Session
 from src.models.agent import AgentStation
 from src.models.handoff import ExecutionLog, HandoffRecord, HandoffTask, WorkerSession
 from src.models.model import Model
-from src.models.workspace import Goal, Task
+from src.models.workspace import Goal, RuntimeRun, Task
 from src.models.workspace import Artifact, VerificationResult, WorkspaceCheckpoint
 from src.models.tool import ToolCallRecord
 from src.schemas.handoff import HandoffTaskCreate
+from src.services.security_service import redact_data, redact_text
 
 HANDOFF_STATUS_REQUESTED = "requested"
 HANDOFF_STATUS_GENERATING = "generating_summary"
@@ -115,6 +116,7 @@ def _set_status(db: Session, handoff: HandoffRecord, next_status: str, message: 
 
 
 def _validate_summary(summary: Dict) -> Dict:
+    summary = redact_data(summary)
     normalized = {}
     for field in REQUIRED_SUMMARY_FIELDS:
         value = summary.get(field)
@@ -201,10 +203,10 @@ def _create_log(
         handoff_id=handoff.id,
         event_type=event_type,
         event_status=event_status,
-        output_summary=output_summary,
+        output_summary=redact_text(output_summary),
     )
     if metadata:
-        log.set_metadata(metadata)
+        log.set_metadata(redact_data(metadata))
     db.add(log)
     return log
 
@@ -442,6 +444,13 @@ def accept_handoff(db: Session, handoff_id: str, agent_id: Optional[str] = None,
     _set_task_model_id(task, accept_model_id)
     task.assigned_worker_id = worker.id
     agent.status = "running"
+    goal = db.query(Goal).filter(Goal.id == handoff.goal_id).first()
+    if goal and goal.status == "handoff":
+        goal.status = "running"
+        if goal.run_id:
+            run = db.query(RuntimeRun).filter(RuntimeRun.id == goal.run_id).first()
+            if run:
+                run.status = "running"
 
     if handoff.from_worker_id:
         previous_worker = db.query(WorkerSession).filter(WorkerSession.id == handoff.from_worker_id).first()

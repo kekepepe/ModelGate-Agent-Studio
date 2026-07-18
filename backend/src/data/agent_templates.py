@@ -47,7 +47,7 @@ AGENT_TEMPLATES = {
         "default_config": {
             "default_model_id": "gpt-4-turbo",
             "backup_model_ids": ["claude-3-opus"],
-            "allowed_tools": ["file_read", "diff_view"],
+            "allowed_tools": ["workspace_list", "file_read", "file_search", "git_diff", "test_runner", "lint_run", "typecheck_run", "build_run"],
             "system_prompt": (
                 "你是一个代码审查专家。你的职责是审查代码修改，检查逻辑正确性、安全性、性能和代码风格。\n"
                 "请给出具体的修改建议，指出问题所在行号和原因。"
@@ -66,7 +66,7 @@ AGENT_TEMPLATES = {
         "default_config": {
             "default_model_id": "kimi-long-context",
             "backup_model_ids": ["claude-3-opus", "gpt-4-turbo"],
-            "allowed_tools": ["web_search", "file_read"],
+            "allowed_tools": ["workspace_list", "file_read", "file_search", "glob_search"],
             "system_prompt": (
                 "你是一个技术研究员。你的职责是根据任务需求搜索和整理相关信息。\n"
                 "请提供来源、关键结论和行动建议。"
@@ -85,7 +85,7 @@ AGENT_TEMPLATES = {
         "default_config": {
             "default_model_id": "claude-3-haiku",
             "backup_model_ids": ["gpt-3.5-turbo", "deepseek-chat"],
-            "allowed_tools": [],
+            "allowed_tools": ["workspace_list", "file_read", "file_search"],
             "system_prompt": (
                 "你是一个摘要生成专家。你的职责是将复杂的执行过程和上下文压缩为清晰的交接摘要。\n"
                 "摘要必须包含：已完成工作、未完成工作、关键约束、已做决策、风险和下一步建议。"

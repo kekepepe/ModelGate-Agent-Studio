@@ -73,6 +73,12 @@ def model_health(model_id: str, execution_mode: str = Query("live", pattern="^(l
 
 @router.post("/models", status_code=201)
 def create_model(data: ModelCreate, db: Session = Depends(get_db)):
+    if data.api_key:
+        _error_response(
+            "SECRET_PERSISTENCE_DENIED",
+            "Provider keys must be configured with PROVIDER_API_KEY or OPENAI_API_KEY, not stored in Model records.",
+            400,
+        )
     # Check for duplicate display_name
     existing = db.query(ModelORM).filter(ModelORM.display_name == data.display_name).first()
     if existing:
@@ -87,7 +93,7 @@ def create_model(data: ModelCreate, db: Session = Depends(get_db)):
         speed_level=data.speed_level or 3,
         is_enabled=data.is_enabled if data.is_enabled is not None else True,
         is_default=data.is_default if data.is_default is not None else False,
-        api_key=data.api_key,
+        api_key=None,
         api_base_url=data.api_base_url,
     )
     if data.capability_tags:
@@ -101,6 +107,12 @@ def create_model(data: ModelCreate, db: Session = Depends(get_db)):
 
 @router.put("/models/{model_id}")
 def update_model(model_id: str, data: ModelUpdate, db: Session = Depends(get_db)):
+    if data.api_key:
+        _error_response(
+            "SECRET_PERSISTENCE_DENIED",
+            "Provider keys must be configured with PROVIDER_API_KEY or OPENAI_API_KEY, not stored in Model records.",
+            400,
+        )
     model = db.query(ModelORM).filter(ModelORM.id == model_id).first()
     if not model:
         _error_response("NOT_FOUND", f"Model '{model_id}' not found", 404)
@@ -124,7 +136,6 @@ def update_model(model_id: str, data: ModelUpdate, db: Session = Depends(get_db)
         "speed_level": data.speed_level,
         "is_enabled": data.is_enabled,
         "is_default": data.is_default,
-        "api_key": data.api_key,
         "api_base_url": data.api_base_url,
     }
     for field, value in update_fields.items():

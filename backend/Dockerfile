@@ -1,4 +1,4 @@
-FROM python:3.9-slim
+FROM python:3.12.8-slim
 
 WORKDIR /app
 
@@ -9,6 +9,8 @@ RUN pip install --no-cache-dir -r requirements.txt
 # Copy application code
 COPY src/ ./src/
 COPY migrations/ ./migrations/
+COPY alembic/ ./alembic/
+COPY alembic.ini alembic_helpers.py ./
 COPY seed_demo_data.py .
 
 # Create data directory for SQLite
@@ -19,7 +21,7 @@ ENV DATABASE_URL=sqlite:///./data/modelgate.db
 ENV EXECUTION_MODE=live
 ENV WORKSPACE_ROOT=/workspace
 ENV APP_NAME="ModelGate Agent Studio"
-ENV DEBUG=true
+ENV DEBUG=false
 ENV API_V1_PREFIX=/api/v1
 
 EXPOSE 8000

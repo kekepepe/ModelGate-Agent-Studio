@@ -2,7 +2,7 @@ from typing import Any, Dict, List, Optional
 from pydantic import BaseModel, Field
 
 
-LOG_EVENT_TYPE_PATTERN = r"^(run\.created|run\.paused|run\.resumed|run\.cancelled|plan\.created|plan\.updated|task\.created|task\.assigned|task\.started|task\.completed|model_health|model_call|model_stream|agent_step|tool_call|task_status_change|quota_status_change|handoff_created|handoff_completed|memory_retrieved|memory_write_candidate|checkpoint_restored|worktree_created|worktree_merged|verification_started|verification_failed|verification_passed|error|supervisor_review)$"
+LOG_EVENT_TYPE_PATTERN = r"^(run\.created|run\.paused|run\.resumed|run\.cancelled|plan\.generating|plan\.created|plan\.updated|plan\.confirmed|task\.created|task\.ready|task\.assigned|task\.started|task\.completed|task\.completed_verified|task\.completed_unverified|task\.blocked|task\.parallel_group_started|worker\.started|model\.streaming|tool\.started|tool\.completed|tool\.failed|artifact\.created|verification\.started|verification\.passed|verification\.failed|verification\.completed_unverified|goal\.completion_gate|goal\.completed|model_health|model_call|model_stream|agent_step|tool_call|task_status_change|quota_status_change|handoff_created|handoff_completed|memory_retrieved|memory_write_candidate|checkpoint_restored|worktree_created|worktree_merged|verification_started|verification_failed|verification_passed|error|supervisor_review)$"
 LOG_EVENT_STATUS_PATTERN = "^(success|failed|error|info|warning|pending|running|completed|cancelled|timeout|rate_limited|quota_exceeded|validation_error|unknown|started|transition|detected|created|accepted|rejected|approved|needs_revision|skipped|denied|retrying|blocked|conflict)$"
 
 

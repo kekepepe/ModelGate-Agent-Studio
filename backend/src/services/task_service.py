@@ -1,6 +1,5 @@
 import uuid
-from datetime import datetime, timezone
-from typing import Dict, List, Optional
+from typing import Dict, List
 
 from sqlalchemy.orm import Session
 
@@ -9,6 +8,7 @@ from src.models.handoff import WorkerSession
 from src.models.model import Model
 from src.models.workspace import Artifact, Task, VerificationResult
 from src.services import log_service
+from src.services.state_machine_service import transition_task
 
 
 class TaskNotFoundError(Exception):
@@ -59,10 +59,8 @@ def cancel_task(db: Session, task_id: str, reason: str = "Cancelled by user") ->
     task = _task_or_raise(db, task_id)
     if task.status in {"completed", "completed_verified", "cancelled"}:
         raise TaskTransitionError(f"Task cannot be cancelled from status: {task.status}")
-    task.status, task.blocked_reason = "cancelled", reason
-    task.updated_at = datetime.now(timezone.utc)
-    db.commit()
-    log_service.create_log(db, {"goal_id": task.goal_id, "task_id": task.id, "event_type": "task_status_change", "event_status": "cancelled", "output_summary": reason})
+    task.blocked_reason = reason
+    transition_task(db, task, "cancelled", summary=reason, event_status="cancelled")
     return get_task(db, task.id)
 
 
@@ -70,10 +68,8 @@ def retry_task(db: Session, task_id: str) -> Dict:
     task = _task_or_raise(db, task_id)
     if task.status not in {"failed", "blocked", "revision_required", "completed_unverified", "cancelled"}:
         raise TaskTransitionError(f"Task cannot be retried from status: {task.status}")
-    task.status, task.blocked_reason, task.verification_status = "pending", None, None
-    task.updated_at = datetime.now(timezone.utc)
-    db.commit()
-    log_service.create_log(db, {"goal_id": task.goal_id, "task_id": task.id, "event_type": "task_status_change", "event_status": "retrying", "output_summary": "Task returned to pending by user"})
+    task.blocked_reason, task.verification_status = None, None
+    transition_task(db, task, "pending", summary="Task returned to pending by user", event_status="retrying")
     return get_task(db, task.id)
 
 
@@ -81,16 +77,8 @@ def skip_task(db: Session, task_id: str, reason: str = "Skipped by user") -> Dic
     task = _task_or_raise(db, task_id)
     if task.status in {"running", "completed", "completed_verified", "completed_unverified", "skipped"}:
         raise TaskTransitionError(f"Task cannot be skipped from status: {task.status}")
-    task.status, task.blocked_reason = "skipped", reason
-    task.updated_at = datetime.now(timezone.utc)
-    db.commit()
-    log_service.create_log(db, {
-        "goal_id": task.goal_id,
-        "task_id": task.id,
-        "event_type": "task.skipped",
-        "event_status": "completed",
-        "output_summary": reason,
-    })
+    task.blocked_reason = reason
+    transition_task(db, task, "skipped", summary=reason, event_type="task.skipped", event_status="completed")
     return get_task(db, task.id)
 
 
@@ -98,16 +86,15 @@ def approve_task(db: Session, task_id: str) -> Dict:
     task = _task_or_raise(db, task_id)
     if task.status != "waiting_approval":
         raise TaskTransitionError(f"Task cannot be approved from status: {task.status}")
-    task.status, task.blocked_reason = "pending", None
-    task.updated_at = datetime.now(timezone.utc)
-    db.commit()
-    log_service.create_log(db, {
-        "goal_id": task.goal_id,
-        "task_id": task.id,
-        "event_type": "task.approved",
-        "event_status": "completed",
-        "output_summary": "Human approval recorded; Task returned to the scheduler",
-    })
+    task.blocked_reason = None
+    transition_task(
+        db,
+        task,
+        "pending",
+        summary="Human approval recorded; Task returned to the scheduler",
+        event_type="task.approved",
+        event_status="completed",
+    )
     return get_task(db, task.id)
 
 

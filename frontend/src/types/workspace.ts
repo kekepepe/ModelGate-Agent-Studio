@@ -226,6 +226,7 @@ export interface WorkspaceState {
   agents: WorkspaceAgent[];
   workers: WorkspaceWorker[];
   handoffs: WorkspaceHandoff[];
+  worktrees?: WorkspaceWorktree[];
   active_plan?: ExecutionPlan | null;
   plan_versions?: PlanVersionSummary[];
   task_mode?: ExecutionPlan['task_mode'] | null;
@@ -252,6 +253,25 @@ export interface WorkspaceState {
   context_runs?: ContextRun[];
   selection_decisions?: AgentSelectionDecision[];
   multi_agent_metrics?: MultiAgentMetrics;
+}
+
+export interface WorkspaceWorktree {
+  id: string;
+  goal_id: string;
+  task_id: string;
+  agent_id?: string | null;
+  path: string;
+  base_ref: string;
+  base_commit_sha?: string | null;
+  branch_name?: string | null;
+  commit_sha?: string | null;
+  merge_commit_sha?: string | null;
+  merge_output?: string | null;
+  conflict_files: string[];
+  status: string;
+  created_at?: string | null;
+  merged_at?: string | null;
+  removed_at?: string | null;
 }
 
 export interface AgentSelectionDecision {

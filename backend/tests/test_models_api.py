@@ -1,4 +1,3 @@
-import pytest
 
 
 class TestListModels:
@@ -104,6 +103,16 @@ class TestCreateModel:
             "cost_level": 10,
         })
         assert resp.status_code == 422
+
+    def test_create_model_rejects_database_secret_persistence(self, client):
+        resp = client.post("/api/v1/models", json={
+            "provider": "openai",
+            "model_name": "gpt-secret",
+            "display_name": "GPT Secret",
+            "api_key": "sk-live-secret",
+        })
+        assert resp.status_code == 400
+        assert resp.json()["detail"]["error"]["code"] == "SECRET_PERSISTENCE_DENIED"
 
 
 class TestGetModel:

@@ -13,6 +13,7 @@ from src.models.knowledge import ContextPackageSnapshot, KnowledgeSource, Memory
 from src.models.workspace import Goal, PlanTask, Task, VerificationResult
 from src.models.tool import ToolCallRecord
 from src.services import retrieval_service
+from src.services.security_service import redact_data, security_metadata
 
 
 def build_planning_context(db: Session, goal: Goal, limit: int = 3) -> Dict[str, Any]:
@@ -146,6 +147,8 @@ def _estimate_tokens(payload: Dict[str, Any]) -> int:
 
 
 def persist_context_snapshot(db: Session, worker_id: str, plan_version_id: str, payload: Dict[str, Any]) -> ContextPackageSnapshot:
+    payload = redact_data(payload)
+    payload.setdefault("security", security_metadata())
     serialized = json.dumps(payload, ensure_ascii=False, sort_keys=True)
     snapshot = ContextPackageSnapshot(
         id=str(uuid.uuid4()), worker_id=worker_id, plan_version_id=plan_version_id,

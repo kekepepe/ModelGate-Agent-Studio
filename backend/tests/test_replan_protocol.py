@@ -7,6 +7,7 @@ from src.models.workspace import ExecutionPlan, Goal, PlanChange, PlanTask, Task
 from src.schemas.planning import ExecutionPlanContract, PlanTaskContract, ReplanRequest
 from src.services import planning_service, replan_service
 from src.services.orchestrator_service import _materialize_plan
+from src.services.state_machine_service import transition_task
 
 
 def _seed_versioned_graph(db_session):
@@ -71,10 +72,13 @@ def _seed_versioned_graph(db_session):
     )
     planning_service.activate_plan(db_session, plan)
     by_title = {task.title: task for task in runtime}
-    by_title["Research constraints"].status = "completed_verified"
-    by_title["Build change"].status = "completed_unverified"
-    by_title["Verify change"].status = "pending"
-    db_session.commit()
+    for task, terminal in (
+        (by_title["Research constraints"], "completed_verified"),
+        (by_title["Build change"], "completed_unverified"),
+    ):
+        transition_task(db_session, task, "assigned", summary="Fixture assignment")
+        transition_task(db_session, task, "running", summary="Fixture execution")
+        transition_task(db_session, task, terminal, summary="Fixture completion")
     return goal, plan, by_title
 
 
@@ -184,8 +188,9 @@ def test_explicit_replan_can_remove_and_insert_graph_nodes(client, db_session):
 
 def test_replan_rejects_running_task_without_mutating_plan(client, db_session):
     goal, first_plan, old = _seed_versioned_graph(db_session)
-    old["Build change"].status = "running"
-    db_session.commit()
+    transition_task(db_session, old["Build change"], "pending", summary="Retry unverified task")
+    transition_task(db_session, old["Build change"], "assigned", summary="Fixture assignment")
+    transition_task(db_session, old["Build change"], "running", summary="Fixture execution")
     response = client.post(f"/api/v1/goals/{goal.id}/replan", json={
         "trigger": "manual",
         "reason": "Try replacing a live task.",

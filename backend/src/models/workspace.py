@@ -1,3 +1,4 @@
+import json
 import uuid
 from datetime import datetime, timezone
 
@@ -73,6 +74,8 @@ class Task(Base):
     plan_version_id = Column(String(36), nullable=True, index=True)
     plan_task_id = Column(String(36), nullable=True, index=True)
     plan_source = Column(String(30), nullable=True)
+    lease_expires_at = Column(DateTime, nullable=True, index=True)
+    recovery_count = Column(Integer, nullable=False, default=0)
     created_at = Column(DateTime, nullable=False, default=lambda: datetime.now(timezone.utc))
     updated_at = Column(DateTime, nullable=False, default=lambda: datetime.now(timezone.utc))
 
@@ -103,6 +106,8 @@ class Task(Base):
             "plan_version_id": self.plan_version_id,
             "plan_task_id": self.plan_task_id,
             "plan_source": self.plan_source,
+            "lease_expires_at": self.lease_expires_at.isoformat() if self.lease_expires_at else None,
+            "recovery_count": self.recovery_count,
             "created_at": self.created_at.isoformat() if self.created_at else None,
             "updated_at": self.updated_at.isoformat() if self.updated_at else None,
         }
@@ -343,9 +348,34 @@ class WorkspaceWorktree(Base):
     task_id = Column(String(36), nullable=False, unique=True, index=True)
     path = Column(Text, nullable=False, unique=True)
     base_ref = Column(String(255), nullable=False, default="HEAD")
+    base_commit_sha = Column(String(64), nullable=True)
+    branch_name = Column(String(255), nullable=True, unique=True)
+    agent_id = Column(String(36), nullable=True, index=True)
+    commit_sha = Column(String(64), nullable=True)
+    merge_commit_sha = Column(String(64), nullable=True)
+    merge_output = Column(Text, nullable=True)
+    conflict_files = Column(Text, nullable=False, default="[]")
     status = Column(String(30), nullable=False, default="active")
     created_at = Column(DateTime, nullable=False, default=lambda: datetime.now(timezone.utc))
+    merged_at = Column(DateTime, nullable=True)
     removed_at = Column(DateTime, nullable=True)
+
+    def to_dict(self) -> dict:
+        try:
+            conflicts = json.loads(self.conflict_files or "[]")
+        except json.JSONDecodeError:
+            conflicts = []
+        return {
+            "id": self.id, "goal_id": self.goal_id, "task_id": self.task_id,
+            "agent_id": self.agent_id, "path": self.path, "base_ref": self.base_ref,
+            "base_commit_sha": self.base_commit_sha, "branch_name": self.branch_name,
+            "commit_sha": self.commit_sha, "merge_commit_sha": self.merge_commit_sha,
+            "merge_output": self.merge_output, "conflict_files": conflicts,
+            "status": self.status,
+            "created_at": self.created_at.isoformat() if self.created_at else None,
+            "merged_at": self.merged_at.isoformat() if self.merged_at else None,
+            "removed_at": self.removed_at.isoformat() if self.removed_at else None,
+        }
 
 
 class RuntimeRun(Base):

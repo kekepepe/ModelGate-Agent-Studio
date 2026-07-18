@@ -126,15 +126,15 @@ def persist_plan(
         plan_change.set_json(field, getattr(change_contract, field))
     db.add(plan_change)
     if commit:
+        emit_plan_events(db, plan, len(contract.tasks), commit=False)
         db.commit()
         db.refresh(plan)
-        emit_plan_events(db, plan, len(contract.tasks))
     else:
         db.flush()
     return plan
 
 
-def emit_plan_events(db: Session, plan: ExecutionPlan, task_count: int) -> None:
+def emit_plan_events(db: Session, plan: ExecutionPlan, task_count: int, *, commit: bool = True) -> None:
     log_service.create_log(db, {
         "goal_id": plan.goal_id,
         "event_type": "plan.created",
@@ -147,7 +147,7 @@ def emit_plan_events(db: Session, plan: ExecutionPlan, task_count: int) -> None:
             "task_mode": plan.task_mode,
             "planner_type": plan.planner_type,
         },
-    })
+    }, commit=False)
     if plan.planner_type == "rule_fallback":
         log_service.create_log(db, {
             "goal_id": plan.goal_id,
@@ -155,7 +155,9 @@ def emit_plan_events(db: Session, plan: ExecutionPlan, task_count: int) -> None:
             "event_status": "completed",
             "output_summary": plan.fallback_reason or "Rule-based planning fallback used",
             "metadata": {"plan_version_id": plan.id, "version": plan.version},
-        })
+        }, commit=False)
+    if commit:
+        db.commit()
 
 
 def activate_plan(

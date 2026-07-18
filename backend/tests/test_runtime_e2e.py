@@ -108,6 +108,7 @@ class TestE2ENormalExecution:
             ExecutionLog.goal_id == goal.id
         ).all()
         assert len(logs) > 0
+        assert "goal.completed" in {item.event_type for item in logs}
 
         # Verify quota records
         from src.models.quota import QuotaRecord
@@ -181,6 +182,7 @@ class TestE2EProviderFailureHandoff:
 
     def test_provider_error_handoff_can_be_accepted_and_resumed(self, client: TestClient, db_session):
         from src.models.handoff import HandoffRecord
+        from src.models.model import Model
         from src.services import router_service
         from src.services.providers.mock_provider import MockModelProvider
         from src.services.providers.provider_factory import create_provider, set_provider
@@ -193,7 +195,8 @@ class TestE2EProviderFailureHandoff:
         assert routing["backup_model_ids"]
 
         failing_provider = MockModelProvider(default_latency_ms=0)
-        failing_provider.configure_model(routing["selected_model_id"], raise_error="Provider timeout")
+        selected_model = db_session.query(Model).filter(Model.id == routing["selected_model_id"]).one()
+        failing_provider.configure_model(selected_model.model_name, raise_error="Provider timeout")
         set_provider(failing_provider)
         try:
             failed_run = client.post(f"/api/v1/runtime/execute-step/{task.id}")
@@ -201,10 +204,14 @@ class TestE2EProviderFailureHandoff:
             assert failed_run.json()["data"]["status"] == "handoff"
             assert failed_run.json()["data"]["is_handoff"] is True
 
+            goal.status = "handoff"
+            db_session.commit()
             handoff = db_session.query(HandoffRecord).filter(HandoffRecord.task_id == task.id).one()
             assert handoff.reason == "error"
             accepted = client.post(f"/api/v1/handoffs/{handoff.id}/accept", json={})
             assert accepted.status_code == 200
+            db_session.refresh(goal)
+            assert goal.status == "running"
 
             resumed_run = client.post(f"/api/v1/runtime/execute-step/{task.id}")
             assert resumed_run.status_code == 200, resumed_run.text

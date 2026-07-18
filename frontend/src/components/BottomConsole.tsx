@@ -3,19 +3,23 @@ import { useQuery } from '@tanstack/react-query';
 import { ChevronDown, ChevronUp, TerminalSquare } from 'lucide-react';
 import LogListItem from './LogListItem';
 import LogFilters from './LogFilters';
+import FinalOutputPanel from './FinalOutputPanel';
 import { getLogs } from '../api/logs';
 import type { LogFilters as LogFiltersType } from '../types/log';
+import type { RuntimeStatusResponse } from '../types/runtime';
 import type { WorkspaceHandoff, WorkspaceTask } from '../types/workspace';
 
 interface BottomConsoleProps {
   goalId?: string | null;
   tasks?: WorkspaceTask[];
   handoffs?: WorkspaceHandoff[];
+  runtimeStatus?: RuntimeStatusResponse;
+  onOpenTask?: (taskId: string) => void;
 }
 
 const COMPLETE = new Set(['completed', 'completed_verified', 'completed_unverified']);
 
-export default function BottomConsole({ goalId, tasks = [], handoffs = [] }: BottomConsoleProps) {
+export default function BottomConsole({ goalId, tasks = [], handoffs = [], runtimeStatus, onOpenTask }: BottomConsoleProps) {
   const [expanded, setExpanded] = useState(false);
   const [filters, setFilters] = useState<LogFiltersType>({ page_size: 50 });
   const allFilters = goalId ? { ...filters, goal_id: goalId } : filters;
@@ -41,6 +45,21 @@ export default function BottomConsole({ goalId, tasks = [], handoffs = [] }: Bot
         <ConsoleMetric label="Last Update" value={latestUpdate ? new Date(latestUpdate).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }) : '—'} wide />
       </div>
       {expanded ? <div className="console-log-drawer">
+        {runtimeStatus ? <div className="p-3 border-b border-stone-200" data-testid="workspace-final-output">
+          <FinalOutputPanel
+            output={runtimeStatus.final_output}
+            status={runtimeStatus.goal_status}
+            tasksCompleted={runtimeStatus.completed_tasks}
+            tasksFailed={runtimeStatus.failed_tasks}
+            tasksHandoff={runtimeStatus.handoff_tasks}
+            tasksTotal={runtimeStatus.total_tasks}
+            totalTokens={runtimeStatus.total_tokens_used}
+            logCount={runtimeStatus.log_count}
+            finalSummary={runtimeStatus.final_summary}
+            taskOutputs={tasks.filter((task) => task.output).map((task) => ({ id: task.id, title: task.title, output: task.output! }))}
+            onOpenTask={onOpenTask}
+          />
+        </div> : null}
         <div className="console-log-filters"><LogFilters filters={filters} onChange={setFilters} /></div>
         <div className="console-log-list">
           {logsData?.items.map((log) => <LogListItem key={log.id} log={log} />)}

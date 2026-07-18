@@ -4,7 +4,7 @@ import uuid
 from src.models.agent import AgentStation
 from src.models.handoff import ExecutionLog
 from src.models.model import Model
-from src.models.workspace import ExecutionPlan, Goal, Task
+from src.models.workspace import ExecutionPlan, Goal
 from src.services.orchestrator_service import plan_goal
 from src.services.providers.mock_provider import MockModelProvider
 from src.services.providers.provider_factory import create_provider, set_provider

@@ -1,18 +1,10 @@
-from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
 from src.core.database import get_db
 from src.schemas.router import (
     RoutingRequest,
-    RoutingResult,
     OverrideRequest,
-    OverrideResponse,
-    RoutingRulesResponse,
-    ScoreBreakdown,
-    DimensionScore,
-    RoutingReason,
-    RiskFlag,
     AgentSelectionRequest,
 )
 from src.services import agent_selector_service, capability_registry_service, router_service

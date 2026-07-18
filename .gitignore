@@ -89,7 +89,12 @@ out/
 .cache/
 .parcel-cache/
 coverage/
+.coverage
+coverage.xml
+pytest.xml
 htmlcov/
+playwright-report/
+test-results/
 .pytest_cache/
 .mypy_cache/
 .ruff_cache/

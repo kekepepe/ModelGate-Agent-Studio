@@ -60,6 +60,7 @@ class ToolCallRecord(Base):
     tool_input = Column(Text, nullable=False, default="{}")
     tool_output = Column(Text, nullable=True)
     result_data = Column(Text, nullable=False, default="{}")
+    idempotency_key = Column(String(64), nullable=True, unique=True, index=True)
     status = Column(String(20), nullable=False, default="started")
     latency_ms = Column(Integer, nullable=False, default=0)
     error_message = Column(Text, nullable=True)
@@ -90,6 +91,7 @@ class ToolCallRecord(Base):
             "tool_name": self.tool_name,
             "tool_input": self.get_tool_input(),
             "tool_output": self.tool_output,
+            "idempotency_key": self.idempotency_key,
             "status": self.status,
             "latency_ms": self.latency_ms,
             "error_message": self.error_message,

@@ -136,9 +136,9 @@ ModelGate Agent Studio 不是普通 AI 聊天工具，也不是简单的多 API 
 
 ### 前置条件
 
-- Python 3.9+
-- Node.js 20+
-- npm
+- Python 3.12.8（见 `.python-version`）
+- Node.js 22.23.1（见 `.nvmrc`）
+- npm 10.9.8
 
 ### 后端
 
@@ -156,23 +156,52 @@ cp .env.example .env  # 编辑配置
 ```bash
 cd frontend
 cp .env.example .env  # 编辑配置
-npm install
+npm ci
 npm run dev
 ```
 
 访问 http://localhost:5173
 
-### 切换 Provider
+### 配置真实 Provider
 
 ```bash
-# 默认 Mock Provider（无需 API key）
-export MODEL_PROVIDER=mock
+# 默认是 live；没有密钥时会明确失败，不会静默退回 Mock。
+export MODEL_GATE_EXECUTION_MODE=live
+export PROVIDER_API_BASE=https://api.openai.com/v1
+export PROVIDER_API_KEY=sk-xxx
+export PLANNER_MODEL_NAME=gpt-5
+export WORKER_MODEL_NAME=gpt-5
+export VERIFIER_MODEL_NAME=gpt-5
 
-# 真实 OpenAI-compatible Provider
-export MODEL_PROVIDER=openai
-export OPENAI_BASE_URL=https://api.openai.com/v1
-export OPENAI_API_KEY=sk-xxx
+# Mock 仅用于显式离线测试或 Demo。
+export MODEL_GATE_EXECUTION_MODE=mock
 ```
+
+## 可复现质量门禁
+
+后端测试依赖单独锁定在 `requirements-dev.txt`：
+
+```bash
+cd backend
+.venv/bin/pip install -r requirements-dev.txt
+.venv/bin/ruff check src tests scripts
+.venv/bin/mypy src/services/providers src/services/sandbox_service.py src/schemas
+.venv/bin/pytest -m "not provider" --cov=src --cov-fail-under=75
+```
+
+前端与浏览器：
+
+```bash
+cd frontend
+npm ci
+npm run lint
+npm run typecheck
+npm run test:coverage
+npm run build
+npm run test:e2e
+```
+
+Pull Request 使用 Backend、Frontend、Integration、Security 四个 workflow；Nightly 另跑 slow/security、完整浏览器矩阵、真实 Provider 六场景和真实 Embedding。真实 Provider 与 5×3 Multi-Agent Benchmark 的严格命令见 [Provider 与安全配置指南](docs/deployment/Provider与安全配置指南.md)。没有密钥时这些门禁必须明确失败，不能回退到 Mock 后宣称通过。
 
 ## Docker 一键启动
 
@@ -184,7 +213,7 @@ export OPENAI_API_KEY=sk-xxx
 ### 启动
 
 ```bash
-# 1. 复制环境变量模板（可选，默认使用 Mock Provider）
+# 1. 复制环境变量模板（默认 live；真实执行必须提供 Provider 密钥）
 cp backend/.env.example backend/.env
 cp frontend/.env.example frontend/.env
 
@@ -205,20 +234,21 @@ docker exec -it modelgate-backend python seed_demo_data.py
 ### 切换 Provider（Docker）
 
 ```bash
-# Mock（默认）
-MODEL_PROVIDER=mock docker-compose up
+# Mock（仅离线测试或 Demo）
+MODEL_GATE_EXECUTION_MODE=mock docker compose up
 
-# 真实 OpenAI API
-MODEL_PROVIDER=openai OPENAI_API_KEY=sk-xxx docker-compose up
+# 真实 OpenAI-compatible Provider（默认运行模式）
+MODEL_GATE_EXECUTION_MODE=live PROVIDER_API_KEY=replace-with-secret docker compose up
 ```
 
 ### 停止
 
 ```bash
-docker-compose down
-# 保留数据库数据
-docker-compose down -v
+docker compose down       # 保留数据库 volume
+# docker compose down -v  # 删除数据库 volume，谨慎使用
 ```
+
+发布前请阅读 [RC 验收报告](docs/review/2026-07-18-RC验收报告.md)、[Provider 与安全配置指南](docs/deployment/Provider与安全配置指南.md) 和 [备份恢复与发布回滚指南](docs/deployment/备份恢复与发布回滚指南.md)。
 
 ### 开发模式（代码热重载）
 
@@ -235,13 +265,11 @@ docker-compose -f docker-compose.dev.yml up --build
 
 ## 当前开发状态
 
-| 阶段 | 状态 | 后端 | 前端 | 总计 |
-|------|------|------|------|------|
-| MVP-A Control Plane | ✅ | 127 | 145 | 272 |
-| MVP-B Runtime | ✅ | 37 | 0 | 37 |
-| Supervisor Review | ✅ | 4 | 0 | 4 |
-| Memory / Skill 自进化 | ✅ | 4 | 0 | 4 |
-| **总计** | | **172** | **145** | **317** |
+| 阶段 | 状态 | 证据 |
+|------|------|------|
+| P0–P2 Agent Runtime | 已实现并本地验证 | ExecutionPlan、DAG、Tool/Artifact/Verification、RAG、Handoff/Replan |
+| P3–P7 仓库内生产化 | 已实现并通过本地门禁 | 后端 395 collected、前端 169、Playwright、PostgreSQL、Docker、安全与负载 |
+| Release Candidate / Production | **NO-GO** | 缺真实 Provider/Embedding/15 次 Benchmark 与 GitHub 托管 Checks/分支保护 |
 
 **执行链路：** Goal → Router → Quota → Worker → Mock/Real Model → Logs → Quota Record → Task/Agent Status → Handoff → Supervisor Review → Memory Drafts → Skill Drafts
 

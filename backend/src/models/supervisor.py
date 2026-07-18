@@ -1,7 +1,7 @@
 import json
 import uuid
 from datetime import datetime, timezone
-from typing import Any, Dict, List
+from typing import Dict, List
 
 from sqlalchemy import Boolean, Column, DateTime, Integer, String, Text, event
 

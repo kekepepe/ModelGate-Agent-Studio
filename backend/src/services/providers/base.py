@@ -8,6 +8,35 @@ from dataclasses import dataclass, field
 from typing import Any, AsyncIterator, Dict, List, Optional, Protocol
 
 
+class ProviderError(RuntimeError):
+    """Stable provider failure contract consumed by Runtime recovery policy."""
+
+    def __init__(
+        self,
+        code: str,
+        message: str,
+        *,
+        retryable: bool,
+        status_code: Optional[int] = None,
+        request_id: Optional[str] = None,
+    ) -> None:
+        super().__init__(f"{code}: {message}")
+        self.code = code
+        self.message = message
+        self.retryable = retryable
+        self.status_code = status_code
+        self.request_id = request_id
+
+    def to_dict(self) -> Dict[str, Any]:
+        return {
+            "code": self.code,
+            "message": self.message,
+            "retryable": self.retryable,
+            "status_code": self.status_code,
+            "request_id": self.request_id,
+        }
+
+
 @dataclass
 class ModelRequest:
     provider: str
@@ -50,5 +79,5 @@ class ModelProvider(Protocol):
     async def health_check(self, model: str) -> Dict[str, Any]:
         ...
 
-    async def stream(self, request: ModelRequest) -> AsyncIterator[ModelStreamEvent]:
+    def stream(self, request: ModelRequest) -> AsyncIterator[ModelStreamEvent]:
         ...

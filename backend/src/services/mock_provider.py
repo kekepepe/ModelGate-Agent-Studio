@@ -10,7 +10,7 @@ set_provider(your_real_provider).
 
 import random
 import time
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import Callable, Dict, Optional, Protocol
 
 

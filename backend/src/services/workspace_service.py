@@ -7,7 +7,7 @@ from src.models.handoff import ExecutionLog, HandoffRecord, WorkerSession
 from src.models.model import Model
 from src.models.quota import QuotaRecord
 from src.models.workspace import Goal, Task
-from src.models.workspace import Artifact, ExecutionPlan, PlanChange, PlanTask, VerificationResult
+from src.models.workspace import Artifact, ExecutionPlan, PlanChange, PlanTask, VerificationResult, WorkspaceWorktree
 from src.models.tool import ToolCallRecord
 from src.models.knowledge import KnowledgeChunk, KnowledgeDocument, KnowledgeSource, RetrievalRun, RetrievedContextItem
 from src.models.selection import AgentSelectionDecision
@@ -42,6 +42,9 @@ def get_workspace_state(db: Session, goal_id: str) -> Dict:
         .order_by(HandoffRecord.created_at.asc())
         .all()
     )
+    worktrees = db.query(WorkspaceWorktree).filter(
+        WorkspaceWorktree.goal_id == goal_id,
+    ).order_by(WorkspaceWorktree.created_at.asc()).all()
     plans = (
         db.query(ExecutionPlan)
         .filter(ExecutionPlan.goal_id == goal_id)
@@ -222,6 +225,7 @@ def get_workspace_state(db: Session, goal_id: str) -> Dict:
             for w in workers
         ],
         "handoffs": handoffs,
+        "worktrees": [record.to_dict() for record in worktrees],
         "active_plan": active_plan.to_dict(active_plan_tasks) if active_plan else None,
         "plan_versions": [
             {

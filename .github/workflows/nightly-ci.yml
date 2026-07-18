@@ -1,0 +1,199 @@
+name: Nightly CI
+
+on:
+  schedule:
+    - cron: "41 18 * * *"
+  workflow_dispatch:
+    inputs:
+      run_benchmark:
+        description: Run the paid 5x3 live Multi-Agent benchmark
+        required: false
+        default: false
+        type: boolean
+
+permissions:
+  contents: read
+
+concurrency:
+  group: nightly-ci-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  slow-and-security-tests:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    defaults:
+      run:
+        working-directory: backend
+    env:
+      DATABASE_URL: sqlite:////tmp/modelgate-nightly-tests.db
+      MODEL_GATE_EXECUTION_MODE: mock
+      WORKSPACE_ROOT: ${{ github.workspace }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version-file: .python-version
+          cache: pip
+          cache-dependency-path: |
+            backend/requirements.txt
+            backend/requirements-dev.txt
+      - name: Install locked dependencies
+        run: python -m pip install --disable-pip-version-check -r requirements-dev.txt
+      - name: Run slow and security suites
+        run: pytest -m "slow or security" --strict-markers --junitxml=nightly-pytest.xml
+      - name: Upload nightly backend evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: nightly-backend-evidence
+          path: backend/nightly-pytest.xml
+          if-no-files-found: error
+
+  full-browser-matrix:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    env:
+      DATABASE_URL: sqlite:////tmp/modelgate-nightly-browser.db
+      MODEL_GATE_EXECUTION_MODE: mock
+      WORKSPACE_ROOT: ${{ github.workspace }}
+      VITE_API_BASE_URL: http://127.0.0.1:8000/api/v1
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version-file: .python-version
+          cache: pip
+          cache-dependency-path: backend/requirements.txt
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - name: Install backend and frontend dependencies
+        run: |
+          python -m pip install --disable-pip-version-check -r backend/requirements.txt
+          npm ci --prefix frontend
+      - name: Install pinned Playwright browser
+        run: npx --prefix frontend playwright install --with-deps chromium
+      - name: Start application
+        run: |
+          python -m uvicorn src.main:app --app-dir backend --host 127.0.0.1 --port 8000 > nightly-backend.log 2>&1 &
+          npm --prefix frontend run dev -- --host 127.0.0.1 --port 5173 > nightly-frontend.log 2>&1 &
+      - name: Wait for application
+        run: bash scripts/wait-for-services.sh
+      - name: Run all configured browser projects
+        run: npm --prefix frontend run test:e2e
+      - name: Upload browser evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: nightly-browser-evidence
+          path: |
+            nightly-backend.log
+            nightly-frontend.log
+            frontend/playwright-report
+            frontend/test-results
+          if-no-files-found: warn
+
+  live-provider-acceptance:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 120
+    services:
+      postgres:
+        image: postgres:16.9-alpine
+        env:
+          POSTGRES_USER: modelgate
+          POSTGRES_PASSWORD: modelgate-nightly
+          POSTGRES_DB: modelgate_nightly
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U modelgate -d modelgate_nightly"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 12
+    env:
+      DATABASE_URL: postgresql+psycopg://modelgate:modelgate-nightly@127.0.0.1:5432/modelgate_nightly
+      MODEL_GATE_EXECUTION_MODE: live
+      PROVIDER_API_BASE: ${{ secrets.PROVIDER_API_BASE }}
+      PROVIDER_API_KEY: ${{ secrets.PROVIDER_API_KEY }}
+      PLANNER_MODEL_NAME: ${{ secrets.PLANNER_MODEL_NAME }}
+      WORKER_MODEL_NAME: ${{ secrets.WORKER_MODEL_NAME }}
+      VERIFIER_MODEL_NAME: ${{ secrets.VERIFIER_MODEL_NAME }}
+      EMBEDDING_MODEL_NAME: ${{ secrets.EMBEDDING_MODEL_NAME }}
+      MODEL_PRICING_JSON: ${{ secrets.MODEL_PRICING_JSON }}
+      EMBEDDING_BACKEND: real
+      WORKSPACE_ROOT: /tmp/modelgate-nightly
+      WORKTREE_ROOT: /tmp/modelgate-nightly-worktrees
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version-file: .python-version
+          cache: pip
+          cache-dependency-path: backend/requirements.txt
+      - name: Require live Provider configuration
+        shell: bash
+        run: |
+          missing=()
+          for name in PROVIDER_API_KEY PLANNER_MODEL_NAME WORKER_MODEL_NAME VERIFIER_MODEL_NAME EMBEDDING_MODEL_NAME; do
+            if [[ -z "${!name}" ]]; then
+              missing+=("$name")
+            fi
+          done
+          if (( ${#missing[@]} > 0 )); then
+            echo "::error::Missing required live acceptance secrets: ${missing[*]}"
+            exit 1
+          fi
+      - name: Install locked backend dependencies
+        run: python -m pip install --disable-pip-version-check -r backend/requirements.txt
+      - name: Prepare isolated runtime root
+        run: mkdir -p /tmp/modelgate-nightly /tmp/modelgate-nightly-worktrees
+      - name: Upgrade PostgreSQL schema
+        working-directory: backend
+        run: alembic upgrade head
+      - name: Start live backend
+        run: python -m uvicorn src.main:app --app-dir backend --host 127.0.0.1 --port 8000 > live-provider-backend.log 2>&1 &
+      - name: Wait for live backend
+        shell: bash
+        run: |
+          for attempt in {1..60}; do
+            if curl --fail --silent http://127.0.0.1:8000/health >/dev/null; then
+              exit 0
+            fi
+            sleep 1
+          done
+          echo "Backend did not become ready" >&2
+          exit 1
+      - name: Run six mandatory live Provider scenarios
+        run: |
+          python backend/scripts/live_provider_acceptance.py \
+            --runs-dir /tmp/modelgate-nightly \
+            --output live-provider-acceptance.json
+      - name: Run real embedding comparison
+        run: |
+          python backend/scripts/rag_eval.py --embedding-backend real \
+            --output live-embedding-rag.json --enforce-thresholds
+      - name: Run 5x3 live Multi-Agent benchmark
+        if: github.event_name == 'workflow_dispatch' && inputs.run_benchmark
+        run: |
+          if [[ -z "$MODEL_PRICING_JSON" ]]; then
+            echo "::error::MODEL_PRICING_JSON is required for a cost-complete benchmark"
+            exit 1
+          fi
+          python backend/scripts/multi_agent_benchmark.py \
+            --runs-dir /tmp/modelgate-nightly \
+            --output live-multi-agent-benchmark.json \
+            --runs-per-mode 5
+      - name: Upload live acceptance evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: nightly-live-provider-evidence
+          path: |
+            live-provider-backend.log
+            live-provider-acceptance.json
+            live-embedding-rag.json
+            live-multi-agent-benchmark.json
+          if-no-files-found: warn

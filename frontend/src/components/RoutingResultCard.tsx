@@ -22,15 +22,24 @@ export default function RoutingResultCard({
 }: RoutingResultCardProps) {
   const [showOverride, setShowOverride] = useState(false);
   const [dismissed, setDismissed] = useState(false);
-  const [timer, setTimer] = useState<number | null>(null);
   const [progress, setProgress] = useState(100);
   const containerRef = useRef<HTMLDivElement>(null);
+  const timerRef = useRef<number | null>(null);
 
   const selectedModel = MOCK_MODELS.find((m) => m.id === result.selected_model_id);
   const confidencePct = Math.round((result.confidence || 0) * 100);
 
+  const clearDismissTimer = useCallback(() => {
+    if (timerRef.current !== null) {
+      window.clearInterval(timerRef.current);
+      timerRef.current = null;
+    }
+    setProgress(100);
+  }, []);
+
   const startDismissTimer = useCallback(() => {
     if (!autoDismiss) return;
+    clearDismissTimer();
     const duration = 5000;
     const interval = 50;
     let elapsed = 0;
@@ -40,25 +49,19 @@ export default function RoutingResultCard({
       const remaining = Math.max(0, duration - elapsed);
       setProgress((remaining / duration) * 100);
       if (remaining <= 0) {
+        window.clearInterval(t);
+        timerRef.current = null;
         setDismissed(true);
         onDismiss?.();
       }
     }, interval);
-    setTimer(t);
-  }, [autoDismiss, onDismiss]);
-
-  const clearDismissTimer = useCallback(() => {
-    if (timer) {
-      clearInterval(timer);
-      setTimer(null);
-      setProgress(100);
-    }
-  }, [timer]);
+    timerRef.current = t;
+  }, [autoDismiss, clearDismissTimer, onDismiss]);
 
   useEffect(() => {
     startDismissTimer();
     return () => clearDismissTimer();
-  }, []);
+  }, [clearDismissTimer, startDismissTimer]);
 
   const handleMouseEnter = () => {
     clearDismissTimer();

@@ -89,11 +89,15 @@ def set_source_status(db: Session, source_id: str, status: str) -> Dict:
     return source.to_dict()
 
 
-def sync_source(db: Session, source_id: str) -> Dict:
+def sync_source(db: Session, source_id: str, embedding_adapter=None) -> Dict:
     source = _source(db, source_id)
     if source.status == "disabled":
         raise KnowledgeSourceError("Disabled source cannot be synchronized")
     root = _resolve_uri(source.uri)
+    if embedding_adapter is None:
+        from src.services.embedding_service import configured_embedding_adapter
+        embedding_adapter = configured_embedding_adapter()
+    previous_embedding_fingerprint = source.get_metadata().get("embedding_fingerprint")
     source.status, source.error_message = "syncing", None
     db.flush()
     try:
@@ -111,7 +115,12 @@ def sync_source(db: Session, source_id: str) -> Dict:
             source_hash.update(relative.encode("utf-8")); source_hash.update(checksum.encode("ascii"))
             seen.add(relative)
             document = existing.get(relative)
-            if document and document.checksum == checksum and document.status == "indexed":
+            if (
+                document
+                and document.checksum == checksum
+                and document.status == "indexed"
+                and previous_embedding_fingerprint == embedding_adapter.fingerprint
+            ):
                 unchanged += 1
                 continue
             content = content_bytes.decode("utf-8")
@@ -128,15 +137,19 @@ def sync_source(db: Session, source_id: str) -> Dict:
                 db.query(KnowledgeChunk).filter(KnowledgeChunk.document_id == document.id).delete(synchronize_session=False)
                 updated += 1
             chunks = _chunk_text(content)
-            db.add_all([
-                KnowledgeChunk(
+            chunk_rows = []
+            from src.services.embedding_service import embedding_metadata
+            for index, chunk in enumerate(chunks):
+                vector = embedding_adapter.embed(chunk)
+                chunk_row = KnowledgeChunk(
                     id=str(uuid.uuid4()), document_id=document.id, content=chunk,
                     chunk_index=index, token_count=_estimate_tokens(chunk),
-                    embedding=json.dumps(_hash_embedding(chunk)),
+                    embedding=json.dumps(vector),
                     symbol_path=_symbol_path(chunk),
                 )
-                for index, chunk in enumerate(chunks)
-            ])
+                chunk_row.set_metadata(embedding_metadata(embedding_adapter, vector))
+                chunk_rows.append(chunk_row)
+            db.add_all(chunk_rows)
 
         deleted = 0
         for relative, document in existing.items():
@@ -148,6 +161,15 @@ def sync_source(db: Session, source_id: str) -> Dict:
             )
             deleted += 1
         source.status = "active"
+        source_metadata = source.get_metadata()
+        source_metadata.update({
+            "embedding_adapter": embedding_adapter.name,
+            "embedding_model": embedding_adapter.model_name,
+            "embedding_version": embedding_adapter.version,
+            "embedding_fingerprint": embedding_adapter.fingerprint,
+            "embedding_fallback_reason": embedding_adapter.fallback_reason,
+        })
+        source.set_metadata(source_metadata)
         source.checksum = source_hash.hexdigest()
         source.last_synced_at = datetime.now(timezone.utc)
         source.updated_at = datetime.now(timezone.utc)

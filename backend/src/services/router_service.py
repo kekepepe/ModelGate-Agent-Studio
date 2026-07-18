@@ -9,7 +9,6 @@ from src.data.models import (
     TASK_TYPE_CAPABILITIES,
     DEFAULT_WEIGHTS,
     QUOTA_HEALTH_SCORES,
-    get_model_seed,
 )
 
 
@@ -238,7 +237,7 @@ def _dimension_reason(dimension: str, score: float, model: Model) -> str:
     reasons = {
         "capability_match": f"匹配度 {int(score * 100)}%" if score > 0.5 else "能力标签匹配较低",
         "role_match": f"角色偏好排名第 {int((1 - score) / 0.15) + 1}" if score >= 0.7 else "非首选角色匹配",
-        "context_fit": f"上下文余量充足" if score >= 0.8 else "上下文余量一般",
+        "context_fit": "上下文余量充足" if score >= 0.8 else "上下文余量一般",
         "cost_fit": f"成本等级 {model.cost_level}" if score > 0.5 else "成本较高",
         "speed_fit": f"速度等级 {model.speed_level}" if score > 0.5 else "速度较慢",
         "quota_health": "额度健康" if score >= 0.8 else "额度接近限制",

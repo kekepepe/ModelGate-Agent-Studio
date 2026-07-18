@@ -73,7 +73,7 @@ def test_hybrid_retrieval_persists_candidates_citations_and_budget_decisions(cli
     assert data["token_count"] <= 1000
     run = db_session.query(RetrievalRun).filter(RetrievalRun.id == data["retrieval_run_id"]).one()
     records = db_session.query(RetrievedContextItem).filter(RetrievedContextItem.retrieval_run_id == run.id).all()
-    assert run.policy == "hybrid_keyword_hash_embedding_v1"
+    assert run.policy == "hybrid_keyword_embedding_v2:local_hash"
     assert records and any(item.used for item in records)
 
     clipped = client.post("/api/v1/context/retrieve", json={
@@ -107,6 +107,13 @@ def test_disabled_or_out_of_scope_sources_return_traceable_empty_result(client, 
     assert len(runs) == 2 and all(run["status"] == "empty" for run in runs)
 
 
+def test_parent_scope_cannot_read_a_more_specific_private_source():
+    from src.services.retrieval_service import _scope_allows
+
+    assert _scope_allows("docs/runtime.py", "docs/**") is True
+    assert _scope_allows("docs/**", "docs/private/**") is False
+
+
 def test_worker_context_uses_retrieval_gate_and_persists_snapshot(client, db_session, tmp_path, monkeypatch):
     docs = tmp_path / "docs"; docs.mkdir()
     (docs / "runtime.md").write_text("Scheduler dependencies are validated before task execution.", encoding="utf-8")
@@ -120,7 +127,7 @@ def test_worker_context_uses_retrieval_gate_and_persists_snapshot(client, db_ses
     snapshot = persist_context_snapshot(db_session, "worker-1", None, package)
     db_session.commit()
 
-    assert package["policy"] == "hybrid_keyword_hash_embedding_v1"
+    assert package["policy"] == "hybrid_keyword_embedding_v2:local_hash"
     assert package["knowledge_items"]
     assert package["citations"][0].startswith("docs/runtime.md#chunk-")
     assert package["retrieval_run_id"]

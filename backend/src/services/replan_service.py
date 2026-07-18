@@ -137,6 +137,7 @@ def request_replan(db: Session, goal_id: str, request: ReplanRequest) -> Dict:
         replaced_task_ids=sorted(replaced_clients),
     )
 
+    pre_execution_replan = goal.status in {"planning", "waiting_confirmation"}
     goal.status = "replanning"
     goal.updated_at = datetime.now(timezone.utc)
     try:
@@ -166,7 +167,35 @@ def request_replan(db: Session, goal_id: str, request: ReplanRequest) -> Dict:
             commit=False,
         )
         planning_service.activate_plan(db, plan, commit=False)
-        goal.status = "running" if created or _has_unfinished(retained.values()) else "completed"
+        goal.status = (
+            "planning"
+            if pre_execution_replan
+            else "running" if created or _has_unfinished(retained.values()) else "completed"
+        )
+        planning_service.emit_plan_events(db, plan, len(contract.tasks), commit=False)
+        log_service.create_log(db, {
+            "goal_id": goal.id,
+            "event_type": "plan.replan_requested",
+            "event_status": "completed",
+            "output_summary": request.reason,
+            "metadata": {
+                "trigger": request.trigger,
+                "from_plan_version": active_plan.version,
+                "to_plan_version": plan.version,
+                "evidence": request.evidence,
+            },
+        }, commit=False)
+        log_service.create_log(db, {
+            "goal_id": goal.id,
+            "event_type": "plan.updated",
+            "event_status": "completed",
+            "output_summary": (
+                f"Plan v{active_plan.version} -> v{plan.version}: "
+                f"retained={len(retained)}, replaced={len(replaced_clients)}, "
+                f"added={len(added_clients)}, cancelled={len(cancelled_clients)}"
+            ),
+            "metadata": change.model_dump(),
+        }, commit=False)
         db.commit()
         db.refresh(plan)
     except Exception as exc:
@@ -175,30 +204,6 @@ def request_replan(db: Session, goal_id: str, request: ReplanRequest) -> Dict:
             raise
         raise ReplanError(str(exc)) from exc
 
-    planning_service.emit_plan_events(db, plan, len(contract.tasks))
-    log_service.create_log(db, {
-        "goal_id": goal.id,
-        "event_type": "plan.replan_requested",
-        "event_status": "completed",
-        "output_summary": request.reason,
-        "metadata": {
-            "trigger": request.trigger,
-            "from_plan_version": active_plan.version,
-            "to_plan_version": plan.version,
-            "evidence": request.evidence,
-        },
-    })
-    log_service.create_log(db, {
-        "goal_id": goal.id,
-        "event_type": "plan.updated",
-        "event_status": "completed",
-        "output_summary": (
-            f"Plan v{active_plan.version} -> v{plan.version}: "
-            f"retained={len(retained)}, replaced={len(replaced_clients)}, "
-            f"added={len(added_clients)}, cancelled={len(cancelled_clients)}"
-        ),
-        "metadata": change.model_dump(),
-    })
     decision = RuntimeDecisionContract(
         action="replan_graph",
         reason=request.reason,
@@ -314,9 +319,9 @@ def ensure_active_plan(db: Session, goal: Goal) -> ExecutionPlan:
         commit=False,
     )
     planning_service.activate_plan(db, plan, commit=False)
+    planning_service.emit_plan_events(db, plan, len(contract.tasks), commit=False)
     db.commit()
     db.refresh(plan)
-    planning_service.emit_plan_events(db, plan, len(contract.tasks))
     return plan
 
 

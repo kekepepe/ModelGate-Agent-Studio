@@ -2,25 +2,30 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from src.core.config import settings
-from src.core.database import engine, Base, SessionLocal, ensure_runtime_v2_schema
+from src.core.database import SessionLocal
+from src.core.migrations import upgrade_database
 from src.routes import agents, router as router_routes, quota as quota_routes, handoffs as handoff_routes, logs as log_routes, goals as goal_routes, tasks as task_routes, workspace as workspace_routes, runtime as runtime_routes, review as review_routes, knowledge as knowledge_routes, models as model_routes, tools as tool_routes, dashboard as dashboard_routes
 from src.data.models import MODEL_SEEDS
 from src.models.model import Model
 from src.models.agent import AgentStation
-from src.models import selection as selection_models
-from src.models import handoff as handoff_models
-from src.models import supervisor as supervisor_models
-from src.models import tool as tool_models
+from src.models import handoff as handoff_models  # noqa: F401 - registers mapped tables
+from src.models import selection as selection_models  # noqa: F401 - registers mapped tables
+from src.models import supervisor as supervisor_models  # noqa: F401 - registers mapped tables
+from src.models import tool as tool_models  # noqa: F401 - registers mapped tables
 from src.schemas.model import MODEL_CONTEXT_TOKEN_OPTIONS
 from src.services.tool_service import seed_builtin_tools
+from src.services.state_machine_service import install_state_guards
+from src.middleware.request_security import RequestBoundaryMiddleware
 
-Base.metadata.create_all(bind=engine)
-ensure_runtime_v2_schema()
+install_state_guards()
+upgrade_database()
 
 app = FastAPI(
     title=settings.app_name,
     debug=settings.debug,
 )
+
+app.add_middleware(RequestBoundaryMiddleware)
 
 app.add_middleware(
     CORSMiddleware,
@@ -144,19 +149,21 @@ def _seed_default_agents():
         {
             "id": "default-reviewer", "name": "Reviewer", "role": "reviewer",
             "description": "审查输出质量、风险和遗漏", "default_model_id": "model-gpt-4-turbo",
-            "backup_model_ids": ["model-claude-opus"], "allowed_tools": ["file_read", "diff_view"],
+            "backup_model_ids": ["model-claude-opus"],
+            "allowed_tools": ["workspace_list", "file_read", "file_search", "git_diff", "test_runner", "lint_run", "typecheck_run", "build_run"],
             "system_prompt": "审查任务输出，给出具体质量与风险结论。", "allow_handoff": True,
         },
         {
             "id": "default-researcher", "name": "Researcher", "role": "research",
             "description": "收集资料并提炼可行动结论", "default_model_id": "model-kimi-long-context",
-            "backup_model_ids": ["model-claude-opus", "model-gpt-4-turbo"], "allowed_tools": ["file_read"],
+            "backup_model_ids": ["model-claude-opus", "model-gpt-4-turbo"],
+            "allowed_tools": ["workspace_list", "file_read", "file_search", "glob_search"],
             "system_prompt": "整理相关资料、来源与行动建议。", "allow_handoff": True,
         },
         {
             "id": "default-summarizer", "name": "Summarizer", "role": "summarizer",
             "description": "压缩上下文并生成任务摘要", "default_model_id": "model-claude-3-haiku",
-            "backup_model_ids": ["model-kimi-long-context"], "allowed_tools": [],
+            "backup_model_ids": ["model-kimi-long-context"], "allowed_tools": ["workspace_list", "file_read", "file_search"],
             "system_prompt": "将执行信息压缩为清晰的结构化摘要。", "allow_handoff": False,
         },
         {
@@ -182,16 +189,20 @@ def _seed_default_agents():
                 db.add(agent)
             db.commit()
         else:
-            # Existing installations should receive newly introduced safe
-            # coder tools without modifying any user-created Agent profile.
-            coder_seed = next(item for item in defaults if item["id"] == "default-coder")
-            coder = db.query(AgentStation).filter(AgentStation.id == "default-coder").first()
-            if coder:
-                allowed = set(coder.get_allowed_tools())
-                changed = set(coder_seed["allowed_tools"]) - allowed
+            # Refresh only built-in profiles and preserve every user-created
+            # Agent. Safe additions are unioned so local customizations remain.
+            changed_any = False
+            for seed in defaults:
+                agent = db.query(AgentStation).filter(AgentStation.id == seed["id"]).first()
+                if not agent:
+                    continue
+                allowed = set(agent.get_allowed_tools())
+                changed = set(seed["allowed_tools"]) - allowed
                 if changed:
-                    coder.set_allowed_tools(sorted(allowed | changed))
-                    db.commit()
+                    agent.set_allowed_tools(sorted(allowed | changed))
+                    changed_any = True
+            if changed_any:
+                db.commit()
     finally:
         db.close()
 

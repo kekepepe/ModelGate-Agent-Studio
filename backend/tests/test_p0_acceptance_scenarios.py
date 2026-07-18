@@ -7,6 +7,7 @@ from src.models.workspace import ExecutionPlan, Goal, PlanChange
 from src.schemas.planning import ExecutionPlanContract, PlanTaskContract, ReplanRequest
 from src.services import planning_service, replan_service
 from src.services.orchestrator_service import RuleBasedPlanningFallback, _materialize_plan
+from src.services.state_machine_service import transition_task
 
 
 def _seed_capabilities(db_session):
@@ -124,9 +125,10 @@ def test_p0_scenario_6_reviewer_architecture_issue_creates_new_plan_version(db_s
     )
     planning_service.activate_plan(db_session, first)
     build = next(task for task in runtime_tasks if task.task_type == "coding")
-    build.status = "revision_required"
     build.verification_status = "failed"
-    db_session.commit()
+    transition_task(db_session, build, "assigned", summary="Fixture assignment")
+    transition_task(db_session, build, "running", summary="Fixture execution")
+    transition_task(db_session, build, "revision_required", summary="Architecture issue found")
 
     result = replan_service.request_replan(db_session, goal.id, ReplanRequest(
         trigger="supervisor_review",
