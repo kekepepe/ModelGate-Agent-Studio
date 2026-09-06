@@ -1,3 +1,5 @@
+import re
+
 from typing import List, Optional
 from sqlalchemy.orm import Session
 from sqlalchemy import or_
@@ -18,6 +20,33 @@ class AgentNotFoundError(AgentServiceError):
 
 class AgentValidationError(AgentServiceError):
     pass
+
+
+class BuiltinStationProtectedError(AgentServiceError):
+    """Raised when a caller tries to delete or rename a built-in station."""
+
+
+_SLUG_RE = re.compile(r"[^a-z0-9]+")
+
+
+def _slugify(name: str) -> str:
+    """Best-effort slug generator for user-created stations."""
+    base = _SLUG_RE.sub("-", (name or "").lower()).strip("-")
+    return base or "station"
+
+
+def _next_unique_slug(db: Session, base: str) -> str:
+    """Return a slug that does not yet exist in the agent_stations table."""
+    candidate = base
+    suffix = 2
+    while db.query(AgentStation).filter(AgentStation.slug == candidate).first() is not None:
+        candidate = f"{base}-{suffix}"
+        suffix += 1
+    return candidate
+
+
+def get_station_by_slug(db: Session, slug: str) -> Optional[AgentStation]:
+    return db.query(AgentStation).filter(AgentStation.slug == slug).first()
 
 
 def _merge_with_template(data: AgentCreate) -> dict:
@@ -64,6 +93,7 @@ def create_agent(db: Session, data: AgentCreate) -> AgentStation:
         allow_handoff=merged.get("allow_handoff", False),
         handoff_threshold_tokens=merged.get("handoff_threshold_tokens"),
         is_enabled=True,
+        is_builtin=False,  # V1.0-3: every user-created station is non-builtin
         total_tasks_completed=0,
         total_tasks_failed=0,
         total_handoffs_initiated=0,
@@ -74,6 +104,8 @@ def create_agent(db: Session, data: AgentCreate) -> AgentStation:
     agent.set_workspace_permissions(merged.get("workspace_permissions") or [])
     agent.set_input_types(merged.get("input_types") or ["text"])
     agent.set_output_types(merged.get("output_types") or ["text"])
+    # Slug is auto-derived from name and guaranteed unique
+    agent.slug = _next_unique_slug(db, _slugify(merged["name"]))
 
     db.add(agent)
     db.commit()
@@ -153,5 +185,9 @@ def update_agent_status(db: Session, agent_id: str, is_enabled: bool) -> AgentSt
 
 def delete_agent(db: Session, agent_id: str) -> None:
     agent = get_agent(db, agent_id)
+    if agent.is_builtin:
+        raise BuiltinStationProtectedError(
+            f"Cannot delete built-in station '{agent.slug or agent.id}'"
+        )
     db.delete(agent)
     db.commit()

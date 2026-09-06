@@ -52,11 +52,13 @@ def list_agents(
         AgentListItem(
             id=a.id,
             name=a.name,
+            slug=a.slug,
             role=a.role,
             description=a.description,
             status=a.status,
             default_model_id=a.default_model_id,
             is_enabled=a.is_enabled,
+            is_builtin=a.is_builtin,
             current_task_id=a.current_task_id,
             total_tasks_completed=a.total_tasks_completed,
             capabilities=sorted((a.get_capability_profile() or agent_service.default_capability_profile(a.role)).keys()),
@@ -87,8 +89,10 @@ def create_agent(data: AgentCreate, db: Session = Depends(get_db)):
             AgentCreateResponse(
                 id=agent.id,
                 name=agent.name,
+                slug=agent.slug,
                 role=agent.role,
                 status=agent.status,
+                is_builtin=agent.is_builtin,
                 created_at=agent.created_at.isoformat() if agent.created_at else None,
             ).model_dump()
         )
@@ -120,3 +124,14 @@ def update_agent_status(agent_id: str, data: AgentStatusUpdate, db: Session = De
         )
     except agent_service.AgentNotFoundError:
         _error_response("NOT_FOUND", f"Agent '{agent_id}' not found", 404)
+
+
+@router.delete("/agents/{agent_id}")
+def delete_agent(agent_id: str, db: Session = Depends(get_db)):
+    try:
+        agent_service.delete_agent(db, agent_id)
+        return _success_response({"id": agent_id, "deleted": True})
+    except agent_service.AgentNotFoundError:
+        _error_response("NOT_FOUND", f"Agent '{agent_id}' not found", 404)
+    except agent_service.BuiltinStationProtectedError as e:
+        _error_response("BAD_REQUEST", str(e), 400)

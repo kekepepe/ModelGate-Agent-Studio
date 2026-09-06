@@ -166,43 +166,54 @@ _seed_tools()
 
 
 def _seed_default_agents():
-    """Create a usable local team for a first-run Workspace experience."""
+    """Create a usable local team for a first-run Workspace experience.
+
+    V1.0-3: each built-in station now also gets a stable `slug` and
+    `is_builtin=True` so the frontend can reference them by name and the
+    application can forbid deletion of built-ins.
+    """
     defaults = [
         {
-            "id": "default-planner", "name": "Planner", "role": "planner",
+            "id": "default-planner", "slug": "planner", "is_builtin": True,
+            "name": "Planner", "role": "planner",
             "description": "拆解 Goal 并规划执行顺序", "default_model_id": "model-gpt-4-turbo",
             "backup_model_ids": ["model-claude-opus"], "allowed_tools": [],
             "system_prompt": "将用户目标拆成清晰、可执行的任务。", "allow_handoff": False,
         },
         {
-            "id": "default-coder", "name": "Coder", "role": "coder",
+            "id": "default-coder", "slug": "coder", "is_builtin": True,
+            "name": "Coder", "role": "coder",
             "description": "实现代码与技术方案", "default_model_id": "model-deepseek-coder",
             "backup_model_ids": ["model-claude-opus", "model-gpt-4-turbo"],
             "allowed_tools": ["workspace_list", "file_read", "file_search", "glob_search", "directory_create", "file_create", "file_write", "file_patch", "checkpoint_create", "checkpoint_restore", "terminal_execute", "test_runner", "lint_run", "typecheck_run", "build_run", "git_status", "git_log", "git_diff", "artifact_register"],
             "system_prompt": "根据任务描述产出可执行的实现方案或代码。", "allow_handoff": True,
         },
         {
-            "id": "default-reviewer", "name": "Reviewer", "role": "reviewer",
+            "id": "default-reviewer", "slug": "reviewer", "is_builtin": True,
+            "name": "Reviewer", "role": "reviewer",
             "description": "审查输出质量、风险和遗漏", "default_model_id": "model-gpt-4-turbo",
             "backup_model_ids": ["model-claude-opus"],
             "allowed_tools": ["workspace_list", "file_read", "file_search", "git_diff", "test_runner", "lint_run", "typecheck_run", "build_run"],
             "system_prompt": "审查任务输出，给出具体质量与风险结论。", "allow_handoff": True,
         },
         {
-            "id": "default-researcher", "name": "Researcher", "role": "research",
+            "id": "default-researcher", "slug": "researcher", "is_builtin": True,
+            "name": "Researcher", "role": "research",
             "description": "收集资料并提炼可行动结论", "default_model_id": "model-kimi-long-context",
             "backup_model_ids": ["model-claude-opus", "model-gpt-4-turbo"],
             "allowed_tools": ["workspace_list", "file_read", "file_search", "glob_search"],
             "system_prompt": "整理相关资料、来源与行动建议。", "allow_handoff": True,
         },
         {
-            "id": "default-summarizer", "name": "Summarizer", "role": "summarizer",
+            "id": "default-summarizer", "slug": "summarizer", "is_builtin": True,
+            "name": "Summarizer", "role": "summarizer",
             "description": "压缩上下文并生成任务摘要", "default_model_id": "model-claude-3-haiku",
             "backup_model_ids": ["model-kimi-long-context"], "allowed_tools": ["workspace_list", "file_read", "file_search"],
             "system_prompt": "将执行信息压缩为清晰的结构化摘要。", "allow_handoff": False,
         },
         {
-            "id": "default-supervisor", "name": "Supervisor", "role": "supervisor",
+            "id": "default-supervisor", "slug": "supervisor", "is_builtin": True,
+            "name": "Supervisor", "role": "supervisor",
             "description": "审查 Goal 是否完成并生成结论", "default_model_id": "model-claude-opus",
             "backup_model_ids": ["model-gpt-4-turbo"], "allowed_tools": ["file_read"],
             "system_prompt": "审查全部任务，判断是否达成 Goal 并给出最终结论。", "allow_handoff": False,
@@ -216,14 +227,21 @@ def _seed_default_agents():
                     id=seed["id"], name=seed["name"], role=seed["role"], description=seed["description"],
                     default_model_id=seed["default_model_id"], system_prompt=seed["system_prompt"],
                     allow_handoff=seed["allow_handoff"], status="idle", is_enabled=True,
+                    slug=seed["slug"], is_builtin=seed["is_builtin"],
                     max_steps_per_task=10, max_tool_calls_per_task=20,
                     max_tokens_per_task=32000, max_duration_seconds=900, max_consecutive_failures=3,
                 )
                 agent.set_backup_model_ids(seed["backup_model_ids"])
                 agent.set_allowed_tools(seed["allowed_tools"])
+                agent.set_handoff_policy({
+                    "can_initiate": seed["allow_handoff"],
+                    "on_quota_exhausted": "handoff" if seed["allow_handoff"] else "fallback_backup",
+                    "on_provider_error": "retry_once",
+                })
                 db.add(agent)
             db.commit()
         else:
+            # Backfill: stations seeded before V1.0-3 lack slug/is_builtin.
             # Refresh only built-in profiles and preserve every user-created
             # Agent. Safe additions are unioned so local customizations remain.
             changed_any = False
@@ -231,6 +249,12 @@ def _seed_default_agents():
                 agent = db.query(AgentStation).filter(AgentStation.id == seed["id"]).first()
                 if not agent:
                     continue
+                if agent.slug != seed["slug"]:
+                    agent.slug = seed["slug"]
+                    changed_any = True
+                if not agent.is_builtin:
+                    agent.is_builtin = True
+                    changed_any = True
                 allowed = set(agent.get_allowed_tools())
                 changed = set(seed["allowed_tools"]) - allowed
                 if changed:

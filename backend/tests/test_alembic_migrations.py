@@ -32,7 +32,10 @@ def test_empty_database_and_repeat_upgrade(tmp_path):
     assert "execution_plans" in inspector.get_table_names()
     assert "knowledge_sources" in inspector.get_table_names()
     with engine.connect() as connection:
-        assert connection.execute(text("SELECT version_num FROM alembic_version")).scalar_one() == "0009_model_provider_fields"
+        assert (
+            connection.execute(text("SELECT version_num FROM alembic_version")).scalar_one()
+            == "0010_station_design_fields"
+        )
 
 
 def test_legacy_012_database_upgrades_without_losing_runtime_records(tmp_path):

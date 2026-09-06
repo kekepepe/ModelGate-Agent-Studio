@@ -41,6 +41,10 @@ class AgentStation(Base):
     average_tokens_per_task = Column(Integer)
     average_duration_ms = Column(Integer)
     average_cost_usd = Column(Float)
+    # V1.0-3 (per design §4.1)
+    slug = Column(String(50), nullable=True)
+    is_builtin = Column(Boolean, nullable=False, default=False)
+    handoff_policy = Column(Text, nullable=True)
     created_at = Column(DateTime, nullable=False, default=lambda: datetime.now(timezone.utc))
     updated_at = Column(DateTime, nullable=False, default=lambda: datetime.now(timezone.utc))
 
@@ -80,10 +84,31 @@ class AgentStation(Base):
     def set_output_types(self, types: List[str]) -> None:
         self.output_types = json.dumps(types)
 
+    def get_handoff_policy(self) -> dict:
+        """Return the structured handoff policy (design §4.1)."""
+        if not self.handoff_policy:
+            return {
+                "can_initiate": bool(self.allow_handoff),
+                "on_quota_exhausted": "handoff" if self.allow_handoff else "fallback_backup",
+                "on_provider_error": "retry_once",
+            }
+        try:
+            return json.loads(self.handoff_policy)
+        except (json.JSONDecodeError, TypeError):
+            return {
+                "can_initiate": bool(self.allow_handoff),
+                "on_quota_exhausted": "handoff",
+                "on_provider_error": "retry_once",
+            }
+
+    def set_handoff_policy(self, policy: dict) -> None:
+        self.handoff_policy = json.dumps(policy, ensure_ascii=False)
+
     def to_dict(self) -> dict:
         return {
             "id": self.id,
             "name": self.name,
+            "slug": self.slug,
             "role": self.role,
             "description": self.description,
             "status": self.status,
@@ -105,7 +130,9 @@ class AgentStation(Base):
             "max_consecutive_failures": self.max_consecutive_failures,
             "allow_handoff": self.allow_handoff,
             "handoff_threshold_tokens": self.handoff_threshold_tokens,
+            "handoff_policy": self.get_handoff_policy(),
             "is_enabled": self.is_enabled,
+            "is_builtin": self.is_builtin,
             "total_tasks_completed": self.total_tasks_completed,
             "total_tasks_failed": self.total_tasks_failed,
             "total_handoffs_initiated": self.total_handoffs_initiated,

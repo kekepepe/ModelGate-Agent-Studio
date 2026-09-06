@@ -1,4 +1,4 @@
-from typing import Dict, List, Optional
+from typing import Any, Dict, List, Optional
 from pydantic import BaseModel, Field, field_validator
 
 
@@ -122,6 +122,7 @@ class AgentStatusUpdate(BaseModel):
 class AgentResponse(BaseModel):
     id: str
     name: str
+    slug: Optional[str] = None
     role: str
     description: Optional[str]
     status: str
@@ -143,7 +144,9 @@ class AgentResponse(BaseModel):
     max_consecutive_failures: int
     allow_handoff: bool
     handoff_threshold_tokens: Optional[int]
+    handoff_policy: Dict[str, Any] = Field(default_factory=dict)
     is_enabled: bool
+    is_builtin: bool = False
     total_tasks_completed: int
     total_tasks_failed: int
     total_handoffs_initiated: int
@@ -157,11 +160,13 @@ class AgentResponse(BaseModel):
 class AgentListItem(BaseModel):
     id: str
     name: str
+    slug: Optional[str] = None
     role: str
     description: Optional[str]
     status: str
     default_model_id: str
     is_enabled: bool
+    is_builtin: bool = False
     current_task_id: Optional[str]
     total_tasks_completed: int
     capabilities: List[str] = Field(default_factory=list)
@@ -179,8 +184,10 @@ class AgentListResponse(BaseModel):
 class AgentCreateResponse(BaseModel):
     id: str
     name: str
+    slug: Optional[str] = None
     role: str
     status: str
+    is_builtin: bool = False
     created_at: Optional[str]
 
 
