@@ -35,8 +35,12 @@ def _init_provider() -> object:
     if settings.execution_mode == "mock":
         logger.info("Provider: MockProvider (MODEL_GATE_EXECUTION_MODE=mock)")
         return _MockProvider()
-    provider = _LiteLLMProvider()
-    if not provider.api_key:
+    provider = _LiteLLMProvider(
+        api_base=settings.provider_api_base or None,
+        api_key=settings.provider_api_key or None,
+        timeout=settings.provider_timeout_seconds,
+    )
+    if not settings.provider_api_key:
         logger.warning(
             "LiteLLMProvider initialised WITHOUT PROVIDER_API_KEY. "
             "Real LLM calls will fail loudly. Set PROVIDER_API_KEY or "

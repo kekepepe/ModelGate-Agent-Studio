@@ -22,5 +22,18 @@ class Settings:
     sandbox_backend: str = os.getenv("SANDBOX_BACKEND", "local").lower()
     sandbox_image: str = os.getenv("SANDBOX_IMAGE", "python:3.12.8-slim-bookworm")
 
+    # ------------------------------------------------------------------
+    # LLM provider (V1.0-2, per design §6.5)
+    # ------------------------------------------------------------------
+    # `os.getenv` returns "" for unset values, which makes the
+    # "no key configured" check (`if not settings.provider_api_key`) work
+    # the same way whether the env var is missing or explicitly empty.
+    provider_api_base: str = os.getenv("PROVIDER_API_BASE", "")
+    provider_api_key: str = os.getenv("PROVIDER_API_KEY", "")
+    provider_timeout_seconds: int = int(os.getenv("PROVIDER_TIMEOUT_SECONDS", "60"))
+    # Backward-compatible aliases (kept so older env files keep working).
+    openai_base_url: str = os.getenv("OPENAI_BASE_URL", "https://api.openai.com/v1")
+    openai_api_key: str = os.getenv("OPENAI_API_KEY", "")
+
 
 settings = Settings()
