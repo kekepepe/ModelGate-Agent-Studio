@@ -1,139 +1,34 @@
-# ModelGate Agent Studio 文档中心
+# ModelGate Agent Studio · 文档入口
 
-> 本文档是 ModelGate Agent Studio 所有技术文档和产品文档的入口索引。
->
-> **原则**：产品方向、信息架构与开发优先级以路线图中的最新“下一阶段产品与开发总方案”为准；具体数据对象、状态枚举和接口契约再由对应 PRD 与架构文档定义。
+> 🚧 **2026-09-06 重设计进行中**  
+> 旧文档已全部归档到 [`_archive_2026/`](./_archive_2026/)。**所有架构 / 产品 / 开发决策以唯一文档为准**：
 
----
+# 👉 [`design/2026-09-06-platform-redesign.md`](./design/2026-09-06-platform-redesign.md)
 
-## 阅读顺序
+## 目录
 
-如果你是第一次接触本项目，建议按以下顺序阅读：
+| 路径 | 说明 |
+|---|---|
+| `design/2026-09-06-platform-redesign.md` | **唯一权威设计文档**（架构 / 前后端 / Agent / 数据 / 阶段） |
+| `_archive_2026/` | 重设计前的所有旧文档（V0 / MVP / P0-P7 时期），仅供考古 |
 
-1. **[roadmap/2026-07-18-Workspace统一导航与信息架构重构开发计划.md](roadmap/2026-07-18-Workspace统一导航与信息架构重构开发计划.md)** — 当前 Workspace 统一导航、Overview 与稳定 Run URL 方案（15 分钟）
-2. **[product/overview.md](product/overview.md)** — 产品定位、愿景、目标用户（5 分钟）
-3. **[roadmap.md](roadmap.md)** — V0 → MVP → V1 的历史产品路线图（5 分钟）
-4. **[mvp/MVP-功能优先级裁剪.md](mvp/MVP-功能优先级裁剪.md)** — MVP 范围与 MoSCoW 优先级（10 分钟）
-5. **[prd/agent-workspace-prd.md](prd/agent-workspace-prd.md)** — Workspace 的既有状态可视化需求（20 分钟）
-6. **[architecture/数据结构与数据库Schema.md](architecture/数据结构与数据库Schema.md)** — 权威数据结构总览（10 分钟）
+## 使用规则
 
-之后按需阅读其他 PRD：
+- ✅ 任何架构 / 接口 / 状态机变更 → 先改 `design/2026-09-06-platform-redesign.md`
+- ❌ 不要在别处另开新的规划文档（除非有充分理由并在本 README 留入口）
+- ❌ 不要去翻 `_archive_2026/` 找"当前事实"（历史已定，新设计为准）
 
-- **Model Router** → [prd/model-router-prd.md](prd/model-router-prd.md)
-- **Quota Manager** → [prd/quota-manager-prd.md](prd/quota-manager-prd.md)
-- **Agent Registry** → [prd/agent-registry-prd.md](prd/agent-registry-prd.md)
-- **Logs / Observability** → [prd/logs-observability-prd.md](prd/logs-observability-prd.md)
+## 实施进度
 
----
+按 V1.0 → V1.4 阶段推进，详见设计文档第 8 章。当前进行中：
 
-## 目录说明
+- ✅ V1.0-1 归档旧文档
+- ⏳ V1.0-2 后端骨架
+- ⏳ V1.0-3 后端服务
+- ⏳ V1.0-4 Runtime 引擎
+- ⏳ V1.0-5 前端骨架
+- ⏳ V1.0-6 前端页面
+- ⏳ V1.0-7 集成
+- ⏳ V1.0-8 收尾
 
-### `prd/` — 产品需求文档（当前有效，唯一权威）
-
-| 文件 | 说明 | 阶段 |
-|------|------|------|
-| [agent-workspace-prd.md](prd/agent-workspace-prd.md) | Workspace 页面：状态可视化、布局、组件、状态机 | MVP-A/B |
-| [handoff-manager-prd.md](prd/handoff-manager-prd.md) | Handoff 数据与流程参考；日常 UI 已调整为 Workspace 内能力 | MVP-A/B（历史页面范围） |
-| [model-router-prd.md](prd/model-router-prd.md) | Model Router：规则评分路由、风险标记 | MVP-A/B |
-| [quota-manager-prd.md](prd/quota-manager-prd.md) | Quota Manager：额度记录、估算、风险状态 | MVP-A/B |
-| [agent-registry-prd.md](prd/agent-registry-prd.md) | Agent Registry：Agent Station CRUD、模板 | MVP-A/B |
-| [logs-observability-prd.md](prd/logs-observability-prd.md) | Logs：全链路可观测性、10 种日志类型 | MVP-A/B |
-
-**规则**：所有数据对象定义、状态枚举、接口设计以 PRD 为准。
-
-### `stories/` — 用户故事（可转测试）
-
-| 文件 | 说明 | 状态 |
-|------|------|------|
-| [handoff-manager-stories.md](stories/handoff-manager-stories.md) | Handoff Manager 用户故事与验收标准 | 已完成 |
-
-**待补齐**：agent-workspace、model-router、quota-manager、logs-observability、agent-registry。
-
-### `architecture/` — 架构与接口
-
-| 文件 | 说明 |
-|------|------|
-| [API-Contract.md](architecture/API-Contract.md) | 前后端接口通用约定（Base URL、响应格式、分页） |
-| [Workspace统一导航路由与Run-API.md](architecture/Workspace统一导航路由与Run-API.md) | Workspace 路由、稳定 runId、恢复与跨模块 API |
-| [数据结构与数据库Schema.md](architecture/数据结构与数据库Schema.md) | **权威数据结构总览**：从所有 PRD 提取的统一对象定义和状态枚举 |
-
-**注意**：`数据结构与数据库Schema.md` 已按 PRD 重写。如与 PRD 冲突，以 PRD 为准，Schema 文档会同步更新。
-
-### `runtime/` — 执行层规范
-
-| 文件 | 说明 |
-|------|------|
-| [Agent-Runtime规则.md](runtime/Agent-Runtime规则.md) | Agent 执行标准流程、Task 调度、Worker 池 |
-| [Prompt模板文档.md](runtime/Prompt模板文档.md) | 各 Agent 的 Prompt 模板设计原则 |
-
-### `ui/` — UI 规范
-
-| 文件 | 说明 |
-|------|------|
-| [UI状态与交互动效规则.md](ui/UI状态与交互动效规则.md) | 状态颜色系统、Task 卡片状态、动效规则 |
-
-### `mvp/` — 范围与规划
-
-| 文件 | 说明 |
-|------|------|
-| [MVP-功能优先级裁剪.md](mvp/MVP-功能优先级裁剪.md) | MoSCoW 优先级分析，MVP-A/B/C 范围定义 |
-| [roadmap.md](../roadmap.md) | 产品路线图：V0 → MVP → V1 |
-| [2026-07-14-下一阶段产品与开发总方案.md](roadmap/2026-07-14-下一阶段产品与开发总方案.md) | **当前开发总方案**：Workspace 主入口、Handoff 收拢、阶段任务与验收 |
-
-### `product/` — 产品概述（对外用）
-
-| 文件 | 说明 |
-|------|------|
-| [overview.md](product/overview.md) | 产品名称、定位、愿景、核心价值、亮点 |
-
-### `demo/` — Demo 与验收
-
-| 文件 | 说明 |
-|------|------|
-| [Demo-Script与测试用例.md](demo/Demo-Script与测试用例.md) | 标准 Demo 流程和测试用例 |
-
-### `deployment/` — 部署与运行
-
-| 文件 | 说明 |
-|------|------|
-| [部署指南.md](deployment/部署指南.md) | Docker Compose、真实 Provider、备份、上线门槛与验收 |
-
-### `_archive/` — 归档历史文档（不再维护）
-
-| 文件 | 归档原因 |
-|------|----------|
-| `02-产品设计.md` | 内容被 `prd/` 各模块 PRD 覆盖 |
-| `03-技术架构与差异化.md` | 内容被 `prd/` 和 `runtime/` 覆盖 |
-| `v0.1-mvp-冻结文档.md` | 与 `roadmap.md` + `MVP-功能优先级裁剪.md` 重复 |
-| `未来开发方向与路线图.md` | 与 `roadmap.md` 重复 |
-| `核心用户流程.md` | 内容被各 PRD 中的用户流程章节覆盖 |
-
----
-
-## 术语速查
-
-| 术语 | 定义 |
-|------|------|
-| **Goal** | 用户输入的顶层目标，系统将其拆解为多个 Task |
-| **Task** | Goal 拆解后的子任务，有状态、优先级、分配 Agent |
-| **Agent Station** | Agent 工位，代表一个角色（Planner / Coder / Reviewer 等），不等于模型 |
-| **Worker** | 绑定到 Agent Station 的模型实例，执行具体 Task |
-| **Model** | 底层模型能力（gpt-4o / claude-3-5 等），被 Worker 调用 |
-| **Handoff** | 任务交接：当前 Worker 无法继续时，结构化传递上下文给新 Worker |
-| **Routing** | 模型路由：根据 Task 特征选择最合适的模型 |
-| **Quota** | 模型额度：调用次数、token 使用量、剩余估算 |
-
-完整术语表见 [architecture/数据结构与数据库Schema.md](architecture/数据结构与数据库Schema.md) 第 1 节。
-
----
-
-## 文档维护规则
-
-1. **方向优先级**：产品方向、页面归属和开发优先级以最新下一阶段开发总方案为准；数据对象、状态枚举、接口定义的冲突，以对应 PRD 为准。
-2. **变更同步**：修改 PRD 中的数据对象后，同步更新 `architecture/数据结构与数据库Schema.md`。
-3. **归档不删**：`_archive/` 中的文档保留历史，但不再维护。新开发不引用归档文档。
-4. **用户故事驱动**：每个 PRD 模块应配套 `stories/` 下的用户故事文档，作为开发验收依据。
-
----
-
-> 最后更新：2026-07-18
+> 最后更新：2026-09-06
