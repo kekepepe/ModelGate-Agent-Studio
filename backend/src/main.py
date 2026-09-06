@@ -1,3 +1,5 @@
+import logging
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
@@ -12,13 +14,42 @@ from src.models import handoff as handoff_models  # noqa: F401 - registers mappe
 from src.models import selection as selection_models  # noqa: F401 - registers mapped tables
 from src.models import supervisor as supervisor_models  # noqa: F401 - registers mapped tables
 from src.models import tool as tool_models  # noqa: F401 - registers mapped tables
+from src.providers.litellm_provider import LiteLLMProvider as _LiteLLMProvider
+from src.providers.mock_provider import MockProvider as _MockProvider
 from src.schemas.model import MODEL_CONTEXT_TOKEN_OPTIONS
 from src.services.tool_service import seed_builtin_tools
 from src.services.state_machine_service import install_state_guards
 from src.middleware.request_security import RequestBoundaryMiddleware
 
+logger = logging.getLogger(__name__)
+
+
+def _init_provider() -> object:
+    """Pick the active LLM provider from `MODEL_GATE_EXECUTION_MODE`.
+
+    Per design §6.5 / §2.2: a real deployment without a configured key must
+    fail visibly instead of silently falling back to a mock. We do not
+    auto-construct `LiteLLMProvider` here; we just verify the import path
+    and surface the active mode in the startup log.
+    """
+    if settings.execution_mode == "mock":
+        logger.info("Provider: MockProvider (MODEL_GATE_EXECUTION_MODE=mock)")
+        return _MockProvider()
+    provider = _LiteLLMProvider()
+    if not provider.api_key:
+        logger.warning(
+            "LiteLLMProvider initialised WITHOUT PROVIDER_API_KEY. "
+            "Real LLM calls will fail loudly. Set PROVIDER_API_KEY or "
+            "switch to MODEL_GATE_EXECUTION_MODE=mock for offline work."
+        )
+    else:
+        logger.info("Provider: LiteLLMProvider (key is set, ready)")
+    return provider
+
+
 install_state_guards()
 upgrade_database()
+_provider = _init_provider()  # noqa: F841 - eager init to surface config errors at startup
 
 app = FastAPI(
     title=settings.app_name,
