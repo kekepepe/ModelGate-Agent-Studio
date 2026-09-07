@@ -1,4 +1,86 @@
 @import "tailwindcss";
+@plugin "tailwindcss-animate";
+@custom-variant dark (&:is(.dark *));
+
+/* ------------------------------------------------------------------
+ *  Design tokens — ModelGate Agent Studio (per 2026-09-06 redesign §5.3)
+ *  Base: shadcn/ui "new-york" preset, slate base color.
+ *  The 6-state × 3-zone palette borrows from Star-Office-UI's
+ *  agent state taxonomy and is applied to TaskCard / AgentStationCard
+ *  / WorkerBadge.
+ * ------------------------------------------------------------------ */
+
+:root {
+  --background: oklch(1 0 0);
+  --foreground: oklch(0.145 0 0);
+  --card: oklch(1 0 0);
+  --card-foreground: oklch(0.145 0 0);
+  --popover: oklch(1 0 0);
+  --popover-foreground: oklch(0.145 0 0);
+  --primary: oklch(0.205 0 0);
+  --primary-foreground: oklch(0.985 0 0);
+  --secondary: oklch(0.97 0 0);
+  --secondary-foreground: oklch(0.205 0 0);
+  --muted: oklch(0.97 0 0);
+  --muted-foreground: oklch(0.556 0 0);
+  --accent: oklch(0.97 0 0);
+  --accent-foreground: oklch(0.205 0 0);
+  --destructive: oklch(0.577 0.245 27.325);
+  --destructive-foreground: oklch(0.985 0 0);
+  --border: oklch(0.922 0 0);
+  --input: oklch(0.922 0 0);
+  --ring: oklch(0.708 0 0);
+  --radius: 0.625rem;
+
+  /* V1.0-5: agent state color tokens (per Star-Office-UI study) */
+  --state-idle: oklch(0.708 0 0);          /* gray — rest / waiting */
+  --state-writing: oklch(0.546 0.196 244);  /* blue — writing */
+  --state-researching: oklch(0.45 0.18 280); /* indigo — research */
+  --state-executing: oklch(0.546 0.196 244); /* blue — execute (alias of writing) */
+  --state-syncing: oklch(0.6 0.15 200);      /* cyan — sync */
+  --state-error: oklch(0.577 0.245 27.325); /* red — error */
+  --state-completed: oklch(0.55 0.16 145);  /* green — done */
+  --state-running: oklch(0.546 0.196 244);   /* blue — running */
+  --state-paused: oklch(0.7 0.12 80);       /* amber — paused */
+  --state-failed: oklch(0.577 0.245 27.325); /* red — failed */
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+}
+
+@layer base {
+  * {
+    border-color: var(--border);
+  }
+  body {
+    background-color: var(--background);
+    color: var(--foreground);
+  }
+}
+
 
 .app-shell-run-main {
   display: flex;

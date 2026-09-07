@@ -1,6 +1,7 @@
 import { lazy, Suspense } from 'react'
 import { Navigate, Routes, Route } from 'react-router-dom'
 import './styles/animations.css'
+import { TooltipProvider } from './components/ui/tooltip'
 import AppShell from './components/app-shell/AppShell'
 
 // Keep the application shell responsive and load each workspace surface only
@@ -23,9 +24,10 @@ const AssetsPage = lazy(() => import('./pages/AssetsPage'))
 
 function App() {
   return (
-    <Suspense fallback={<RouteLoadingFallback />}>
-      <Routes>
-        <Route element={<AppShell />}>
+    <TooltipProvider delayDuration={150}>
+      <Suspense fallback={<RouteLoadingFallback />}>
+        <Routes>
+          <Route element={<AppShell />}>
             <Route path="/dashboard" element={<DashboardPage />} />
             <Route path="/agents" element={<AgentRegistryPage />} />
             <Route path="/models" element={<ModelManagerPage />} />
@@ -44,9 +46,10 @@ function App() {
             <Route path="/evolution" element={<EvolutionReviewPage />} />
             <Route path="/studio" element={<StudioPage />} />
             <Route path="/" element={<Navigate to="/studio" replace />} />
-        </Route>
-      </Routes>
-    </Suspense>
+          </Route>
+        </Routes>
+      </Suspense>
+    </TooltipProvider>
   )
 }
 
