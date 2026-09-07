@@ -7,7 +7,7 @@ import type {
 } from '../types/workspace';
 import type { TeamPreset } from '../types/team';
 
-export type WorkspaceViewMode = 'card' | 'pixel';
+export type WorkspaceViewMode = 'card' | 'pixel' | 'zones';
 
 export type StationViewModel = {
   agent: WorkspaceAgent;

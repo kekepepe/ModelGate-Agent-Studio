@@ -9,6 +9,7 @@ import PlanOverviewPanel from '../components/PlanOverviewPanel';
 import TaskTree from '../components/TaskTree';
 import AgentDetailModal from '../components/AgentDetailModal';
 import CardFlowRenderer from '../components/CardFlowRenderer';
+import ThreeZoneCardFlow from '../components/ThreeZoneCardFlow';
 import BottomConsole from '../components/BottomConsole';
 import HandoffConfirmModal from '../components/HandoffConfirmModal';
 import HandoffDetailDrawer from '../components/HandoffDetailDrawer';
@@ -28,7 +29,9 @@ export default function WorkspacePage() {
   const [viewMode, setViewMode] = useState<WorkspaceViewMode>(() => {
     const requested = searchParams.get('view');
     const persisted = window.localStorage.getItem(`workspace:view:${runId}`);
-    return requested === 'pixel' || (!requested && persisted === 'pixel') ? 'pixel' : 'card';
+    if (requested === 'zones' || (!requested && persisted === 'zones')) return 'zones';
+    if (requested === 'pixel' || (!requested && persisted === 'pixel')) return 'pixel';
+    return 'card';
   });
 
   const { data: state, isLoading, error: workspaceError, refetch } = useRunWorkspace(runId);
@@ -174,9 +177,15 @@ export default function WorkspacePage() {
 
         <main className="workspace-main">
           {isLoading && goalId ? <div className="workspace-loading-overlay">Refreshing workspace state…</div> : null}
-          {viewMode === 'card' ? <CardFlowRenderer viewModel={viewModel} selectedTaskId={selectedTaskId} onSelectTask={setSelectedTaskId} onOpenHandoff={setSelectedHandoffId} /> : <Suspense fallback={<div className="workspace-loading-overlay">Preparing Pixel Office…</div>}>
-            <PixelOfficeRenderer viewModel={viewModel} onSelectTask={setSelectedTaskId} onRequestHandoff={setHandoffTaskId} onOpenHandoff={setSelectedHandoffId} onPause={state?.goal?.status === 'running' && goalId ? () => pauseGoal.mutate(goalId) : undefined} />
-          </Suspense>}
+          {viewMode === 'card' ? (
+            <CardFlowRenderer viewModel={viewModel} selectedTaskId={selectedTaskId} onSelectTask={setSelectedTaskId} onOpenHandoff={setSelectedHandoffId} />
+          ) : viewMode === 'zones' ? (
+            <ThreeZoneCardFlow viewModel={viewModel} selectedTaskId={selectedTaskId} onSelectTask={setSelectedTaskId} />
+          ) : (
+            <Suspense fallback={<div className="workspace-loading-overlay">Preparing Pixel Office…</div>}>
+              <PixelOfficeRenderer viewModel={viewModel} onSelectTask={setSelectedTaskId} onRequestHandoff={setHandoffTaskId} onOpenHandoff={setSelectedHandoffId} onPause={state?.goal?.status === 'running' && goalId ? () => pauseGoal.mutate(goalId) : undefined} />
+            </Suspense>
+          )}
         </main>
       </div>
 
