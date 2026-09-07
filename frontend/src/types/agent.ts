@@ -40,11 +40,13 @@ export interface AgentStation {
 export interface AgentListItem {
   id: string;
   name: string;
+  slug?: string | null;
   role: AgentRole;
   description?: string;
   status: AgentStatus;
   default_model_id: string;
   is_enabled: boolean;
+  is_builtin?: boolean;
   current_task_id?: string;
   total_tasks_completed: number;
   capabilities?: string[];
