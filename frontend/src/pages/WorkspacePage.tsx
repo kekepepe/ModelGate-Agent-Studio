@@ -10,6 +10,7 @@ import TaskTree from '../components/TaskTree';
 import AgentDetailModal from '../components/AgentDetailModal';
 import CardFlowRenderer from '../components/CardFlowRenderer';
 import ThreeZoneCardFlow from '../components/ThreeZoneCardFlow';
+import FinalSummaryPanel from '../components/FinalSummaryPanel';
 import BottomConsole from '../components/BottomConsole';
 import HandoffConfirmModal from '../components/HandoffConfirmModal';
 import HandoffDetailDrawer from '../components/HandoffDetailDrawer';
@@ -177,6 +178,16 @@ export default function WorkspacePage() {
 
         <main className="workspace-main">
           {isLoading && goalId ? <div className="workspace-loading-overlay">Refreshing workspace state…</div> : null}
+          {/* V1.0-6d: Final Summary panel (仿 Star-Office-UI Memo) — shows when
+              the goal is in a terminal state (completed / failed / stopped). */}
+          {state?.goal && ['completed', 'failed', 'stopped'].includes(state.goal.status) && (
+            <div className="p-3">
+              <FinalSummaryPanel
+                summary={runtimeStatus?.final_summary ?? null}
+                goalTitle={state.goal.title}
+              />
+            </div>
+          )}
           {viewMode === 'card' ? (
             <CardFlowRenderer viewModel={viewModel} selectedTaskId={selectedTaskId} onSelectTask={setSelectedTaskId} onOpenHandoff={setSelectedHandoffId} />
           ) : viewMode === 'zones' ? (
