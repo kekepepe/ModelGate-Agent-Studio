@@ -1,0 +1,180 @@
+# Changelog
+
+All notable changes to ModelGate Agent Studio are documented here.
+
+V1.0 is the first release produced under the 2026-09-06 platform
+redesign. Older per-phase changelogs are archived in
+`docs/_archive_2026/CHANGELOG.md`.
+
+## V1.0 — 2026-09-06 platform redesign complete
+
+### Scope
+
+V1.0 is a single-developer, locally-runnable platform: one
+`docker compose up` brings the backend + frontend up, and one
+`bash scripts/e2e-demo.sh` proves the Goal → Task → Worker → Model
+→ Final Summary pipeline runs end-to-end.
+
+This is the "0 → 1" milestone. V1.1–V1.4 layer in Handoff, Quota,
+parallelism, custom Stations, and a CI gate.
+
+### Added
+
+**Design (2026-09-06 redesign)**
+- `docs/design/2026-09-06-platform-redesign.md` — single source of
+  truth for product direction, architecture, station model,
+  routing, handoff protocol, and V1.0–V1.4 phasing.
+
+**Backend (V1.0-2 / V1.0-3 / V1.0-4)**
+- `src/providers/` — LLM provider abstraction (LLMProvider Protocol
+  + LiteLLMProvider + MockProvider) so business code never imports
+  litellm directly.
+- `src/runtime/` — re-export of the state machine
+  (GOAL_TRANSITIONS, TASK_TRANSITIONS, validate_transition, etc.)
+  at the design-documented path.
+- Alembic migration `0010_station_design_fields` — adds
+  `slug` / `is_builtin` / `handoff_policy` to `agent_stations`,
+  with a partial unique index on `slug` and idempotent back-fill.
+- 6 pre-built Stations now expose their slug + is_builtin status and
+  a structured handoff_policy JSON blob; user-created stations
+  always have is_builtin=false and an auto-derived unique slug.
+- DELETE `/api/v1/agents/{id}` rejects attempts to delete a
+  built-in station (returns 400 with `BuiltinStationProtectedError`).
+- Final Summary contract (V1.0-4 / V1.0-6d) — runtime returns a
+  7-field dict in `/runtime/status/{id}`; frontend displays it in
+  a collapsible card.
+- V1.0-4 entry layer — `from src.runtime import execute_goal_pipeline,
+  get_runtime_status, ...` re-exports the public surface so the
+  new design path is the discoverable one.
+- 8 V1.0-4 acceptance tests covering the runtime entry, final-summary
+  shape, and the V1.0-3 station-fields coexistence path.
+- 11 V1.0-3 station-fields tests covering slug generation,
+  uniqueness, built-in protection, and handoff_policy defaults.
+
+**Frontend (V1.0-5 / V1.0-6)**
+- shadcn/ui integrated as the design-system foundation: 10
+  copy-paste components under `src/components/ui/`
+  (button / card / badge / avatar / input / textarea / separator /
+  tabs / scroll-area / tooltip).
+- Tailwind v4 design tokens in `index.css` — full shadcn "new-york"
+  theme plus 10 agent-state color tokens (--state-idle /
+  -writing / -researching / -executing / -syncing / -error /
+  -completed / -running / -paused / -failed) inspired by the
+  Star-Office-UI 6-state palette.
+- `AgentStatusBadge` — single shared component that maps any of 30+
+  Goal / Task / Worker status enums to a coloured Badge with
+  left-border accent + dot.
+- `ActiveStationsSidebar` (V1.0-6a) — left rail listing all
+  Stations with role icon + status badge + state-distribution
+  chips in the footer. Modeled on Star-Office-UI's guest list.
+- TopBar state distribution chips (V1.0-6b) — `[●3 running] [●2 idle]`
+  in the global header. Modeled on Star-Office-UI's control bar.
+- `ThreeZoneCardFlow` (V1.0-6c) — third Workspace view mode grouping
+  every Task into Rest / Working / Problem columns. Modeled on
+  Star-Office-UI's three-region pixel-office layout.
+- `FinalSummaryPanel` (V1.0-6d) — collapsible card that renders
+  the 7-field Final Summary at the top of the Workspace when a
+  Goal is in a terminal state. Modeled on Star-Office-UI's Memo panel.
+- `WorkspaceModeSwitch` exposes the three view modes
+  (Card Flow / 3 Zones / Pixel Office); per-run choice is
+  persisted to localStorage and overridable via `?view=zones`.
+
+**Tooling (V1.0-7)**
+- `scripts/e2e-demo.sh` — full end-to-end smoke test against a
+  running stack. Verifies all 7 Final Summary contract fields
+  are present.
+- `V1.0-7-e2e.md` — operator doc for bringing the stack up.
+
+### Changed
+
+- `backend/src/services/state_machine_service` is now also
+  reachable as `src.runtime` (re-export). Business code may use
+  either path; new code should prefer `src.runtime`.
+- `frontend/src/index.css` — full shadcn theme overlay plus agent
+  state tokens. Existing class-based styles preserved verbatim.
+- `frontend/src/components/app-shell/AppShell.tsx` — now a flex
+  column (TopBar on top) + flex row (sidebar left + main right).
+- `frontend/src/utils/workspaceViewModel.ts` — `WorkspaceViewMode`
+  gains `'zones'` alongside `'card'` and `'pixel'`.
+- `backend/requirements.txt` — `httpx==0.28.1` widened to
+  `httpx>=0.27,<0.29` to resolve a build-time conflict with
+  litellm 1.55.0 (was causing Docker builds to fail).
+
+### Removed (or moved to archive)
+
+- 5 P0-P7-era GitHub Actions workflows deleted (`backend-ci.yml`,
+  `frontend-ci.yml`, `integration-ci.yml`, `nightly-ci.yml`,
+  `security-ci.yml`). They were tightly bound to the pre-V1.0
+  codebase and have been failing on every push since 2026-07-18.
+  A new V1.0 CI set is designed in this release (see below).
+- 99 planning / status documents moved to
+  `docs/_archive_2026/`. None of them were authoritative for V1.0.
+- 3 root-level `CHANGELOG.md` / `RELEASE_NOTES.md` / `design-qa.md`
+  moved to `docs/_archive_2026/`. The new `CHANGELOG.md` at the
+  repo root supersedes them.
+- `backend/src/services/mock_provider.py` (top-level mock) deleted
+  — replaced by `src/providers/mock_provider.py` in V1.0-2.
+- `backend/src/routes/dashboard.py` + `tests/test_dashboard_api.py`
+  — design §5 removes the top-level Dashboard; Workspace Overview
+  takes its role.
+- `backend/src/models/selection.py` kept (agent-selector imports
+  it; V1.0-3 cleanup log records the false-start).
+
+### Tests
+
+| | V1.0-2 | V1.0-3 | V1.0-4 | V1.0-5/6/7 | Total |
+|---|---:|---:|---:|---:|---:|
+| Backend pytest | 398 | 409 | 411 | 411 | **411 passed, 1 skipped, 0 failures** |
+| Frontend typecheck | — | — | — | 0 errors | 0 |
+| Frontend build | — | — | — | 197ms | ok |
+| Docker build | — | — | — | ok | ok |
+| e2e-demo.sh | — | — | — | **PASS** | PASS |
+
+The 1 skipped test is a pre-existing `pytest.mark.skip` on
+`test_postgres_integration` (only runs in CI with a postgres service).
+
+### Known gaps (deferred to V1.0.1 / V1.1 / V1.4)
+
+- **Handoff** — the data model is in place, the page is gone (V1.0
+  inlines handoff into the Task card per design §2.2). The full
+  Handoff state machine will be wired in V1.1.
+- **Quota** — the data model is in place, the auto-handoff on
+  LIMITED is in place, but the Quota Overview page is deferred
+  to V1.1.
+- **Real Provider smoke** — V1.0 only runs the mock provider. The
+  first real-Provider acceptance is part of V1.0.1 (needs an
+  OpenAI-compatible key + 5–10 minute budget).
+- **Per-station "current task" line in the Sidebar** — there is
+  no `/api/v1/tasks` list endpoint yet. The row will gain a
+  one-line `→ <title>` preview once that endpoint lands.
+- **V1.0 CI gate** — the workflows in `.github/workflows/`
+  are still empty. Design is in `docs/_archive_2026/v1.0_deletions_log.md`
+  §6. Implementation deferred to V1.0.1 (P0 risk: V1.0 ships
+  without a build gate; the next Phase-1 commit should add the
+  minimum backend-test + frontend-build workflows).
+- **TaskCard / AgentStationCard shadcn refactor** — V1.0-5/6
+  added the design system and Star-Office-UI patterns, but the
+  45 existing components still use the P0-P7 styling. The refactor
+  in-place is planned for V1.0.1 / V1.0.2.
+
+### Commit graph (oldest → newest)
+
+```
+b93fb39 docs(design): 2026-09-06 platform redesign
+56dd1de docs(v1.0-1): archive 99 old planning docs
+1079a86 feat(v1.0-2): LiteLLM provider + state machine
+5c5d083 feat(v1.0-2-followup): Settings wiring
+59bf1b9 feat(v1.0-3): Station slug/is_builtin/handoff_policy
+440158d chore(v1.0-3): clean up + delete log
+86d5081 chore(v1.0-3.7): delete 5 P0-P7 CI workflows
+8d3bc7d feat(v1.0-4): runtime entry layer + tests
+d8ba8c5 feat(v1.0-5): shadcn/ui integration + state tokens
+a08169a feat(v1.0-6a): ActiveStationsSidebar
+d545009 feat(v1.0-6b): topbar state distribution chips
+04bf521 feat(v1.0-6c): ThreeZoneCardFlow view
+64d6947 feat(v1.0-6d): FinalSummaryPanel
+e3fc444 feat(v1.0-7): docker compose local stack + e2e demo
+```
+
+15 commits, 9 days of design + implementation (2026-09-06 design
+draft → 2026-09-12 first end-to-end demo on Docker).
