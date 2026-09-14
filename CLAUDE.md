@@ -56,24 +56,9 @@ cd backend
 
 ## Architecture
 
-### Module-Based Development
+### Authoritative Design Doc
 
-The project follows a strict 7-round module development SOP defined in `docs/dev/module-development-sop.md`. Each module has 4 specification documents:
-
-```
-docs/prd/{{module-slug}}-prd.md           # Product requirements
-docs/stories/{{module-slug}}-stories.md   # User stories & acceptance criteria
-docs/tasks/{{module-slug}}-tasks.md       # Implementation tasks
-docs/ui/{{module-slug}}-ui-spec.md        # UI structure, states, interactions
-```
-
-Planned modules (in dependency order):
-1. **Agent Registry** (completed) — Defines agent stations and role templates
-2. **Model Router** — Model capability routing and recommendations
-3. **Quota Manager** — Token/quota tracking and risk status
-4. **Handoff Manager** — Structured task handoff with summary generation
-5. **Logs / Observability** — Execution logging and tracing
-6. **Agent Workspace** — Visual workspace with card-flow and pixel-office views
+Since the 2026-09-06 platform redesign, `docs/design/2026-09-06-platform-redesign.md` is the **single authoritative design document** (architecture, frontend/backend design, agent model, data model, and the V1.0 → V1.4 delivery phases). All pre-redesign planning docs (PRDs, stories, tasks, UI specs, API contract) were archived to `docs/_archive_2026/` — reference only, do not treat as current fact. Any architecture / API / state-machine change starts by updating the design doc.
 
 ### Backend Structure
 
@@ -122,7 +107,7 @@ frontend/src/
 
 ### API Contract
 
-The full API contract is in `docs/architecture/API-Contract.md`. Key conventions:
+Key conventions (details in the design doc §6, endpoints under `backend/src/routes/`):
 - Base URL: `http://localhost:8000/api/v1`
 - Pagination: `?page=1&page_size=20`
 - Paginated response wrapper: `{ items: [], total, page, page_size, total_pages }`
@@ -131,7 +116,7 @@ The full API contract is in `docs/architecture/API-Contract.md`. Key conventions
 
 ### Design System
 
-**Visual style** (from `docs/ui/UI状态与交互动效规则.md` and `frontend/src/index.css`):
+**Visual style** (from `frontend/src/index.css`):
 - Low-saturation, non-dark, Claude-inspired aesthetic
 - Background: `stone-50` (#fafaf9)
 - Primary text: `stone-800` (#292524)
@@ -155,7 +140,7 @@ Due to dependent modules not yet implemented, the following mock data is intenti
 
 ### Database Schema
 
-The authoritative schema reference is `docs/architecture/数据结构与数据库Schema.md`. It contains:
+The authoritative schema reference is the design doc §7 (`docs/design/2026-09-06-platform-redesign.md`) plus the ORM models in `backend/src/models/`. The design doc contains:
 - All status enums (GoalStatus, TaskStatus, AgentStatus, WorkerStatus, HandoffStatus, QuotaStatus, etc.)
 - Core data objects (Goal, Task, AgentStation, WorkerSession, Model, HandoffRecord, QuotaRecord, ExecutionLog)
 - Object relationship diagram
@@ -166,12 +151,12 @@ The authoritative schema reference is `docs/architecture/数据结构与数据�
 
 | File | Purpose |
 |------|---------|
-| `docs/dev/module-development-sop.md` | The 7-round development SOP every module follows |
-| `docs/architecture/API-Contract.md` | All API request/response formats |
-| `docs/architecture/数据结构与数据库Schema.md` | Status enums, data objects, DB schema |
-| `docs/dev/implementation-log.md` | Module completion logs |
+| `docs/design/2026-09-06-platform-redesign.md` | Single authoritative design doc (11 chapters, V1.0–V1.4 phasing) |
+| `HANDOVER.md` | V1.0 handover notes: progress, quirks, future plan pointers |
+| `V1.0.1-V1.1-plan.md` | Current phase plan (fixes, CI, Handoff business flow) |
 | `frontend/src/index.css` | Tailwind theme config (custom colors) |
 | `backend/tests/conftest.py` | Test fixtures and DB cleanup strategy |
+| `docs/_archive_2026/v1.0_deletions_log.md` | Record of what was deleted/kept in V1.0 and why |
 
 ## Development Notes
 
