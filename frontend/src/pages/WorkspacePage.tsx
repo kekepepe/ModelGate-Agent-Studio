@@ -116,7 +116,7 @@ export default function WorkspacePage() {
   }
 
   return (
-    <div className="workspace-shell flex min-h-0 flex-1 flex-col">
+    <div className="flex h-full min-h-0 flex-1 flex-col bg-stone-50">
       <WorkspaceRunHeader
         runId={runId}
         goal={state.goal}
@@ -133,8 +133,8 @@ export default function WorkspacePage() {
         metrics={state?.multi_agent_metrics}
       />
 
-      <div className="workspace-body flex min-h-0 flex-1 overflow-hidden">
-        <aside className="workspace-sidebar">
+      <div className="flex min-h-0 flex-1 overflow-hidden border-t border-stone-200">
+        <aside className="hidden w-80 shrink-0 flex-col overflow-y-auto border-r border-stone-200 bg-white lg:flex">
           <GoalInputPanel
             onGoalCreated={() => undefined}
             activeGoalId={goalId}
@@ -176,8 +176,12 @@ export default function WorkspacePage() {
           />
         </aside>
 
-        <main className="workspace-main">
-          {isLoading && goalId ? <div className="workspace-loading-overlay">Refreshing workspace state…</div> : null}
+        <main className="flex-1 overflow-y-auto bg-stone-50">
+          {isLoading && goalId ? (
+            <div className="flex items-center justify-center p-8 text-sm text-stone-500">
+              Refreshing workspace state…
+            </div>
+          ) : null}
           {/* V1.0-6d: Final Summary panel (仿 Star-Office-UI Memo) — shows when
               the goal is in a terminal state (completed / failed / stopped). */}
           {state?.goal && ['completed', 'failed', 'stopped'].includes(state.goal.status) && (
@@ -193,7 +197,11 @@ export default function WorkspacePage() {
           ) : viewMode === 'zones' ? (
             <ThreeZoneCardFlow viewModel={viewModel} selectedTaskId={selectedTaskId} onSelectTask={setSelectedTaskId} />
           ) : (
-            <Suspense fallback={<div className="workspace-loading-overlay">Preparing Pixel Office…</div>}>
+            <Suspense fallback={
+              <div className="flex items-center justify-center p-8 text-sm text-stone-500">
+                Preparing Pixel Office…
+              </div>
+            }>
               <PixelOfficeRenderer viewModel={viewModel} onSelectTask={setSelectedTaskId} onRequestHandoff={setHandoffTaskId} onOpenHandoff={setSelectedHandoffId} onPause={state?.goal?.status === 'running' && goalId ? () => pauseGoal.mutate(goalId) : undefined} />
             </Suspense>
           )}
