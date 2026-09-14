@@ -1,3 +1,5 @@
+import asyncio
+import json
 from datetime import datetime, timezone
 from math import ceil
 from typing import Any, Dict, Optional, Tuple
@@ -8,6 +10,7 @@ import os
 from sqlalchemy import or_
 from sqlalchemy.orm import Session
 
+from src.core.config import settings
 from src.models.agent import AgentStation
 from src.models.handoff import ExecutionLog, HandoffRecord, HandoffTask, WorkerSession
 from src.models.model import Model
@@ -15,6 +18,8 @@ from src.models.workspace import Goal, RuntimeRun, Task
 from src.models.workspace import Artifact, VerificationResult, WorkspaceCheckpoint
 from src.models.tool import ToolCallRecord
 from src.schemas.handoff import HandoffTaskCreate
+from src.services.providers import ModelRequest, get_provider
+from src.services.providers.provider_config import provider_model_name
 from src.services.security_service import redact_data, redact_text
 
 HANDOFF_STATUS_REQUESTED = "requested"
@@ -65,6 +70,24 @@ STATUS_EVENT_MAP = {
     HANDOFF_STATUS_COMPLETED: ("handoff_completed", "completed"),
     HANDOFF_STATUS_FAILED: ("error", "failed"),
 }
+
+SUMMARY_GENERATED_BY_LLM = "llm"
+SUMMARY_GENERATED_BY_FALLBACK = "fallback"
+
+SUMMARY_GENERATION_SYSTEM_PROMPT = (
+    "You are the handoff coordinator of a multi-agent execution platform. "
+    "A worker station is handing its task to another station mid-run. Write the "
+    "structured handoff summary the receiving agent will read before continuing. "
+    "Respond with ONLY a JSON object — no markdown fences, no prose — with exactly "
+    "these keys:\n"
+    + json.dumps(REQUIRED_SUMMARY_FIELDS)
+    + "\nTypes: original_goal, current_task, workspace_checkpoint, "
+    "recommended_next_action are short strings; every other field is an array "
+    "(changed_files entries may be objects with path/checksum, tool_results entries "
+    "objects with tool/status/output, verification_state entries objects with "
+    "criterion/status/evidence, the rest arrays of short strings). Be concrete and "
+    "factual; never invent work that the evidence does not show."
+)
 
 
 class HandoffServiceError(Exception):
@@ -124,7 +147,51 @@ def _validate_summary(summary: Dict) -> Dict:
             normalized[field] = value if isinstance(value, str) and value else "—"
         else:
             normalized[field] = value if isinstance(value, list) else []
+    # Provenance metadata (V1.1): survive validation so the API exposes how
+    # the summary was produced.
+    if summary.get("generated_by") in {SUMMARY_GENERATED_BY_LLM, SUMMARY_GENERATED_BY_FALLBACK}:
+        normalized["generated_by"] = summary["generated_by"]
+    if isinstance(summary.get("generated_at"), str) and summary["generated_at"]:
+        normalized["generated_at"] = summary["generated_at"]
     return normalized
+
+
+def _task_headline(
+    task: Any,
+    from_agent: AgentStation,
+    to_agent: AgentStation,
+    reason: str,
+    reason_description: Optional[str] = None,
+) -> Dict:
+    current_output = getattr(task, "current_output", None) or getattr(task, "output", None)
+    error_message = getattr(task, "error_message", None)
+    goal_record = getattr(task, "_workspace_goal", None)
+    return {
+        "original_goal": goal_record.title if goal_record else f"Goal {task.goal_id}",
+        "current_task": task.description or task.title,
+        "current_output": current_output,
+        "error_message": error_message,
+        "handoff_reason": reason,
+        "handoff_reason_description": reason_description,
+        "from_station": from_agent.name,
+        "to_station": to_agent.name,
+    }
+
+
+def _collect_task_evidence(db: Session, task: Any) -> Dict:
+    """Artifacts, tool results, verifications and the latest checkpoint."""
+    if not isinstance(task, Task):
+        return {"artifacts": [], "tool_results": [], "verification_state": [], "workspace_checkpoint": None}
+    artifacts = db.query(Artifact).filter(Artifact.task_id == task.id).all()
+    tool_calls = db.query(ToolCallRecord).filter(ToolCallRecord.task_id == task.id).order_by(ToolCallRecord.created_at.desc()).limit(10).all()
+    verifications = db.query(VerificationResult).filter(VerificationResult.task_id == task.id).all()
+    checkpoint = db.query(WorkspaceCheckpoint).filter(WorkspaceCheckpoint.task_id == task.id).order_by(WorkspaceCheckpoint.created_at.desc()).first()
+    return {
+        "artifacts": [{"path": item.path, "checksum": item.checksum} for item in artifacts],
+        "tool_results": [{"tool": item.tool_name, "status": item.status, "output": (item.tool_output or "")[:500]} for item in tool_calls],
+        "verification_state": [{"criterion": item.criterion_type, "status": item.status, "evidence": item.evidence} for item in verifications],
+        "workspace_checkpoint": checkpoint.id if checkpoint else None,
+    }
 
 
 def _build_fallback_summary(
@@ -135,36 +202,26 @@ def _build_fallback_summary(
     reason: str,
     reason_description: Optional[str] = None,
 ) -> Dict:
-    current_output = getattr(task, "current_output", None) or getattr(task, "output", None)
-    error_message = getattr(task, "error_message", None)
-    goal = task.goal_id
-    goal_record = None
-    # Workspace tasks carry a real Goal record; legacy HandoffTask records do not.
-    # The caller may attach it to avoid changing the legacy task schema.
-    if hasattr(task, "_workspace_goal"):
-        goal_record = task._workspace_goal
+    headline = _task_headline(task, from_agent, to_agent, reason, reason_description)
+    evidence = _collect_task_evidence(db, task)
 
     completed_work = []
-    if current_output:
-        completed_work.append(current_output)
+    if headline["current_output"]:
+        completed_work.append(headline["current_output"])
     else:
         completed_work.append("已保留当前任务上下文，等待接手 Agent 继续推进。")
 
     risks = []
-    if error_message:
-        risks.append(error_message)
-    if reason_description:
-        risks.append(reason_description)
+    if headline["error_message"]:
+        risks.append(headline["error_message"])
+    if headline["handoff_reason_description"]:
+        risks.append(headline["handoff_reason_description"])
     if not risks:
         risks.append("当前未记录明确错误，交接原因来自用户或系统判断。")
 
-    artifacts = db.query(Artifact).filter(Artifact.task_id == task.id).all() if isinstance(task, Task) else []
-    tool_calls = db.query(ToolCallRecord).filter(ToolCallRecord.task_id == task.id).order_by(ToolCallRecord.created_at.desc()).limit(10).all() if isinstance(task, Task) else []
-    verifications = db.query(VerificationResult).filter(VerificationResult.task_id == task.id).all() if isinstance(task, Task) else []
-    checkpoint = db.query(WorkspaceCheckpoint).filter(WorkspaceCheckpoint.task_id == task.id).order_by(WorkspaceCheckpoint.created_at.desc()).first() if isinstance(task, Task) else None
     return _validate_summary({
-        "original_goal": goal_record.title if goal_record else f"Goal {goal}",
-        "current_task": task.description or task.title,
+        "original_goal": headline["original_goal"],
+        "current_task": headline["current_task"],
         "completed_work": completed_work,
         "unfinished_work": [f"由 {to_agent.name} 继续完成：{task.title}"],
         "important_constraints": ["保持原始 Goal 和当前 Task 的上下文连续性。"],
@@ -175,12 +232,111 @@ def _build_fallback_summary(
             "确认当前任务目标后继续执行。",
         ],
         "context_needed": ["原始 Goal", "当前 Task 描述", "交接原因", "最近输出或错误信息"],
-        "changed_files": [{"path": item.path, "checksum": item.checksum} for item in artifacts],
-        "tool_results": [{"tool": item.tool_name, "status": item.status, "output": (item.tool_output or "")[:500]} for item in tool_calls],
-        "verification_state": [{"criterion": item.criterion_type, "status": item.status, "evidence": item.evidence} for item in verifications],
-        "workspace_checkpoint": checkpoint.id if checkpoint else "",
+        "changed_files": evidence["artifacts"],
+        "tool_results": evidence["tool_results"],
+        "verification_state": evidence["verification_state"],
+        "workspace_checkpoint": evidence["workspace_checkpoint"] or "",
         "recommended_next_action": "Inspect the current workspace, then continue the unfinished verification.",
     })
+
+
+def _extract_json_object(text: str) -> Optional[Dict]:
+    """Parse the first JSON object embedded in a model response."""
+    start, end = text.find("{"), text.rfind("}")
+    if start < 0 or end <= start:
+        return None
+    try:
+        parsed = json.loads(text[start:end + 1])
+    except (ValueError, TypeError):
+        return None
+    return parsed if isinstance(parsed, dict) else None
+
+
+def _generate_llm_summary(
+    db: Session,
+    task: Any,
+    from_agent: AgentStation,
+    to_agent: AgentStation,
+    reason: str,
+    reason_description: Optional[str],
+    model_id: Optional[str],
+) -> Optional[Dict]:
+    """Ask the from-station model for a structured summary.
+
+    Returns None whenever the LLM path is unavailable (mock mode, missing or
+    disabled model record, provider errors, unparseable answer) so the caller
+    can fall back to the deterministic template.
+    """
+    if not model_id:
+        return None
+    model = db.query(Model).filter(Model.id == model_id).first()
+    if model is None:
+        return None
+    goal_record = getattr(task, "_workspace_goal", None)
+    execution_mode = (
+        getattr(goal_record, "execution_mode", None)
+        or settings.execution_mode
+        or "live"
+    ).lower()
+    if execution_mode == "mock":
+        return None
+
+    try:
+        provider = get_provider(model=model, execution_mode=execution_mode)
+        headline = _task_headline(task, from_agent, to_agent, reason, reason_description)
+        evidence = _collect_task_evidence(db, task)
+        request = ModelRequest(
+            provider=model.provider,
+            model=provider_model_name(from_agent.role, model.model_name),
+            messages=[
+                {"role": "system", "content": SUMMARY_GENERATION_SYSTEM_PROMPT},
+                {"role": "user", "content": json.dumps({**headline, **evidence}, ensure_ascii=False, default=str)},
+            ],
+            temperature=0.2,
+            max_tokens=1200,
+            metadata={"purpose": "handoff_summary", "model_record_id": model.id},
+        )
+        response = asyncio.run(provider.generate(request))
+        parsed = _extract_json_object(response.content or "")
+        if parsed is None:
+            return None
+
+        from src.services import quota_service
+
+        quota_service.record_usage(
+            db=db,
+            provider=model.provider,
+            model_id=model.id,
+            model_name=model.model_name,
+            request_tokens=response.input_tokens,
+            response_tokens=response.output_tokens,
+            total_tokens=response.total_tokens,
+        )
+
+        parsed["generated_by"] = SUMMARY_GENERATED_BY_LLM
+        parsed["generated_at"] = datetime.now(timezone.utc).isoformat()
+        return _validate_summary(parsed)
+    except Exception:
+        return None
+
+
+def _generate_summary(
+    db: Session,
+    task: Any,
+    from_agent: AgentStation,
+    to_agent: AgentStation,
+    reason: str,
+    reason_description: Optional[str],
+    model_id: Optional[str],
+) -> Tuple[Dict, str]:
+    """Produce the handoff summary; returns (summary, generated_by)."""
+    llm_summary = _generate_llm_summary(db, task, from_agent, to_agent, reason, reason_description, model_id)
+    if llm_summary is not None:
+        return llm_summary, SUMMARY_GENERATED_BY_LLM
+    summary = _build_fallback_summary(db, task, from_agent, to_agent, reason, reason_description)
+    summary["generated_by"] = SUMMARY_GENERATED_BY_FALLBACK
+    summary["generated_at"] = datetime.now(timezone.utc).isoformat()
+    return _validate_summary(summary), SUMMARY_GENERATED_BY_FALLBACK
 
 
 def _create_log(
@@ -356,9 +512,22 @@ def trigger_handoff(
     )
 
     _set_status(db, handoff, HANDOFF_STATUS_GENERATING, "Generating handoff summary")
-    summary = _build_fallback_summary(db, task, from_agent, to_agent, reason, reason_description)
+    summary, generated_by = _generate_summary(db, task, from_agent, to_agent, reason, reason_description, from_model_id)
     handoff.set_handoff_summary(summary)
-    _set_status(db, handoff, HANDOFF_STATUS_READY, "Handoff summary ready")
+    _set_status(
+        db,
+        handoff,
+        HANDOFF_STATUS_READY,
+        f"Handoff summary ready (generated_by={generated_by})",
+    )
+    _create_log(
+        db,
+        handoff=handoff,
+        event_type="model_call",
+        event_status="completed",
+        output_summary=f"Handoff summary produced by {generated_by}",
+        metadata={"generated_by": generated_by, "model_id": from_model_id},
+    )
 
     db.commit()
     db.refresh(handoff)
