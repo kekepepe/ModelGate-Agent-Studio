@@ -19,6 +19,7 @@ describe('GlobalHeader', () => {
     expect(screen.getByRole('link', { name: 'Workspace' })).toHaveAttribute('aria-current', 'page');
     expect(screen.getByRole('link', { name: 'Assets' })).toHaveAttribute('href', '/assets?runId=run-9');
     expect(screen.getByRole('link', { name: 'Evolution' })).toHaveAttribute('href', '/evolution?runId=run-9&goalId=goal-9');
+    expect(screen.getByRole('link', { name: 'Handoff' })).toHaveAttribute('href', '/handoffs?runId=run-9');
     expect(screen.getByRole('link', { name: 'Logs' })).toHaveAttribute('href', '/logs?runId=run-9');
   });
 });

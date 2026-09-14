@@ -77,6 +77,7 @@ export default function GlobalHeader({ runId, goalId }: { runId?: string; goalId
           <GlobalNavLink to="/workspace">Workspace</GlobalNavLink>
           <GlobalNavLink to={contextual('/assets')}>Assets</GlobalNavLink>
           <GlobalNavLink to={contextual('/evolution', 'evolution')}>Evolution</GlobalNavLink>
+          <GlobalNavLink to={contextual('/handoffs')}>Handoff</GlobalNavLink>
           <GlobalNavLink to={contextual('/logs')}>Logs</GlobalNavLink>
         </nav>
 
