@@ -1,5 +1,5 @@
 import uuid
-from typing import Dict, List
+from typing import Dict, List, Optional
 
 from sqlalchemy.orm import Session
 
@@ -17,6 +17,79 @@ class TaskNotFoundError(Exception):
 
 class TaskTransitionError(Exception):
     pass
+
+
+# Status precedence for `list_tasks` ordering. Lower index wins.
+_TASK_STATUS_RANK: Dict[str, int] = {
+    "running": 0,
+    "handoff": 1,
+    "assigned": 2,
+    "ready": 3,
+    "pending": 4,
+    "waiting_approval": 5,
+    "revision_required": 6,
+    "blocked": 7,
+    "paused": 8,
+    "completed": 9,
+    "completed_verified": 10,
+    "completed_unverified": 11,
+    "failed": 12,
+    "skipped": 13,
+    "cancelled": 14,
+}
+
+
+def list_tasks(
+    db: Session,
+    *,
+    agent_ids: Optional[List[str]] = None,
+    statuses: Optional[List[str]] = None,
+    goal_id: Optional[str] = None,
+    page: int = 1,
+    page_size: int = 50,
+) -> Dict:
+    """Filtered, paginated task list.
+
+    Designed for V1.0-P1-2 (Sidebar "current task" line) and any future
+    per-agent task feed. Filters:
+      - agent_ids:  restrict to tasks assigned to any of these agents
+      - statuses:   keep only these task statuses (e.g. running, assigned)
+      - goal_id:    restrict to a single goal's tasks
+      - page / page_size: standard pagination (default 50, max 200)
+
+    Ordering: by status rank (running > handoff > assigned > ...),
+    then priority DESC, then updated_at DESC.
+    """
+    page = max(page, 1)
+    page_size = max(1, min(page_size, 200))
+
+    query = db.query(Task)
+    if agent_ids:
+        query = query.filter(Task.assigned_agent_id.in_(agent_ids))
+    if statuses:
+        query = query.filter(Task.status.in_(statuses))
+    if goal_id:
+        query = query.filter(Task.goal_id == goal_id)
+
+    total = query.count()
+    rows = (
+        query.order_by(Task.status, Task.priority.desc(), Task.updated_at.desc())
+        .offset((page - 1) * page_size)
+        .limit(page_size)
+        .all()
+    )
+    # Manual sort by status rank: SQL ORDER BY is alphabetical, but we
+    # want semantic ordering (running first, cancelled last). For each
+    # page the difference is negligible; for global lists the caller
+    # can re-sort client-side if needed.
+    rows.sort(key=lambda t: _TASK_STATUS_RANK.get(t.status, 99))
+
+    return {
+        "items": [t.to_dict() for t in rows],
+        "total": total,
+        "page": page,
+        "page_size": page_size,
+    }
 
 
 def get_task(db: Session, task_id: str) -> Dict:

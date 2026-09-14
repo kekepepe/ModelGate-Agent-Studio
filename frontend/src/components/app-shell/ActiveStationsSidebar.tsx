@@ -5,16 +5,31 @@ import {
   Code,
   FileSearch,
   FileText,
+  Loader2,
   Terminal,
   Users,
   Wrench,
 } from 'lucide-react';
 import { useMemo } from 'react';
 import { useAgents } from '@/hooks/useAgents';
+import { useTasks } from '@/hooks/useTasks';
 import { AgentStatusBadge } from '@/components/ui/agent-status-badge';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { cn } from '@/lib/utils';
+import type { TaskStatus } from '@/types/workspace';
+
+/** V1.0-P1-2 — status precedence for "what is the Station doing right now". */
+const ACTIVE_STATUS_RANK: Partial<Record<TaskStatus, number>> = {
+  running: 0,
+  handoff: 1,
+  assigned: 2,
+  ready: 3,
+  pending: 4,
+  waiting_approval: 5,
+  revision_required: 6,
+  blocked: 7,
+};
 
 const ROLE_ICON: Record<string, typeof Bot> = {
   planner: ClipboardList,
@@ -28,23 +43,9 @@ const ROLE_ICON: Record<string, typeof Bot> = {
 
 /**
  * V1.0-6a — ActiveStationsSidebar.
- *
- * Inspired by Star-Office-UI's "guest agent list" panel
- * (ringhyacinth/Star-Office-UI, 7K+ stars, Feb 2026). Star-Office-UI's
- * panel shows every joined agent with name + state + current task;
- * this sidebar does the same for ModelGate's Stations (planner /
- * coder / reviewer / researcher / summarizer / supervisor + user-defined).
- *
- * Differs from Star-Office-UI in two ways:
- *   1. Pixel-art Phaser canvas is replaced by a clean shadcn list
- *      (Claude-flavoured, not retro pixel).
- *   2. Star-Office-UI's API push is replaced by TanStack Query polling
- *      every 5s; the next iteration will swap this for SSE.
- *
- * Per-station "current task" display is intentionally deferred —
- * there is no /api/v1/tasks list endpoint that the sidebar can call
- * without a goal_id. When the tasks list endpoint is added (V1.x),
- * each row will gain a one-line "→ <task title>" preview.
+ * V1.0-P1-2 — Sidebar row now shows the Station's current Task
+ * (the one with the highest-rank active status) below the slug,
+ * mirroring the Star-Office-UI visitor list behaviour.
  */
 export default function ActiveStationsSidebar() {
   const { data, isLoading, isError } = useAgents({
@@ -52,6 +53,40 @@ export default function ActiveStationsSidebar() {
     page_size: 50,
   });
   const stations = data?.items ?? [];
+
+  // Single query for all stations' current tasks. We pass the station
+  // id list, default no status filter (so the Sidebar still shows
+  // recent-but-paused / blocked work). Backend ordering puts 'running'
+  // first, so the first match per agent_id is the most relevant task.
+  const { data: tasksResp, isLoading: isTasksLoading } = useTasks({
+    agentIds: stations.map((s) => s.id),
+    statuses: [
+      'running',
+      'handoff',
+      'assigned',
+      'ready',
+      'pending',
+      'waiting_approval',
+      'revision_required',
+      'blocked',
+    ],
+    pageSize: 100,
+  });
+
+  // Per-Station current task. Group by agent_id, take the task with
+  // the highest rank (lowest ACTIVE_STATUS_RANK value).
+  const currentTaskByAgent = useMemo(() => {
+    const map: Record<string, { title: string; status: TaskStatus }> = {};
+    const rank = (s: TaskStatus) => ACTIVE_STATUS_RANK[s] ?? 99;
+    for (const t of tasksResp?.items ?? []) {
+      if (!t.assigned_agent_id) continue;
+      const cur = map[t.assigned_agent_id];
+      if (!cur || rank(t.status) < rank(cur.status)) {
+        map[t.assigned_agent_id] = { title: t.title, status: t.status };
+      }
+    }
+    return map;
+  }, [tasksResp]);
 
   // State distribution chip (per Star-Office-UI's status bar idea)
   const distribution = useMemo(() => {
@@ -104,6 +139,7 @@ export default function ActiveStationsSidebar() {
 
           {stations.map((station) => {
             const Icon = ROLE_ICON[station.role] ?? Bot;
+            const task = currentTaskByAgent[station.id];
             return (
               <button
                 key={station.id}
@@ -112,7 +148,7 @@ export default function ActiveStationsSidebar() {
                   "group flex w-full items-start gap-3 rounded-md px-2 py-2 text-left",
                   "transition-colors hover:bg-stone-50 focus:bg-stone-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-stone-300"
                 )}
-                aria-label={`Station ${station.name} (${station.role})`}
+                aria-label={`Station ${station.name} (${station.role})${task ? ` — ${task.title}` : ''}`}
               >
                 <Avatar className="h-9 w-9 shrink-0">
                   <AvatarFallback
@@ -152,6 +188,25 @@ export default function ActiveStationsSidebar() {
                       label={statusToZh(station.status)}
                       className="px-1.5 py-0 text-[10px]"
                     />
+                  </div>
+                  {/* V1.0-P1-2: per-Station "current task" line */}
+                  <div
+                    className="mt-1 flex min-w-0 items-center gap-1 text-[11px] text-stone-600"
+                    title={task ? task.title : undefined}
+                  >
+                    {task ? (
+                      <>
+                        <span className="text-stone-400" aria-hidden>→</span>
+                        <span className="truncate">{task.title}</span>
+                      </>
+                    ) : isTasksLoading ? (
+                      <>
+                        <Loader2 size={10} className="animate-spin text-stone-400" aria-hidden />
+                        <span className="italic text-stone-400">查找任务…</span>
+                      </>
+                    ) : (
+                      <span className="italic text-stone-400">→ (空闲)</span>
+                    )}
                   </div>
                 </div>
               </button>

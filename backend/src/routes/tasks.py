@@ -1,5 +1,6 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
+from typing import List, Optional
 
 from src.core.database import get_db
 from src.services import task_service
@@ -17,6 +18,37 @@ def _error(code: str, message: str, status_code: int = 400):
         status_code=status_code,
         detail={"success": False, "error": {"code": code, "message": message}},
     )
+
+
+@router.get("/tasks")
+def list_tasks(
+    agent_id: Optional[List[str]] = Query(None, description="Filter by one or more agent ids"),
+    status: Optional[List[str]] = Query(None, description="Filter by one or more task statuses"),
+    goal_id: Optional[str] = Query(None, description="Restrict to a single goal's tasks"),
+    page: int = Query(1, ge=1),
+    page_size: int = Query(50, ge=1, le=200),
+    db: Session = Depends(get_db),
+):
+    """V1.0-P1-2: filtered, paginated task list.
+
+    Used by the frontend Sidebar to render a "current task" line per
+    Station, and by any future per-agent task feed. Returns the same
+    shape as `/api/v1/goals/{id}/state` task list, so the frontend
+    can reuse the `WorkspaceTask` type.
+    """
+    try:
+        return _success(
+            task_service.list_tasks(
+                db,
+                agent_ids=agent_id,
+                statuses=status,
+                goal_id=goal_id,
+                page=page,
+                page_size=page_size,
+            )
+        )
+    except Exception as e:
+        _error("INTERNAL_ERROR", str(e), 500)
 
 
 @router.get("/tasks/{task_id}")
