@@ -1,9 +1,16 @@
-"""Build a traceable, bounded context package before every worker run."""
+"""Build a traceable, bounded context package before every worker run.
+
+V1.2: memory and skill selection uses hybrid keyword + vector ranking
+(memory_vector_service), approved skills are weighted by their success
+rate (Voyager-style), explicit user preferences are injected into every
+package unconditionally, replanning pulls similar past experiences, and
+planning gets skill suggestions.
+"""
 import json
 import hashlib
 import uuid
 from datetime import datetime, timezone
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Optional, Tuple
 
 from sqlalchemy import or_
 
@@ -12,39 +19,32 @@ from sqlalchemy.orm import Session
 from src.models.knowledge import ContextPackageSnapshot, KnowledgeSource, MemoryDraft, SkillDraft
 from src.models.workspace import Goal, PlanTask, Task, VerificationResult
 from src.models.tool import ToolCallRecord
-from src.services import retrieval_service
+from src.services import memory_vector_service, retrieval_service
 from src.services.security_service import redact_data, security_metadata
+
+# V1.2 policy identities (recorded on the package / snapshot for traceability).
+HYBRID_POLICY = "hybrid_memory_skill_v1"
+# A vector-only match below this floor is treated as embedding noise under
+# the lexical hash adapter; keyword evidence alone still matches.
+VECTOR_MATCH_FLOOR = 0.35
+# Hard cap on unconditionally injected user preferences.
+MAX_PREFERENCES = 3
 
 
 def build_planning_context(db: Session, goal: Goal, limit: int = 3) -> Dict[str, Any]:
-    """Return a small, source-backed package for the planning decision.
-
-    This intentionally reuses the current reviewed Memory/Skill store. P1 will
-    replace the lightweight ranking with the shared retrieval pipeline.
-    """
+    """Return a small, source-backed package for the planning decision."""
     query = f"{goal.title} {goal.description or ''}".lower()
     tokens = {word for word in query.replace("/", " ").split() if len(word) > 2}
-    memories = db.query(MemoryDraft).filter(
-        MemoryDraft.human_approved == True,
-        or_(MemoryDraft.expires_at == None, MemoryDraft.expires_at > datetime.now(timezone.utc)),
-    ).order_by(MemoryDraft.confidence.desc()).all()
-    ranked_memories = sorted(
-        memories,
-        key=lambda item: _score(query, tokens, f"{item.title} {item.content} {' '.join(item.get_tags())}"),
-        reverse=True,
-    )
-    selected_memories = [
-        item for item in ranked_memories
-        if _score(query, tokens, f"{item.title} {item.content}") > 0
-    ][:limit]
-    skills = db.query(SkillDraft).filter(
-        SkillDraft.human_approved == True,
-        SkillDraft.status == "approved",
-    ).all()
-    selected_skills = [
-        item for item in skills
-        if _score(query, tokens, f"{item.name} {item.scenario or ''} {item.success_criteria or ''}") > 0
-    ][:limit]
+    memories = _approved_memories(db)
+    query_vector, _ = memory_vector_service.embed_text(query)
+    ranked_memories = _hybrid_rank(memories, query, tokens, query_vector)
+    selected_memories = [item for _, _, _, item in ranked_memories if item[0] > 0 or item[1] >= VECTOR_MATCH_FLOOR][:limit]
+    skills = _approved_skills(db)
+    ranked_skills = _hybrid_rank_skills(skills, query, tokens, query_vector)
+    # Planning wants suggestions even without a keyword hit: a high success
+    # rate or vector alignment alone can propose a workflow (Voyager-style).
+    ranked_skills.sort(key=lambda entry: entry[0], reverse=True)
+    selected_skills = [item for _, _, _, item in ranked_skills[:limit]]
     knowledge = _retrieve_knowledge(
         db, query=query, goal=goal, task=None, token_budget=600,
         workspace_scope=None, enabled=_has_active_sources(db),
@@ -60,15 +60,7 @@ def build_planning_context(db: Session, goal: Goal, limit: int = 3) -> Dict[str,
             }
             for item in selected_memories
         ],
-        "skills": [
-            {
-                "id": item.id,
-                "name": item.name,
-                "steps": item.get_steps(),
-                "source_run_id": item.source_run_id,
-            }
-            for item in selected_skills
-        ],
+        "skills": [_skill_suggestion(item) for item in selected_skills],
         "knowledge_items": knowledge["items"],
         "retrieval_run_id": knowledge.get("retrieval_run_id"),
         "citations": [item["citation"] for item in knowledge["items"]],
@@ -79,16 +71,37 @@ def build_planning_context(db: Session, goal: Goal, limit: int = 3) -> Dict[str,
 def build_context_package(db: Session, goal: Goal, task: Task, limit: int = 5) -> Dict[str, Any]:
     query = f"{goal.title} {goal.description or ''} {task.title} {task.description or ''}".lower()
     tokens = {word for word in query.replace("/", " ").split() if len(word) > 2}
-    memories = db.query(MemoryDraft).filter(
-        MemoryDraft.human_approved == True,
-        or_(MemoryDraft.expires_at == None, MemoryDraft.expires_at > datetime.now(timezone.utc)),
-    ).order_by(MemoryDraft.confidence.desc()).all()
-    ranked_memories = sorted(memories, key=lambda item: _score(query, tokens, f"{item.title} {item.content} {' '.join(item.get_tags())}"), reverse=True)
-    selected_memories = [item for item in ranked_memories if _score(query, tokens, f"{item.title} {item.content}") > 0][:limit]
-    skills = db.query(SkillDraft).filter(SkillDraft.human_approved == True, SkillDraft.status == "approved").all()
-    selected_skills = [item for item in skills if _score(query, tokens, f"{item.name} {item.scenario or ''} {item.success_criteria or ''}") > 0][:limit]
-    memory_payload = [{"id": item.id, "title": item.title, "content": item.content, "source_goal_id": item.source_goal_id, "confidence": item.confidence, "source_references": item.get_metadata().get("source_references", {})} for item in selected_memories]
-    skill_payload = [{"id": item.id, "name": item.name, "steps": item.get_steps(), "source_run_id": item.source_run_id} for item in selected_skills]
+    memories = _approved_memories(db)
+    query_vector, _ = memory_vector_service.embed_text(query)
+
+    # Explicit user preferences ride along unconditionally (V1.2 D7) and are
+    # deliberately excluded from the "matched" signal below.
+    preference_memories = [item for item in memories if item.type == "user_preference"][:MAX_PREFERENCES]
+    project_memories = [item for item in memories if item.type != "user_preference"]
+
+    ranked_memories = _hybrid_rank(project_memories, query, tokens, query_vector)
+    selected_memories = [
+        item for combined, keyword, vector, item in ranked_memories
+        if keyword > 0 or vector >= VECTOR_MATCH_FLOOR
+    ][:limit]
+
+    skills = _approved_skills(db)
+    ranked_skills = _hybrid_rank_skills(skills, query, tokens, query_vector)
+    selected_skills = [
+        item for combined, keyword, vector, item in ranked_skills
+        if keyword > 0 or vector >= VECTOR_MATCH_FLOOR
+    ][:limit]
+
+    memory_payload = [
+        {"id": item.id, "title": item.title, "content": item.content, "source_goal_id": item.source_goal_id,
+         "confidence": item.confidence, "source_references": item.get_metadata().get("source_references", {})}
+        for item in selected_memories
+    ]
+    skill_payload = [_skill_suggestion(item, include_source=True) for item in selected_skills]
+    preference_payload = [
+        {"id": item.id, "title": item.title, "content": item.content}
+        for item in preference_memories
+    ]
     source_references = [
         {"memory_id": item["id"], **item["source_references"]}
         for item in memory_payload if item["source_references"]
@@ -107,13 +120,15 @@ def build_context_package(db: Session, goal: Goal, task: Task, limit: int = 5) -
         {"source_id": item["source_id"], "chunk_id": item["chunk_id"], "citation": item["citation"]}
         for item in knowledge["items"]
     ])
+    matched = bool(memory_payload or skill_payload or knowledge["items"])
     payload = {
         "goal": {"id": goal.id, "title": goal.title, "description": goal.description},
         "task": {"id": task.id, "title": task.title, "dependencies": task._get_json("dependencies"), "completion_contract": task._get_json("acceptance_criteria")},
-        "retrieval_reason": _retrieval_reason(task, bool(memory_payload or skill_payload or knowledge["items"]), should_retrieve),
+        "retrieval_reason": _retrieval_reason(task, matched, should_retrieve),
         "query": query,
-        "policy": knowledge.get("policy") or "approved_memory_skill_keyword_v0",
+        "policy": f"{HYBRID_POLICY}:{knowledge.get('policy') or 'no_knowledge_sources'}",
         "project_memories": memory_payload,
+        "user_preferences": preference_payload,
         "skills": skill_payload,
         "knowledge_items": knowledge["items"],
         "retrieval_run_id": knowledge.get("retrieval_run_id"),
@@ -121,6 +136,79 @@ def build_context_package(db: Session, goal: Goal, task: Task, limit: int = 5) -
         "source_references": source_references,
     }
     payload["token_count"] = _estimate_tokens(payload)
+    return payload
+
+
+def _approved_memories(db: Session) -> List[MemoryDraft]:
+    return db.query(MemoryDraft).filter(
+        MemoryDraft.human_approved == True,
+        or_(MemoryDraft.expires_at == None, MemoryDraft.expires_at > datetime.now(timezone.utc)),
+    ).order_by(MemoryDraft.confidence.desc()).all()
+
+
+def _approved_skills(db: Session) -> List[SkillDraft]:
+    return db.query(SkillDraft).filter(
+        SkillDraft.human_approved == True,
+        SkillDraft.status == "approved",
+    ).all()
+
+
+def _hybrid_rank(
+    memories: List[MemoryDraft], query: str, tokens: set, query_vector: List[float],
+) -> List[Tuple[float, float, float, MemoryDraft]]:
+    """Keyword + vector hybrid ranking (V1.2 D3).
+
+    Keyword evidence alone still ranks (it powers hash-embedding rows and
+    stale fingerprints); vectors add alignment when the stored fingerprint
+    matches the configured adapter (memory_vector_service returns 0.0
+    otherwise, so vector spaces never mix).
+    """
+    scored: List[Tuple[float, float, float, MemoryDraft]] = []
+    for item in memories:
+        text = f"{item.title} {item.content} {' '.join(item.get_tags())}"
+        keyword = min(1.0, _score(query, tokens, text) / 3)
+        vector = memory_vector_service.similarity(query_vector, item)
+        scored.append((keyword * 0.5 + vector * 0.5, keyword, vector, item))
+    scored.sort(key=lambda entry: (entry[0], entry[1]), reverse=True)
+    return scored
+
+
+def _hybrid_rank_skills(
+    skills: List[SkillDraft], query: str, tokens: set, query_vector: List[float],
+) -> List[Tuple[float, float, float, SkillDraft]]:
+    """Hybrid ranking with a success-rate weight (V1.2 D4, Voyager-style).
+
+    weight = 0.8 + 0.4 * success_rate keeps an unproven skill neutral (0.5
+    success rate -> weight 1.0) while a proven one gains up to +20% and a
+    failing one loses up to -20%.
+    """
+    scored: List[Tuple[float, float, float, SkillDraft]] = []
+    for item in skills:
+        text = f"{item.name} {item.scenario or ''} {item.success_criteria or ''} {' '.join(item.get_steps())}"
+        keyword = min(1.0, _score(query, tokens, text) / 3)
+        vector = memory_vector_service.similarity(query_vector, item)
+        weight = 0.8 + 0.4 * item.success_rate
+        scored.append(((keyword * 0.5 + vector * 0.5) * weight, keyword, vector, item))
+    scored.sort(key=lambda entry: (entry[0], entry[1]), reverse=True)
+    return scored
+
+
+def _skill_suggestion(item: SkillDraft, *, include_source: bool = False) -> Dict[str, Any]:
+    """Progressive disclosure (V1.2 D6): summary + a few steps in context;
+    the full record stays behind GET /knowledge/skills/{id}."""
+    steps = item.get_steps()
+    payload: Dict[str, Any] = {
+        "id": item.id,
+        "name": item.name,
+        "scenario": item.scenario,
+        "success_rate": item.success_rate,
+        "success_count": item.success_count,
+        "failure_count": item.failure_count,
+        "steps": steps[:3],
+        "steps_total": len(steps),
+    }
+    if include_source:
+        payload["source_run_id"] = item.source_run_id
     return payload
 
 
@@ -170,13 +258,19 @@ def build_replan_context(db: Session, goal: Goal, tasks: List[Task], reason: str
         token_budget=800, workspace_scope=None, enabled=_has_active_sources(db),
     )
     query_tokens = {word for word in query.lower().split() if len(word) > 2}
-    skills = db.query(SkillDraft).filter(
-        SkillDraft.human_approved == True, SkillDraft.status == "approved",
-    ).all()
+    skills = _approved_skills(db)
+    query_vector, _ = memory_vector_service.embed_text(query)
+    ranked_skills = _hybrid_rank_skills(skills, query.lower(), query_tokens, query_vector)
     matched_skills = [
-        skill for skill in skills
-        if _score(query.lower(), query_tokens, f"{skill.name} {skill.scenario or ''} {skill.success_criteria or ''}") > 0
+        item
+        for combined, keyword, vector, item in ranked_skills
+        if keyword > 0 or vector >= VECTOR_MATCH_FLOOR
     ][:5]
+    # V1.2: pull similar past experiences ("how we fixed this last time")
+    # so the replan decision inherits prior error resolutions.
+    experiences = memory_vector_service.search_memories(
+        db, query, memory_type="experience_memory", require_approved=True, limit=3,
+    )
     verifications = (
         db.query(VerificationResult)
         .filter(VerificationResult.task_id.in_(task_ids))
@@ -196,6 +290,12 @@ def build_replan_context(db: Session, goal: Goal, tasks: List[Task], reason: str
         "knowledge_items": knowledge["items"],
         "citations": [item["citation"] for item in knowledge["items"]],
         "skills": [{"id": skill.id, "name": skill.name, "steps": skill.get_steps()} for skill in matched_skills],
+        "experiences": [
+            {"id": item["id"], "title": item["title"], "content": item["content"],
+             "error_signature": item["metadata"].get("error_signature"),
+             "occurrence_count": item["metadata"].get("occurrence_count", 1)}
+            for item in experiences
+        ],
         "verification_evidence": [
             {"task_id": item.task_id, "criterion": item.criterion_type, "status": item.status,
              "evidence": item.evidence, "exit_code": item.exit_code}

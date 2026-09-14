@@ -20,7 +20,7 @@ def test_context_uses_approved_unexpired_memory_with_source_references(db_sessio
     assert package["project_memories"][0]["source_references"]["tool_call_ids"] == ["c1"]
     assert package["source_references"][0]["memory_id"] == usable.id
     assert package["retrieval_reason"] == "Approved project knowledge, Memory or Skill matched the Goal and Task query."
-    assert package["policy"] == "approved_memory_skill_keyword_v0"
+    assert package["policy"].startswith("hybrid_memory_skill_v1")
     assert package["token_count"] > 0
 
 

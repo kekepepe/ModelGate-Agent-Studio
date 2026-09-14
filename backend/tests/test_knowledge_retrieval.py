@@ -127,7 +127,7 @@ def test_worker_context_uses_retrieval_gate_and_persists_snapshot(client, db_ses
     snapshot = persist_context_snapshot(db_session, "worker-1", None, package)
     db_session.commit()
 
-    assert package["policy"] == "hybrid_keyword_embedding_v2:local_hash"
+    assert package["policy"] == "hybrid_memory_skill_v1:hybrid_keyword_embedding_v2:local_hash"
     assert package["knowledge_items"]
     assert package["citations"][0].startswith("docs/runtime.md#chunk-")
     assert package["retrieval_run_id"]
