@@ -1,4 +1,13 @@
 import { useState } from 'react';
+import { Input } from './ui/input';
+import { Button } from './ui/button';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from './ui/select';
 import type { LogFilters as LogFiltersType } from '../types/log';
 
 interface LogFiltersProps {
@@ -33,66 +42,60 @@ export default function LogFilters({ filters, onChange }: LogFiltersProps) {
 
   return (
     <div className="space-y-3">
-      <div className="flex flex-wrap items-center gap-2">
-        <button
+      <div className="flex flex-wrap items-center gap-1.5">
+        <Button
+          size="sm"
+          variant={!filters.event_type && !filters.event_status ? 'default' : 'outline'}
           onClick={() => handleQuickFilter('')}
-          className={`px-2.5 py-1 text-xs rounded-lg border transition-colors ${
-            !filters.event_type && !filters.event_status
-              ? 'bg-stone-800 text-white border-stone-800'
-              : 'bg-white text-stone-600 border-stone-200 hover:border-stone-300'
-          }`}
         >
           全部
-        </button>
-        <button
+        </Button>
+        <Button
+          size="sm"
+          variant={filters.event_status === 'error,failed' ? 'destructive' : 'outline'}
           onClick={handleErrorsOnly}
-          className={`px-2.5 py-1 text-xs rounded-lg border transition-colors ${
-            filters.event_status === 'error,failed'
-              ? 'bg-red-700 text-white border-red-700'
-              : 'bg-white text-stone-600 border-stone-200 hover:border-stone-300'
-          }`}
         >
           仅错误
-        </button>
+        </Button>
         {EVENT_TYPE_OPTIONS.slice(1).map((opt) => (
-          <button
+          <Button
             key={opt.value}
+            size="sm"
+            variant={filters.event_type === opt.value ? 'default' : 'outline'}
             onClick={() => handleQuickFilter(opt.value)}
-            className={`px-2.5 py-1 text-xs rounded-lg border transition-colors ${
-              filters.event_type === opt.value
-                ? 'bg-stone-800 text-white border-stone-800'
-                : 'bg-white text-stone-600 border-stone-200 hover:border-stone-300'
-            }`}
           >
             {opt.label}
-          </button>
+          </Button>
         ))}
       </div>
 
       <div className="flex items-center gap-2">
-        <input
+        <Input
           type="text"
           value={search}
           onChange={(e) => setSearch(e.target.value)}
           onKeyDown={(e) => e.key === 'Enter' && handleSearch()}
-          placeholder="搜索日志内容..."
-          className="flex-1 min-w-0 px-3 py-1.5 text-sm border border-stone-200 rounded-lg focus:outline-none focus:ring-1 focus:ring-stone-400"
+          placeholder="搜索日志内容…"
+          className="h-8 flex-1 min-w-0 text-sm"
         />
-        <button
-          onClick={handleSearch}
-          className="px-3 py-1.5 text-sm bg-stone-800 text-white rounded-lg hover:bg-stone-900"
-        >
+        <Button size="sm" onClick={handleSearch} className="h-8">
           搜索
-        </button>
-        <select
-          value={filters.page_size || 20}
-          onChange={(e) => onChange({ ...filters, page_size: Number(e.target.value), page: 1 })}
-          className="px-2 py-1.5 text-sm border border-stone-200 rounded-lg"
+        </Button>
+        <Select
+          value={String(filters.page_size || 20)}
+          onValueChange={(v) =>
+            onChange({ ...filters, page_size: Number(v), page: 1 })
+          }
         >
-          <option value={10}>10 条/页</option>
-          <option value={20}>20 条/页</option>
-          <option value={50}>50 条/页</option>
-        </select>
+          <SelectTrigger className="h-8 w-[110px] text-sm">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="10">10 条/页</SelectItem>
+            <SelectItem value="20">20 条/页</SelectItem>
+            <SelectItem value="50">50 条/页</SelectItem>
+          </SelectContent>
+        </Select>
       </div>
     </div>
   );

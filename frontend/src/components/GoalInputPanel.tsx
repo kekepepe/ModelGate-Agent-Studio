@@ -1,6 +1,16 @@
 import { Check, CheckSquare2, FileText, Pencil, Settings2 } from 'lucide-react';
 import { useState } from 'react';
 import { useCreateGoal, useStartGoal } from '../hooks/useWorkspace';
+import { Input } from './ui/input';
+import { Textarea } from './ui/textarea';
+import { Button } from './ui/button';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from './ui/select';
 import type { TeamPreset } from '../types/team';
 import type { Goal } from '../types/workspace';
 
@@ -70,20 +80,64 @@ export default function GoalInputPanel({ onGoalCreated, activeGoalId, goalTitle,
     <div className="workspace-setup-panel">
       <div className="workspace-setup-heading"><FileText size={16} /><span>Goal</span></div>
       {preset ? <p className="workspace-setup-team">{preset.name} · capability pool: {preset.capabilities.join(', ')}</p> : null}
-      <textarea value={title} onChange={(event) => setTitle(event.target.value)} placeholder="描述你的目标..." rows={3} disabled={isSubmitting} />
-      <input type="text" value={description} onChange={(event) => setDescription(event.target.value)} placeholder="补充说明（可选）" disabled={isSubmitting} />
+      <Textarea
+        value={title}
+        onChange={(event) => setTitle(event.target.value)}
+        placeholder="描述你的目标..."
+        rows={3}
+        disabled={isSubmitting}
+        className="resize-none"
+      />
+      <Input
+        type="text"
+        value={description}
+        onChange={(event) => setDescription(event.target.value)}
+        placeholder="补充说明（可选）"
+        disabled={isSubmitting}
+      />
       {preset?.defaultCriteria?.length ? <ul className="sidebar-criteria workspace-setup-criteria">{preset.defaultCriteria.map((criterion) => <li key={criterion}><Check size={12} />{criterion}</li>)}</ul> : null}
-      <button type="button" onClick={() => setShowRunConfig((value) => !value)} className="workspace-config-toggle"><Settings2 size={14} />Run Config<span>{showRunConfig ? '收起' : '展开'}</span></button>
-      {showRunConfig ? <div className="workspace-config-form">
-        <select value={executionMode} onChange={(event) => setExecutionMode(event.target.value as typeof executionMode)} disabled={isSubmitting}>
-          <option value="live">Live · 真实模型与工具</option><option value="sandbox">Sandbox · 受控工作区</option><option value="dry_run">Dry Run · 禁止写入</option><option value="mock">Mock · 演示/测试</option>
-        </select>
+      <Button
+        type="button"
+        onClick={() => setShowRunConfig((value) => !value)}
+        variant="outline"
+        size="sm"
+        className="w-full justify-between"
+      >
+        <span className="flex items-center gap-1.5">
+          <Settings2 size={14} />Run Config
+        </span>
+        <span>{showRunConfig ? '收起' : '展开'}</span>
+      </Button>
+      {showRunConfig ? <div className="workspace-config-form space-y-2">
+        <Select
+          value={executionMode}
+          onValueChange={(v) => setExecutionMode(v as typeof executionMode)}
+          disabled={isSubmitting}
+        >
+          <SelectTrigger>
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="live">Live · 真实模型与工具</SelectItem>
+            <SelectItem value="sandbox">Sandbox · 受控工作区</SelectItem>
+            <SelectItem value="dry_run">Dry Run · 禁止写入</SelectItem>
+            <SelectItem value="mock">Mock · 演示/测试</SelectItem>
+          </SelectContent>
+        </Select>
         <RunToggle label="Auto Handoff" value={autoHandoff} onChange={setAutoHandoff} />
         <RunToggle label="Auto Model Switch" value={autoModelSwitch} onChange={setAutoModelSwitch} />
-        <label>Token 预算<input type="number" min={1} value={budgetTokens} onChange={(event) => setBudgetTokens(Math.max(1, Number(event.target.value) || 1))} /></label>
-        <label>最长时长（秒）<input type="number" min={1} value={maxDurationSeconds} onChange={(event) => setMaxDurationSeconds(Math.max(1, Number(event.target.value) || 1))} /></label>
+        <label>Token 预算<Input type="number" min={1} value={budgetTokens} onChange={(event) => setBudgetTokens(Math.max(1, Number(event.target.value) || 1))} /></label>
+        <label>最长时长（秒）<Input type="number" min={1} value={maxDurationSeconds} onChange={(event) => setMaxDurationSeconds(Math.max(1, Number(event.target.value) || 1))} /></label>
       </div> : null}
-      <button type="button" aria-label="开始" onClick={handleStart} disabled={!isValid || isSubmitting} className="workspace-start-button">{isSubmitting ? '创建中...' : '创建并规划'}</button>
+      <Button
+        type="button"
+        aria-label="开始"
+        onClick={handleStart}
+        disabled={!isValid || isSubmitting}
+        className="w-full"
+      >
+        {isSubmitting ? '创建中...' : '创建并规划'}
+      </Button>
       {error ? <p className="workspace-error">{error}</p> : null}
     </div>
   );

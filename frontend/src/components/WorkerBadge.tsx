@@ -1,5 +1,7 @@
 import type { WorkerStatus } from '../types/workspace';
-import { WORKER_STATUS_COLORS } from '../types/workspace';
+import { Badge } from './ui/badge';
+import { AgentStatusBadge } from './ui/agent-status-badge';
+import { cn } from '@/lib/utils';
 
 interface WorkerBadgeProps {
   modelName?: string | null;
@@ -16,24 +18,50 @@ const STATUS_LABELS: Record<string, string> = {
   failed: '失败',
 };
 
-export default function WorkerBadge({ modelName, status = 'idle', compact = false }: WorkerBadgeProps) {
-  const dotColor = WORKER_STATUS_COLORS[status as WorkerStatus] || WORKER_STATUS_COLORS.idle;
+export default function WorkerBadge({
+  modelName,
+  status = 'idle',
+  compact = false,
+}: WorkerBadgeProps) {
   const isRunning = status === 'running';
   const isHandoff = status === 'handoff_required';
+  const pulseClass = isRunning || isHandoff ? 'animate-pulse' : '';
 
   return (
-    <div className={`inline-flex items-center gap-1.5 rounded-full border border-stone-200 bg-white ${compact ? 'px-2 py-0.5' : 'px-2.5 py-1'}`}>
+    <Badge
+      variant="secondary"
+      className={cn(
+        'gap-1.5 font-medium',
+        compact ? 'px-2 py-0.5 text-[10px]' : 'px-2.5 py-1 text-xs',
+        pulseClass,
+      )}
+      data-worker-status={status}
+    >
       <span
-        className={`inline-block w-2 h-2 rounded-full ${dotColor} ${isRunning ? 'animate-breathe-dot' : ''} ${isHandoff ? 'animate-dot-pulse' : ''} ${status === 'failed' ? 'animate-blink' : ''}`}
-        style={status === 'failed' ? { animation: 'dot-pulse 0.5s infinite' } : undefined}
+        aria-hidden
+        className={cn(
+          'inline-block h-2 w-2 rounded-full',
+          status === 'running' && 'bg-blue-500',
+          status === 'handoff_required' && 'bg-violet-500',
+          status === 'completed' && 'bg-emerald-500',
+          status === 'failed' && 'bg-red-500 animate-ping',
+          status === 'idle' && 'bg-stone-400',
+        )}
       />
-      <span className="text-xs text-stone-700 font-medium">{modelName || '—'}</span>
+      <span className="text-xs text-stone-700 font-medium">
+        {modelName || '—'}
+      </span>
       {!compact && (
         <>
-          <span className="text-xs text-stone-400">·</span>
-          <span className="text-xs text-stone-400">{STATUS_LABELS[status || 'idle'] || status}</span>
+          <span aria-hidden className="text-stone-400">·</span>
+          <AgentStatusBadge
+            state={(status as WorkerStatus) ?? 'idle'}
+            label={STATUS_LABELS[status || 'idle'] ?? status ?? undefined}
+            dot={false}
+            className="border-0 bg-transparent px-0 py-0 text-[10px] text-stone-500"
+          />
         </>
       )}
-    </div>
+    </Badge>
   );
 }
