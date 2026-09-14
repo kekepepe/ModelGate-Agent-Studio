@@ -1534,6 +1534,11 @@ def _handle_quota_intercept(
     agent.status = "handoff"
     agent.total_handoffs_initiated = (agent.total_handoffs_initiated or 0) + 1
     agent.updated_at = datetime.now(timezone.utc)
+    from src.models.quota import QuotaRecord
+
+    quota_record = db.query(QuotaRecord).filter(QuotaRecord.model_id == model_id).first()
+    if quota_record:
+        quota_record.handoff_triggered_count = (quota_record.handoff_triggered_count or 0) + 1
     db.commit()
 
     return {

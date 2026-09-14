@@ -46,9 +46,17 @@ def _calculate_estimated_remaining(record: QuotaRecord) -> Optional[int]:
 
 def _determine_quota_status(record: QuotaRecord) -> str:
     """Determine quota_status based on usage_percent, error counts, and cooldown."""
-    # Check cooldown first
-    if record.cooldown_until and record.cooldown_until > datetime.now(timezone.utc):
-        return QUOTA_STATUS_COOLDOWN
+    # Check cooldown first. SQLite round-trips DateTime columns as naive
+    # values, so normalize before comparing with the aware clock (mirrors
+    # recovery_service).
+    if record.cooldown_until:
+        cooldown = (
+            record.cooldown_until
+            if record.cooldown_until.tzinfo
+            else record.cooldown_until.replace(tzinfo=timezone.utc)
+        )
+        if cooldown > datetime.now(timezone.utc):
+            return QUOTA_STATUS_COOLDOWN
 
     # Check limit errors
     if record.limit_error_count > 0:

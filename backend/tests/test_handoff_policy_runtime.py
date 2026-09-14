@@ -203,6 +203,18 @@ class TestQuotaPolicy:
         assert resp.json()["data"]["status"] == "failed"
         assert db_session.query(HandoffRecord).filter(HandoffRecord.task_id == task.id).count() == 0
 
+    def test_quota_handoff_increments_handoff_triggered_count(self, client: TestClient, db_session, _seed):
+        from src.models.quota import QuotaRecord as QuotaRecordModel
+
+        goal, task, coder, _ = _seed
+        self._limit_opus(db_session)
+
+        resp = client.post(f"/api/v1/runtime/execute-step/{task.id}")
+
+        assert resp.json()["data"]["is_handoff"] is True
+        record = db_session.query(QuotaRecordModel).filter(QuotaRecordModel.model_id == "model-claude-opus").one()
+        assert record.handoff_triggered_count == 1
+
 
 class TestQualityIssuePolicy:
     def test_on_quality_issue_handoff_transfers_task(self, db_session, _seed):

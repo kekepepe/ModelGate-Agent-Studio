@@ -146,6 +146,21 @@ class TestRecordUsageService:
         assert result["updated_status"] == "cooldown"
         assert "rate_limited" in result["risk_flags"]
 
+    def test_record_usage_after_cooldown_roundtrip(self, db_session):
+        """Regression (V1.1 e2e): SQLite reads cooldown_until back as a naive
+        datetime; a second record_usage on a cooling record must not raise
+        "can't compare offset-naive and offset-aware datetimes"."""
+        quota_service.record_usage(
+            db=db_session, provider="openai", model_id="gpt-4o", error_code=429,
+        )
+        # Expire so the next access re-SELECTs from SQLite (the round-trip
+        # that turns cooldown_until naive), like a brand-new request would.
+        db_session.expire_all()
+        result = quota_service.record_usage(
+            db=db_session, provider="openai", model_id="gpt-4o", total_tokens=10,
+        )
+        assert result["updated_status"] in {"cooldown", "limited"}
+
     def test_accumulates_requests(self, db_session):
         quota_service.record_usage(db=db_session, provider="openai", model_id="gpt-4o", total_tokens=100)
         quota_service.record_usage(db=db_session, provider="openai", model_id="gpt-4o", total_tokens=200)
