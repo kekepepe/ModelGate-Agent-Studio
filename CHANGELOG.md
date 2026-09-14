@@ -6,6 +6,50 @@ V1.0 is the first release produced under the 2026-09-06 platform
 redesign. Older per-phase changelogs are archived in
 `docs/_archive_2026/CHANGELOG.md`.
 
+## V1.0.1 / V1.1 — 2026-09-15（修复 + Handoff 完整业务流）
+
+计划与逐项进度见 `V1.0.1-V1.1-plan.md`；CI 工作流按用户决定暂缓。
+
+### Fixed（V1.0.1 修复批）
+- `frontend/src/components/ui/select.tsx` 入库 —— 它已被 LogFilters /
+  GoalInputPanel 引用，此前未提交导致新 clone 构建失败。
+- `vitest.config.ts` 补 `@` 路径别名，修复 7 个测试文件的模块解析失败。
+- 6 个组件测试（TaskCard / AgentStationCard / WorkerBadge / GlobalHeader /
+  TaskTree / LogFilters）对齐 shadcn 重构后的 UI；jsdom 补 PointerEvent /
+  pointer capture / scrollIntoView polyfill。
+- `.playwright-cli/` 调试产物 untrack + gitignore。
+- CLAUDE.md / HANDOVER.md 失实文档路径与描述修正；
+  `V1.0-frontend-plan.md` 归档。
+
+### Added（V1.1 Handoff 完整业务流）
+- **LLM 交接摘要**：`trigger_handoff` 先进 `generating_summary`，按 Goal 的
+  execution_mode 调用 provider 生成结构化摘要（mock 模式与任何失败路径回退
+  模板），摘要携带 `generated_by` / `generated_at` 溯源并计入 model_call 日志。
+- **handoff_policy 接入 runtime**：error / quota 两个自动触发点与验证失败后
+  的 quality 触发点均遵循 Station 的 `handoff_policy`
+  （can_initiate / on_provider_error / on_quota_exhausted / on_quality_issue）；
+  无显式策略的 Station 保持 V1.0 行为。状态矩阵补 ready/assigned → pending
+  的 requeue 边（设计文档 §3.2 已同步）。
+- **Workspace Handoff 状态条**：TaskCard 的 handoff 块接入真实数据
+  （ThreeZoneCardFlow 不再传空 stub）；站点 handoff 态判定改用后端真实枚举
+  （旧值 summary_ready / in_progress 永远匹配不上）。
+- **导航与配额可视化**：GlobalHeader 新增 Handoff 入口；Quota Overview 展示
+  `handoff_triggered_count` 并移除依赖已删 dashboard 接口的趋势图。
+- **`scripts/e2e-handoff.sh`**：设计 §8 V1.1 验收的 8 步端到端脚本，
+  mock 栈实测 PASS。
+
+### Fixed（V1.1 验收暴露）
+- `quota_service._determine_quota_status`：SQLite 回读的 `cooldown_until`
+  为 naive datetime，与 aware 时钟比较直接 TypeError —— 429 冷却后任何
+  第二次用量上报都会 500。已按 recovery_service 的方式归一化。
+- `QuotaRecord.handoff_triggered_count` 此前从未被递增；quota 拦截成功
+  触发 handoff 时现在会 +1。
+
+### 数字
+- 后端 pytest：428 passed, 1 skipped（V1.0 末态 411）
+- 前端 vitest：180 passed / 37 文件（修复前 16 个用例失败被别名缺失掩盖）
+- 前端 typecheck / build / lint：0 errors
+
 ## V1.0 — 2026-09-06 platform redesign complete
 
 ### Scope

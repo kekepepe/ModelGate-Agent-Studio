@@ -161,8 +161,12 @@ ExecutionLog   不可变事件流（10 种事件类型）
 Goal:        draft → planning → ready → running → {completed, failed, stopped}
 Task:        pending → assigned → running → {completed_verified, completed_unverified,
                                               revision_required, failed, cancelled}
+             （V1.1 修订：ready/assigned → pending 为合法边，用于 handoff_policy
+               驱动的 requeue：on_provider_error=retry_once、on_quota_exhausted=
+               fallback_backup，与 running/blocked → pending 的既有 requeue 语义一致）
 Worker:      created → running → {completed, failed, handoff_required}
-Handoff:     requested → summary_ready → accepted → {completed, failed, rejected}
+Handoff:     requested → generating_summary → ready → accepted → {completed, failed}
+             （V1.1 修订：以实现枚举为准，废除 summary_ready / rejected 命名）
 ```
 
 **所有状态转换走纯函数矩阵**：`can_transition(from, to, ctx) -> bool | TransitionError`。

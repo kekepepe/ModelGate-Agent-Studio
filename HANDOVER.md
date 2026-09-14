@@ -91,17 +91,18 @@
 
 ## 3. 当前可运行状态（实测数字）
 
+> 2026-09-15 V1.0.1/V1.1 收尾后更新；逐项进度见 `V1.0.1-V1.1-plan.md`。
+
 | 项 | 数值 |
 |---|---:|
-| 后端 pytest | **411 passed, 1 skipped, 0 failures** |
-| 前端 typecheck | **0 errors** |
-| 前端 build | **197ms / 392KB main bundle** |
-| Docker compose dev | **可启动** |
-| `scripts/e2e-demo.sh` | **PASS**（7 个 Final Summary 字段全验证） |
-| Working tree | **干净**（V1.0.1 起，含 select.tsx） |
-| 前端测试 | **175 passed（V1.0.1 修复后基线）；V1.0 末态实际有 16 个失败测试被 vitest 别名缺失掩盖** |
-| 总 commit 数 | 49（含 V1.0 之前的 20 个旧 commit） |
-| V1.0 期间新增 commit | 29 |
+| 后端 pytest | **428 passed, 1 skipped, 0 failures**（V1.0 末态 411） |
+| 前端测试 | **180 passed / 37 文件**（V1.0 末态实际有 16 个失败测试被 vitest 别名缺失掩盖，已修复） |
+| 前端 typecheck / build / lint | **0 errors** |
+| `scripts/e2e-demo.sh` | **PASS**（V1.0-7 验证；本阶段未改动其流程） |
+| `scripts/e2e-handoff.sh` | **PASS**（V1.1 验收：quota 耗尽 → auto-handoff → accept → 恢复 → completed，本地 mock 后端实测） |
+| CI（GitHub Actions） | **暂缓**（用户决定；恢复路径见 `docs/_archive_2026/v1.0_deletions_log.md` §6） |
+| Working tree | **干净** |
+| V1.0.1/V1.1 期间新增 commit | 10（`c4e8f91` → B14） |
 
 ---
 
