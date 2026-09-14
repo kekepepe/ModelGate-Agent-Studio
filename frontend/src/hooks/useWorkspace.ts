@@ -1,4 +1,4 @@
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { confirmPlan, createGoal, getTask, getWorkspaceState, retryTask as apiRetryTask, startGoal, updatePlan } from '../api/workspace';
 import { executeStep as apiExecuteStep, getRuntimeStatus, pauseGoal as apiPauseGoal, resumeGoal as apiResumeGoal, startGoalExecution, stopGoal as apiStopGoal } from '../api/runtime';
@@ -91,21 +91,56 @@ export function useRuntimeStatus(goalId: string | null) {
  * Runtime emits only persisted backend events. This subscription makes the
  * Workspace refresh immediately after a real state transition while polling
  * remains a recovery fallback for disconnected browsers.
+ *
+ * V1.0-P1-1: Returns `{ isConnected, lastEventAt }` so consumers (e.g.
+ * BottomConsole) can show an SSE health indicator.
  */
-export function useRuntimeEvents(goalId: string | null) {
+export function useRuntimeEvents(goalId: string | null): {
+  isConnected: boolean;
+  lastEventAt: number | null;
+} {
   const queryClient = useQueryClient();
+  const [isConnected, setIsConnected] = useState(false);
+  const [lastEventAt, setLastEventAt] = useState<number | null>(null);
+
   useEffect(() => {
-    if (!goalId) return;
+    if (!goalId) {
+      setIsConnected(false);
+      setLastEventAt(null);
+      return;
+    }
     const stream = new EventSource(`${API_BASE}/runtime/events/${goalId}`);
     const refresh = () => {
       queryClient.invalidateQueries({ queryKey: [WORKSPACE_QUERY_KEY, goalId] });
       queryClient.invalidateQueries({ queryKey: [RUNTIME_STATUS_KEY, goalId] });
       queryClient.invalidateQueries({ queryKey: [TASK_DETAIL_KEY] });
     };
-    stream.addEventListener('runtime', refresh);
+    const onOpen = () => setIsConnected(true);
+    const onError = () => {
+      // EventSource fires `error` on transient disconnects too; flip
+      // the flag off but don't tear down the stream (browser will
+      // auto-retry unless we manually call stream.close()).
+      setIsConnected(false);
+    };
+    const onMessage = () => {
+      refresh();
+      setLastEventAt(Date.now());
+    };
+    stream.addEventListener('open', onOpen);
+    stream.addEventListener('error', onError);
+    stream.addEventListener('runtime', onMessage);
     stream.addEventListener('end', () => stream.close());
-    return () => stream.close();
+
+    return () => {
+      stream.removeEventListener('open', onOpen);
+      stream.removeEventListener('error', onError);
+      stream.removeEventListener('runtime', onMessage);
+      stream.close();
+      setIsConnected(false);
+    };
   }, [goalId, queryClient]);
+
+  return { isConnected, lastEventAt };
 }
 
 export function usePauseGoal() {
