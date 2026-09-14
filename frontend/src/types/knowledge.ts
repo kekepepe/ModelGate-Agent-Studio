@@ -28,6 +28,9 @@ export interface SkillDraft {
   tools: string[];
   output_format?: string | null;
   success_criteria?: string | null;
+  success_rate?: number;
+  success_count: number;
+  failure_count: number;
   common_failures: string[];
   status: string;
   human_approved?: boolean | null;
@@ -107,6 +110,8 @@ export const MEMORY_TYPE_LABELS: Record<string, string> = {
   project_memory: '项目记忆',
   agent_memory: 'Agent 记忆',
   user_memory: '用户偏好',
+  user_preference: '用户偏好',
+  experience_memory: '经验记忆',
   session_memory: '会话记忆',
   raw_memory: '原始记忆',
   skill_memory: '技能记忆',

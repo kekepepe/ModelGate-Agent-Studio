@@ -66,3 +66,20 @@ export async function getKnowledgeChunks(documentId: string): Promise<KnowledgeC
   const resp = await client.get<ApiResponse<KnowledgeChunk[]>>(`/knowledge/documents/${documentId}/chunks`);
   return unwrap(resp, []);
 }
+
+export async function createPreference(input: {
+  title: string;
+  content: string;
+  tags?: string[];
+  created_by?: string;
+}): Promise<MemoryDraft> {
+  const resp = await client.post<ApiResponse<MemoryDraft>>('/knowledge/preferences', input);
+  if (!resp.data.success || !resp.data.data) throw new Error(resp.data.error?.message || '偏好创建失败');
+  return resp.data.data;
+}
+
+export async function getSkillDetail(skillId: string): Promise<SkillDraft> {
+  const resp = await client.get<ApiResponse<SkillDraft>>(`/knowledge/skills/${skillId}`);
+  if (!resp.data.success || !resp.data.data) throw new Error(resp.data.error?.message || '技能详情加载失败');
+  return resp.data.data;
+}

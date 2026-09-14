@@ -1,6 +1,6 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
-  generateMemories, getEvolutionSummary, approveMemory, approveSkill, disableKnowledgeSource,
+  createPreference, generateMemories, getEvolutionSummary, approveMemory, approveSkill, disableKnowledgeSource,
   getKnowledgeSources, createKnowledgeSource, syncKnowledgeSource, getKnowledgeDocuments, getKnowledgeChunks,
 } from '../api/knowledge';
 import type { KnowledgeSourceInput } from '../types/knowledge';
@@ -36,6 +36,14 @@ export function useApproveSkill() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: ({ id, approved }: { id: string; approved: boolean }) => approveSkill(id, approved),
+    onSuccess: () => qc.invalidateQueries({ queryKey: [EVOLUTION_KEY] }),
+  });
+}
+
+export function useCreatePreference() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (input: { title: string; content: string; created_by?: string }) => createPreference(input),
     onSuccess: () => qc.invalidateQueries({ queryKey: [EVOLUTION_KEY] }),
   });
 }

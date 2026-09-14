@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
-import { useEvolutionSummary, useApproveMemory, useApproveSkill } from '../hooks/useKnowledge';
+import { useEvolutionSummary, useApproveMemory, useApproveSkill, useCreatePreference } from '../hooks/useKnowledge';
 import type { MemoryDraft, SkillDraft } from '../types/knowledge';
 import { MEMORY_TYPE_LABELS } from '../types/knowledge';
 import KnowledgeSourcesPanel from '../components/KnowledgeSourcesPanel';
@@ -12,6 +12,7 @@ export default function EvolutionReviewPage() {
   const { data, isLoading } = useEvolutionSummary(goalId, runId || undefined);
   const approveMemory = useApproveMemory();
   const approveSkill = useApproveSkill();
+  const createPreference = useCreatePreference();
   const [tab, setTab] = useState<'sources' | 'memories' | 'skills'>('sources');
 
   return (
@@ -64,6 +65,8 @@ export default function EvolutionReviewPage() {
       {!isLoading && tab === 'skills' && data?.skill_drafts.length === 0 && (
         <div className="text-center text-stone-400 text-sm py-12">暂无技能草稿，完成多任务执行后自动生成</div>
       )}
+
+      {!isLoading && tab === 'memories' && <PreferenceForm onCreate={(title, content) => createPreference.mutate({ title, content })} isCreating={createPreference.isPending} />}
 
       {!isLoading && tab === 'memories' && (
         <div className="space-y-3">
@@ -156,10 +159,15 @@ function SkillCard({ skill, onApprove, isApproving }: { skill: SkillDraft; onApp
           <h3 className="text-sm font-semibold text-stone-800">{skill.name}</h3>
           {skill.scenario && <p className="text-sm text-stone-500 mt-1">{skill.scenario}</p>}
           <p className="mt-2 text-xs text-stone-500">来源运行：{skill.source_run_id || '未记录'}</p>
-          <div className="grid grid-cols-3 gap-2 mt-2 text-xs text-stone-600">
+          <div className="grid grid-cols-4 gap-2 mt-2 text-xs text-stone-600">
             <div><span className="text-stone-400">Steps: </span>{skill.steps.length}</div>
             <div><span className="text-stone-400">Agents: </span>{skill.recommended_agents.length}</div>
             <div><span className="text-stone-400">Tools: </span>{skill.tools.length}</div>
+            <div><span className="text-stone-400">成功率: </span>
+              {skill.success_rate !== undefined
+                ? `${(skill.success_rate * 100).toFixed(0)}% (${skill.success_count}/${skill.success_count + skill.failure_count})`
+                : '—'}
+            </div>
           </div>
         </div>
         {isPending && (
@@ -170,6 +178,45 @@ function SkillCard({ skill, onApprove, isApproving }: { skill: SkillDraft; onApp
         )}
         {isApproved && <span className="text-xs text-green-600 flex-shrink-0">✓ Approved</span>}
         {skill.human_approved === false && <span className="text-xs text-red-600 flex-shrink-0">✗ Rejected</span>}
+      </div>
+    </div>
+  );
+}
+
+function PreferenceForm({ onCreate, isCreating }: { onCreate: (title: string, content: string) => void; isCreating: boolean }) {
+  const [title, setTitle] = useState('');
+  const [content, setContent] = useState('');
+  const submit = () => {
+    if (!title.trim() || !content.trim()) return;
+    onCreate(title.trim(), content.trim());
+    setTitle('');
+    setContent('');
+  };
+  return (
+    <div className="bg-white rounded-xl border border-stone-200 p-4 mb-3">
+      <h3 className="text-sm font-semibold text-stone-800 mb-2">添加用户偏好</h3>
+      <p className="text-xs text-stone-500 mb-2">偏好会被注入到之后每一次执行的上下文中（无需审批）。</p>
+      <div className="flex flex-col sm:flex-row gap-2">
+        <input
+          value={title}
+          onChange={(e) => setTitle(e.target.value)}
+          placeholder="偏好标题，如：测试框架偏好"
+          className="flex-1 px-3 py-2 text-sm border border-stone-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-stone-300"
+        />
+        <input
+          value={content}
+          onChange={(e) => setContent(e.target.value)}
+          onKeyDown={(e) => e.key === 'Enter' && submit()}
+          placeholder="具体内容，如：测试一律用 pytest + fixtures"
+          className="flex-1 px-3 py-2 text-sm border border-stone-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-stone-300"
+        />
+        <button
+          onClick={submit}
+          disabled={isCreating || !title.trim() || !content.trim()}
+          className="px-4 py-2 text-sm bg-stone-800 text-white rounded-lg hover:bg-stone-700 disabled:opacity-40"
+        >
+          保存
+        </button>
       </div>
     </div>
   );
