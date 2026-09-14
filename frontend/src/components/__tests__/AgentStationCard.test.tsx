@@ -4,6 +4,9 @@ import { MemoryRouter } from 'react-router-dom'
 import AgentStationCard from '../AgentStationCard'
 import type { WorkspaceAgent } from '../../types/workspace'
 
+// The shadcn refactor (V1.0-P0) filters tasks by `assigned_agent_id` and
+// replaced the Chinese empty state with the Star-Office-UI copy.
+
 const agent: WorkspaceAgent = {
   id: 'a-1',
   name: 'Coder #1',
@@ -43,12 +46,13 @@ describe('AgentStationCard', () => {
         <AgentStationCard agent={agent} tasks={[]} />
       </MemoryRouter>
     )
-    expect(screen.getByText('暂无任务')).toBeInTheDocument()
+    expect(screen.getByText('Awaiting task')).toBeInTheDocument()
+    expect(screen.getByText('No handoff planned')).toBeInTheDocument()
   })
 
   it('shows tasks assigned to this agent', () => {
     const tasks = [
-      { id: 't-1', title: 'Build login', status: 'running', agent_id: 'a-1' },
+      { id: 't-1', title: 'Build login', status: 'running', assigned_agent_id: 'a-1' },
     ]
     render(
       <MemoryRouter>
@@ -58,17 +62,19 @@ describe('AgentStationCard', () => {
     expect(screen.getByText('Build login')).toBeInTheDocument()
   })
 
-  it('calls onTaskClick when task is clicked', () => {
+  it('calls onTaskClick when the station header is clicked', () => {
     const onTaskClick = vi.fn()
     const tasks = [
-      { id: 't-1', title: 'Build login', status: 'running', agent_id: 'a-1' },
+      { id: 't-1', title: 'Build login', status: 'running', assigned_agent_id: 'a-1' },
     ]
     render(
       <MemoryRouter>
         <AgentStationCard agent={agent} tasks={tasks} onTaskClick={onTaskClick} />
       </MemoryRouter>
     )
-    fireEvent.click(screen.getByText('Build login'))
+    // The current task title lives in a read-only section; the header button
+    // is the click target that routes through onTaskClick.
+    fireEvent.click(screen.getByText('Coder #1'))
     expect(onTaskClick).toHaveBeenCalledWith('t-1')
   })
 })

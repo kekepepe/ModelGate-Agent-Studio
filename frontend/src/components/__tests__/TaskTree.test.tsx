@@ -39,6 +39,7 @@ describe('TaskTree', () => {
   it('highlights selected task', () => {
     render(<TaskTree tasks={tasks} selectedTaskId="t-2" />)
     const btn = screen.getByText('Task 2').closest('button')
-    expect(btn?.className).toContain('bg-stone-100')
+    // Selected rows use the shadcn Button "secondary" variant.
+    expect(btn?.className).toContain('bg-secondary')
   })
 })

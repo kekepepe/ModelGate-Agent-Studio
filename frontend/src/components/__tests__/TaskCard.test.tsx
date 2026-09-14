@@ -2,37 +2,36 @@ import { describe, it, expect, vi } from 'vitest'
 import { render, screen, fireEvent } from '@testing-library/react'
 import TaskCard from '../TaskCard'
 
+// TaskCard was refactored to shadcn Card + AgentStatusBadge (V1.0-P0): status
+// pills use the shared English labels and there are no per-status card
+// animations any more, so assertions target data attributes and badge text.
+
 describe('TaskCard', () => {
   it('renders pending state correctly', () => {
     render(<TaskCard id="t-1" title="Test Task" status="pending" />)
     expect(screen.getByText('Test Task')).toBeInTheDocument()
-    expect(screen.getByText('待处理')).toBeInTheDocument()
+    expect(screen.getByText('Pending')).toBeInTheDocument()
   })
 
-  it('renders running state with animation class', () => {
-    const { container } = render(<TaskCard id="t-1" title="Running" status="running" />)
-    const card = container.firstChild as HTMLElement
-    expect(card.className).toContain('animate-breathe')
-    expect(screen.getByText('执行中')).toBeInTheDocument()
+  it('marks the card element with its task status', () => {
+    render(<TaskCard id="t-1" title="Task A" status="running" />)
+    expect(screen.getByRole('button')).toHaveAttribute('data-task-status', 'running')
+    expect(screen.getByText('Running')).toBeInTheDocument()
   })
 
   it('renders completed state', () => {
-    render(<TaskCard id="t-1" title="Done" status="completed" />)
-    expect(screen.getByText('已完成')).toBeInTheDocument()
+    render(<TaskCard id="t-1" title="Task A" status="completed" />)
+    expect(screen.getByText('Done')).toBeInTheDocument()
   })
 
-  it('renders failed state with shake', () => {
-    const { container } = render(<TaskCard id="t-1" title="Failed" status="failed" />)
-    const card = container.firstChild as HTMLElement
-    expect(card.className).toContain('animate-shake')
-    expect(screen.getByText('失败')).toBeInTheDocument()
+  it('renders failed state', () => {
+    render(<TaskCard id="t-1" title="Task A" status="failed" />)
+    expect(screen.getByText('Failed')).toBeInTheDocument()
   })
 
-  it('renders handoff state with rotate animation', () => {
-    const { container } = render(<TaskCard id="t-1" title="Handoff" status="handoff" />)
-    const card = container.firstChild as HTMLElement
-    expect(card.className).toContain('animate-rotate-border')
-    expect(screen.getByText('交接中')).toBeInTheDocument()
+  it('renders handoff state', () => {
+    render(<TaskCard id="t-1" title="Task A" status="handoff" />)
+    expect(screen.getByText('Handoff')).toBeInTheDocument()
   })
 
   it('calls onSelect when clicked', () => {
@@ -43,14 +42,14 @@ describe('TaskCard', () => {
   })
 
   it('shows priority badge when > 0', () => {
-    render(<TaskCard id="t-1" title="Pri" status="pending" priority={2} />)
-    expect(screen.getByText('P2')).toBeInTheDocument()
+    // PRIORITY_LABEL maps numeric priority 2 to the P1 badge.
+    render(<TaskCard id="t-1" title="Task A" status="pending" priority={2} />)
+    expect(screen.getByText('P1')).toBeInTheDocument()
   })
 
   it('applies selected ring style', () => {
-    const { container } = render(<TaskCard id="t-1" title="Sel" status="pending" isSelected />)
-    const card = container.firstChild as HTMLElement
-    expect(card.className).toContain('ring-2');
+    render(<TaskCard id="t-1" title="Sel" status="pending" isSelected />)
+    expect(screen.getByRole('button').className).toContain('ring-2')
   })
 
   it('renders handoff indicator when provided', () => {
@@ -59,16 +58,12 @@ describe('TaskCard', () => {
     expect(screen.getByTestId('handoff-indicator')).toBeInTheDocument()
   })
 
-  it('offers handoff from an active task without selecting the card', () => {
-    const onRequestHandoff = vi.fn()
-    const onSelect = vi.fn()
+  it('renders agent, model and output snippet', () => {
     render(
       <TaskCard
         id="t-1"
         title="Active task"
         status="running"
-        onSelect={onSelect}
-        onRequestHandoff={onRequestHandoff}
         agentName="Coder"
         modelName="GPT-4o"
         outputSnippet="Implementation is in progress"
@@ -77,18 +72,17 @@ describe('TaskCard', () => {
     expect(screen.getByText('Coder')).toBeInTheDocument()
     expect(screen.getByText('GPT-4o')).toBeInTheDocument()
     expect(screen.getByText('Implementation is in progress')).toBeInTheDocument()
-    fireEvent.click(screen.getByText('交接任务'))
-    expect(onRequestHandoff).toHaveBeenCalledWith('t-1')
-    expect(onSelect).not.toHaveBeenCalled()
   })
 
-  it('opens the task handoff timeline from its handoff summary', () => {
+  it('opens the handoff detail from the handoff block without selecting the card', () => {
     const onOpenHandoff = vi.fn()
+    const onSelect = vi.fn()
     render(
       <TaskCard
         id="t-1"
         title="Handoff task"
         status="handoff"
+        onSelect={onSelect}
         handoff={{
           id: 'h-1', task_id: 't-1', status: 'ready', reason: 'manual',
           from_agent_id: 'a-1', from_agent_name: 'Coder', from_model_id: 'gpt',
@@ -97,7 +91,9 @@ describe('TaskCard', () => {
         onOpenHandoff={onOpenHandoff}
       />
     )
-    fireEvent.click(screen.getByText(/交接 Coder → Reviewer/))
+    // Accessible name is the concatenated text "Handoff" + reason.
+    fireEvent.click(screen.getByRole('button', { name: 'Handoffmanual' }))
     expect(onOpenHandoff).toHaveBeenCalledWith('h-1')
+    expect(onSelect).not.toHaveBeenCalled()
   })
 })

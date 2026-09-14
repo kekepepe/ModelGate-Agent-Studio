@@ -32,15 +32,16 @@ describe('WorkerBadge', () => {
     })
   })
 
-  it('applies breathe animation for running', () => {
+  it('pulses the badge while running', () => {
     const { container } = render(<WorkerBadge modelName="test" status="running" />)
-    const dot = container.querySelector('.animate-breathe-dot')
-    expect(dot).toBeTruthy()
+    const badge = container.querySelector('[data-worker-status="running"]')
+    expect(badge?.className).toContain('animate-pulse')
   })
 
-  it('applies dot-pulse animation for handoff_required', () => {
+  it('colors the dot violet for handoff_required', () => {
     const { container } = render(<WorkerBadge modelName="test" status="handoff_required" />)
-    const dot = container.querySelector('.animate-dot-pulse')
-    expect(dot).toBeTruthy()
+    // The Badge shell also has rounded-full, so target the inner dot size classes.
+    const dot = container.querySelector('.h-2.w-2.rounded-full')
+    expect(dot?.className).toContain('bg-violet-500')
   })
 })

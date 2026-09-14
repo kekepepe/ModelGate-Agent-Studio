@@ -9,6 +9,9 @@ vi.mock('../../hooks/useDashboard', () => ({
 vi.mock('../../hooks/useRuns', () => ({
   useRun: () => ({ data: { goal_id: 'goal-9' } }),
 }));
+vi.mock('../../hooks/useAgents', () => ({
+  useAgents: () => ({ data: { items: [] } }),
+}));
 
 describe('GlobalHeader', () => {
   it('keeps Workspace active and carries run context across global navigation', () => {
