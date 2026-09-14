@@ -133,3 +133,6 @@ exports/
 !README.md
 !docs/
 !skills-lock.json
+
+# Browser session debug snapshots (playwright CLI artifacts)
+.playwright-cli/
