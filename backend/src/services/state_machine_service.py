@@ -34,8 +34,8 @@ GOAL_TRANSITIONS: Dict[str, Set[str]] = {
 
 TASK_TRANSITIONS: Dict[str, Set[str]] = {
     "pending": {"ready", "assigned", "running", "waiting_approval", "blocked", "skipped", "cancelled", "failed", "handoff"},
-    "ready": {"assigned", "running", "waiting_approval", "blocked", "skipped", "cancelled", "failed", "handoff"},
-    "assigned": {"running", "waiting_approval", "blocked", "cancelled", "failed", "handoff"},
+    "ready": {"pending", "assigned", "running", "waiting_approval", "blocked", "skipped", "cancelled", "failed", "handoff"},
+    "assigned": {"pending", "running", "waiting_approval", "blocked", "cancelled", "failed", "handoff"},
     "running": {"pending", "waiting_approval", "completed", "completed_verified", "completed_unverified", "revision_required", "replanning", "blocked", "cancelled", "failed", "handoff"},
     "waiting_approval": {"pending", "blocked", "skipped", "cancelled"},
     "completed_unverified": {"pending", "revision_required", "cancelled"},

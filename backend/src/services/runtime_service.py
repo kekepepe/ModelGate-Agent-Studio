@@ -957,6 +957,36 @@ def _execute_single_task(db: Session, task: Task) -> Dict[str, Any]:
             evidence=verification["results"],
         )
     else:
+        quality_handoff = _maybe_handoff_on_quality(db, task, agent, routing, verification)
+        if quality_handoff is not None:
+            # Preserve the execution evidence on the task record, flip the
+            # worker to handoff_required, and report a handoff result so the
+            # pipeline stops with goal status "handoff" until acceptance.
+            task.output = final_content
+            task.lease_expires_at = None
+            task.tokens_used = total_tokens
+            task.duration_ms = elapsed_ms
+            task.updated_at = datetime.now(timezone.utc)
+            worker.status = "handoff_required"
+            worker.final_output = final_content
+            worker.total_tokens_used = total_tokens
+            worker.next_action = "handoff"
+            worker.updated_at = datetime.now(timezone.utc)
+            completion_decision = quality_handoff
+            db.commit()
+            return {
+                "task_id": task.id,
+                "status": "handoff",
+                "output": final_content,
+                "tokens_used": total_tokens,
+                "duration_ms": elapsed_ms,
+                "model_name": model_name,
+                "worker_id": worker.id,
+                "quota_status": quota_result.get("updated_status", "unknown") if quota_result else "unknown",
+                "is_handoff": True,
+                "tool_call_count": tool_call_count,
+                "verification": verification,
+            }
         # Code and verification work may not be presented as complete merely
         # because the model exhausted its retry budget. Restore the latest
         # stable state for each changed path and leave an actionable block.
@@ -1197,15 +1227,157 @@ def _verify_task(db: Session, task: Task) -> Dict[str, Any]:
     return verifier_service.verify_task_contract(db, task)
 
 
+def _task_has_runtime_log(db: Session, task_id: str, event_type: str, event_status: str) -> bool:
+    """Once-only marker for policy-driven requeues (no extra schema needed)."""
+    from src.models.handoff import ExecutionLog
+
+    return db.query(ExecutionLog).filter(
+        ExecutionLog.task_id == task_id,
+        ExecutionLog.event_type == event_type,
+        ExecutionLog.event_status == event_status,
+    ).first() is not None
+
+
+def _handoff_policy_for(agent: AgentStation) -> Dict[str, Any]:
+    """Legacy-compatible view of the station handoff policy (design §4.1).
+
+    Stations without an explicit policy JSON keep the pre-V1.1 runtime
+    behavior: auto-handoff stays available and is decided by the backup
+    routing. An explicit ``handoff_policy`` JSON on the station is
+    authoritative, including ``can_initiate: false``. ``on_quality_issue``
+    governs the post-verification handoff and defaults to the legacy
+    ``replan`` behavior.
+    """
+    policy: Dict[str, Any] = {}
+    if agent.handoff_policy:
+        policy = agent.get_handoff_policy() or {}
+    policy.setdefault("can_initiate", True)
+    policy.setdefault("on_quota_exhausted", "handoff")
+    policy.setdefault("on_provider_error", "handoff")
+    policy.setdefault("on_quality_issue", "replan")
+    return policy
+
+
+def _fail_task_on_quota(db: Session, task: Task, agent: AgentStation) -> Dict[str, Any]:
+    task.status = "failed"
+    task.updated_at = datetime.now(timezone.utc)
+    db.commit()
+    return {
+        "task_id": task.id,
+        "status": "failed",
+        "output": None,
+        "tokens_used": 0,
+        "duration_ms": 0,
+        "model_name": None,
+        "worker_id": None,
+        "quota_status": "limited",
+        "is_handoff": False,
+    }
+
+
+def _requeue_task(db: Session, task: Task, reason: str, quota_status: Optional[str]) -> Dict[str, Any]:
+    """Requeue a task for the scheduler without consuming verification retries."""
+    task.status = "pending"
+    task.updated_at = datetime.now(timezone.utc)
+    return {
+        "task_id": task.id,
+        "status": "pending",
+        "output": None,
+        "tokens_used": 0,
+        "duration_ms": 0,
+        "model_name": None,
+        "worker_id": None,
+        "quota_status": quota_status,
+        "is_handoff": False,
+        "requeue_reason": reason,
+    }
+
+
+def _maybe_handoff_on_quality(
+    db: Session, task: Task, agent: AgentStation, routing: Optional[Dict], verification: Dict[str, Any],
+) -> Optional[Any]:
+    """§4.1 on_quality_issue=handoff: transfer after verification retries are exhausted.
+
+    Returns the recorded runtime decision when a handoff was created; None
+    means the caller should continue with the legacy blocked/replan path.
+    """
+    from src.schemas.planning import RuntimeDecisionContract  # noqa: F401  (typed via decide_failure)
+    from src.services import runtime_decision_service
+
+    policy = _handoff_policy_for(agent)
+    if not policy.get("can_initiate", True) or policy.get("on_quality_issue") != "handoff":
+        return None
+    target_agent = db.query(AgentStation).filter(
+        AgentStation.id != agent.id,
+        AgentStation.is_enabled == True,
+    ).first()
+    if not target_agent:
+        return None
+    backup_model_ids = routing.get("backup_model_ids", []) if routing else []
+    to_model_id = backup_model_ids[0] if backup_model_ids else target_agent.default_model_id
+    try:
+        handoff_service.trigger_handoff(
+            db=db,
+            task_id=task.id,
+            to_agent_id=target_agent.id,
+            to_model_id=to_model_id,
+            reason="quality_issue",
+            reason_description="Verification failed after retry budget; handing off per station policy.",
+        )
+    except handoff_service.HandoffServiceError:
+        return None
+    decision = runtime_decision_service.decide_failure(
+        task,
+        trigger="verification_failure",
+        reason="Verification failed after retry budget; responsibility transferred via handoff.",
+        handoff_available=True,
+        evidence=verification["results"],
+    )
+    runtime_decision_service.record_decision(db, task, decision, commit=False)
+    return decision
+
+
 def _handle_task_failure(
     db: Session, task: Task, agent: AgentStation, worker: WorkerSession, error_msg: str, routing: Optional[Dict] = None,
 ) -> Dict[str, Any]:
+    policy = _handoff_policy_for(agent)
+    on_provider_error = policy.get("on_provider_error", "handoff")
+
+    # §4.1 retry_once: one policy-driven requeue before the task is allowed
+    # to fail. The prior retry_scheduled log marks the second failure terminal.
+    if (
+        policy.get("can_initiate", True)
+        and on_provider_error == "retry_once"
+        and not _task_has_runtime_log(db, task.id, "error", "retry_scheduled")
+    ):
+        task.blocked_reason = f"Provider execution failed ({error_msg}); one retry scheduled by handoff policy."
+        worker.status = "failed"
+        worker.error_message = error_msg
+        worker.failure_count = (worker.failure_count or 0) + 1
+        worker.next_action = "retry"
+        worker.updated_at = datetime.now(timezone.utc)
+        log_service.create_log(db, {
+            "goal_id": task.goal_id,
+            "task_id": task.id,
+            "agent_id": agent.id,
+            "worker_id": worker.id,
+            "event_type": "error",
+            "event_status": "retry_scheduled",
+            "error_message": error_msg,
+            "error_type": "runtime_error",
+            "metadata": {"handoff_policy": "retry_once"},
+        })
+        result = _requeue_task(db, task, "provider_error_retry_once", None)
+        db.commit()
+        return result
+
     backup_model_ids = routing.get("backup_model_ids", []) if routing else []
     target_agent = db.query(AgentStation).filter(
         AgentStation.id != agent.id,
         AgentStation.is_enabled == True,
     ).first()
-    if backup_model_ids and target_agent:
+    handoff_allowed = policy.get("can_initiate", True) and on_provider_error == "handoff"
+    if handoff_allowed and backup_model_ids and target_agent:
         try:
             handoff_result = handoff_service.trigger_handoff(
                 db=db,
@@ -1307,7 +1479,15 @@ def _handle_task_failure(
 def _handle_quota_intercept(
     db: Session, task: Task, agent: AgentStation, model_id: str, routing: Dict
 ) -> Dict[str, Any]:
-    """Handle intercepted model call by triggering handoff."""
+    """Handle intercepted model call according to the station handoff policy.
+
+    on_quota_exhausted (design §4.1): ``handoff`` transfers the task to another
+    station, ``fallback_backup`` requeues it once so the Router can pick a
+    healthier model (quota health is a routing input), ``fail`` terminates it.
+    A per-task flag bounds ``fallback_backup`` to a single attempt.
+    """
+    policy = _handoff_policy_for(agent)
+    on_quota = policy.get("on_quota_exhausted", "handoff")
     backup_model_ids = routing.get("backup_model_ids", []) if routing else []
     fallback_model_id = backup_model_ids[0] if backup_model_ids else agent.default_model_id
 
@@ -1317,21 +1497,25 @@ def _handle_quota_intercept(
         AgentStation.is_enabled == True,
     ).first()
 
-    if not target_agent:
-        task.status = "failed"
-        task.updated_at = datetime.now(timezone.utc)
-        db.commit()
-        return {
+    if on_quota == "fallback_backup" and policy.get("can_initiate", True):
+        if _task_has_runtime_log(db, task.id, "task.blocked", "requeued"):
+            return _fail_task_on_quota(db, task, agent)
+        task.blocked_reason = f"Model {model_id} hit its quota; requeued once for backup routing."
+        log_service.create_log(db, {
+            "goal_id": task.goal_id,
             "task_id": task.id,
-            "status": "failed",
-            "output": None,
-            "tokens_used": 0,
-            "duration_ms": 0,
-            "model_name": None,
-            "worker_id": None,
-            "quota_status": "limited",
-            "is_handoff": False,
-        }
+            "agent_id": agent.id,
+            "event_type": "task.blocked",
+            "event_status": "requeued",
+            "output_summary": f"Quota exhausted on {model_id}; fallback_backup requeue",
+            "metadata": {"handoff_policy": "fallback_backup", "model_id": model_id},
+        })
+        result = _requeue_task(db, task, "quota_fallback_backup", "limited")
+        db.commit()
+        return result
+
+    if not policy.get("can_initiate", True) or on_quota == "fail" or not target_agent:
+        return _fail_task_on_quota(db, task, agent)
 
     try:
         handoff_service.trigger_handoff(
@@ -1343,20 +1527,7 @@ def _handle_quota_intercept(
             reason_description=f"Model {model_id} is in LIMITED/COOLDOWN status",
         )
     except handoff_service.HandoffServiceError:
-        task.status = "failed"
-        task.updated_at = datetime.now(timezone.utc)
-        db.commit()
-        return {
-            "task_id": task.id,
-            "status": "failed",
-            "output": None,
-            "tokens_used": 0,
-            "duration_ms": 0,
-            "model_name": None,
-            "worker_id": None,
-            "quota_status": "limited",
-            "is_handoff": False,
-        }
+        return _fail_task_on_quota(db, task, agent)
 
     task.status = "handoff"
     task.updated_at = datetime.now(timezone.utc)
