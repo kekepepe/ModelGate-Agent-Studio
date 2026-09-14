@@ -98,7 +98,8 @@
 | 前端 build | **197ms / 392KB main bundle** |
 | Docker compose dev | **可启动** |
 | `scripts/e2e-demo.sh` | **PASS**（7 个 Final Summary 字段全验证） |
-| Working tree | **干净**（除一个待处理的孤儿文件，见 §7） |
+| Working tree | **干净**（V1.0.1 起，含 select.tsx） |
+| 前端测试 | **175 passed（V1.0.1 修复后基线）；V1.0 末态实际有 16 个失败测试被 vitest 别名缺失掩盖** |
 | 总 commit 数 | 49（含 V1.0 之前的 20 个旧 commit） |
 | V1.0 期间新增 commit | 29 |
 
@@ -115,7 +116,7 @@
 
 ### 前端
 - **React 19** + **Vite**
-- **TanStack Router**（file-based）+ **TanStack Query**
+- **react-router-dom v7**（声明式 `<Routes>`，定义在 `src/App.tsx`）+ **TanStack Query**
 - **shadcn/ui**（new-york preset，slate base，**copy-paste 模式不是 npm 依赖**）
 - **Tailwind v4** + 10 个 agent 状态色 CSS 变量
 - **Zustand**（shadcn 配套引入）
@@ -174,7 +175,7 @@
 | `frontend/src/lib/utils.ts` | `cn()` 工具 |
 | `frontend/src/components/ui/agent-status-badge.tsx` | **共享状态徽章**，映射 30+ 状态枚举到 V1.0-5 颜色 |
 | `frontend/src/components/ui/{avatar,badge,button,card,input,scroll-area,separator,tabs,textarea,tooltip}.tsx` | 10 个 shadcn 基础组件（commit 进库） |
-| `frontend/src/components/ui/select.tsx` | **未 commit 的孤儿文件**（见 §7） |
+| `frontend/src/components/ui/select.tsx` | Radix Select 封装；**已被 LogFilters / GoalInputPanel 引用，V1.0.1 已提交**（见 §7.1 修订） |
 | `frontend/src/hooks/useRuntimeEvents.ts` | SSE 事件流 hook（P1-1 修了 listener 泄漏） |
 | `frontend/src/hooks/useTasks.ts` | `/api/v1/tasks` 数据 hook（V1.0-P1-2） |
 | `frontend/src/api/tasks.ts` | `/api/v1/tasks` axios wrapper |
@@ -237,7 +238,7 @@ mv -f ./@/components/ui/select.tsx src/components/ui/select.tsx 2>/dev/null
 rm -rf "./@"
 ```
 
-**这就是 `select.tsx` 至今没 commit 的原因** —— 没人调用它，孤儿文件。
+**这就是 `select.tsx` 起初没 commit 的原因。** ⚠️ 修订（V1.0.1）：交接时"没被任何文件 import"的判断是**错的** —— P2/P3 提交的 `LogFilters.tsx` 和 `GoalInputPanel.tsx` 实际引用了它，新 clone 会构建失败。已在 V1.0.1 提交修复（`c4e8f91`）。shadcn CLI 的 alias bug 本身依然存在，脚本化绕过方式如上。
 
 ### 7.2 `httpx==0.28.1` 被宽 pin 成 `httpx>=0.27,<0.29`
 Docker build 时与 `litellm 1.55.0` 的 `httpx<0.28.0` 冲突；本地 venv 之前静默用的是 0.27.2。**改 httpx 版本时记得检查 litellm 约束**，别简单 bump 到最新。
@@ -264,7 +265,7 @@ V1.0-3.7 删除了全部 5 个 P0-P7 workflow。V1.0 故意"无 CI 推送"。**V
 
 ## 8. 未来计划（按设计文档 V1.0 → V1.4）
 
-> 全部来自 `docs/design/2026-09-06-platform-redesign.md` §8。本节是"接 Mavis 班"的人要按这个顺序推进的事。
+> ⚠️ 2026-09-15 起，V1.0.1 / V1.1 的**执行计划与进度跟踪已迁移到 [`V1.0.1-V1.1-plan.md`](./V1.0.1-V1.1-plan.md)**（根目录，含设计决策 D1-D7 与 checkbox）。下面保留原始路线图供总览。本节全部来自 `docs/design/2026-09-06-platform-redesign.md` §8。
 
 ### V1.0.1 — 补齐 V1.0 短板（最近期，1-2 周）
 
@@ -347,23 +348,14 @@ V1.0-3.7 删除了全部 5 个 P0-P7 workflow。V1.0 故意"无 CI 推送"。**V
 
 ## 10. 我现在没做、要立刻决定的事
 
-写这个文档时发现的有意识遗留问题（不是 bug）：
+> ✅ V1.0.1 全部落定（2026-09-15），原始决策与理由保留如下：
 
 1. **`frontend/src/components/ui/select.tsx` 未 commit**
-   - 状态：磁盘存在、git 不知道
-   - 影响：0（没被任何文件 import）
-   - 建议：删除（shadcn 标准模板，未来一行命令重生）
-   - **等用户决定**
-
+   - ✅ **决定：提交**。交接时的"没被任何文件 import"判断有误（LogFilters / GoalInputPanel 引用了它），删除会弄坏新 clone。已提交（`c4e8f91`）。
 2. **`V1.0-frontend-plan.md` 没归档**
-   - 状态：仍然在根目录
-   - 决策：保留，作为已实施 P0/P1/P2/P3 的历史记录；或者归档到 `docs/_archive_2026/`
-   - **等用户决定**
-
+   - ✅ **决定：归档**到 `docs/_archive_2026/`（已实施完毕的 P0-P3 历史记录，保留但移出根目录）。
 3. **`HANDOVER.md`（本文档）是否归档**
-   - 状态：刚刚新建
-   - 决策：建议**留在根目录**作为长期参考（类比 `CHANGELOG.md` / `CLAUDE.md`）
-   - **等用户决定**
+   - ✅ **决定：留在根目录**，与 `CHANGELOG.md` / `CLAUDE.md` 同级作为长期参考。
 
 ---
 
