@@ -3,8 +3,8 @@ import { Info, Route } from 'lucide-react';
 import TaskCard from './TaskCard';
 import { AgentStatusBadge } from './ui/agent-status-badge';
 import { cn } from '@/lib/utils';
-import type { WorkspaceViewModel } from '../utils/workspaceViewModel';
-import type { WorkspaceTask } from '../types/workspace';
+import { ACTIVE_HANDOFF_STATUSES, type WorkspaceViewModel } from '../utils/workspaceViewModel';
+import type { WorkspaceHandoff, WorkspaceTask } from '../types/workspace';
 
 /**
  * V1.0-6c — ThreeZoneCardFlow.
@@ -71,18 +71,32 @@ interface ThreeZoneCardFlowProps {
   viewModel: WorkspaceViewModel;
   selectedTaskId?: string | null;
   onSelectTask: (taskId: string) => void;
+  onOpenHandoff?: (handoffId: string) => void;
 }
 
 export default function ThreeZoneCardFlow({
   viewModel,
   selectedTaskId,
   onSelectTask,
+  onOpenHandoff,
 }: ThreeZoneCardFlowProps) {
   // Flat-collect all tasks across stations, group by zone
   const allTasks: WorkspaceTask[] = useMemo(
     () => viewModel.stations.flatMap((s) => s.tasks),
     [viewModel],
   );
+
+  // V1.1: surface the active handoff on the card it belongs to (design §4.5
+  // "Handoff 在 Task Card 上半透明卡片展示").
+  const handoffByTaskId = useMemo(() => {
+    const map = new Map<string, WorkspaceHandoff>();
+    for (const handoff of viewModel.handoffs) {
+      if (ACTIVE_HANDOFF_STATUSES.includes(handoff.status)) {
+        map.set(handoff.task_id, handoff);
+      }
+    }
+    return map;
+  }, [viewModel.handoffs]);
 
   const grouped = useMemo(() => {
     const buckets: Record<'rest' | 'working' | 'problem', WorkspaceTask[]> = {
@@ -171,11 +185,9 @@ export default function ThreeZoneCardFlow({
                             modelName={task.model_name ?? null}
                             onSelect={onSelectTask}
                             isSelected={task.id === selectedTaskId}
-                            handoffIndicator={undefined}
                             outputSnippet={null}
-                            handoff={null}
-                            onRequestHandoff={undefined}
-                            onOpenHandoff={undefined}
+                            handoff={handoffByTaskId.get(task.id) ?? null}
+                            onOpenHandoff={onOpenHandoff}
                             quotaStatus={null}
                             quotaUsagePercent={null}
                             latestToolCall={null}

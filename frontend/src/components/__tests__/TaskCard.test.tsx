@@ -91,8 +91,8 @@ describe('TaskCard', () => {
         onOpenHandoff={onOpenHandoff}
       />
     )
-    // Accessible name is the concatenated text "Handoff" + reason.
-    fireEvent.click(screen.getByRole('button', { name: 'Handoffmanual' }))
+    // Explicit aria-label avoids clashing with the card's own button role.
+    fireEvent.click(screen.getByRole('button', { name: 'View handoff: manual' }))
     expect(onOpenHandoff).toHaveBeenCalledWith('h-1')
     expect(onSelect).not.toHaveBeenCalled()
   })

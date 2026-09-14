@@ -17,7 +17,6 @@ interface TaskCardProps {
   modelName?: string | null;
   outputSnippet?: string | null;
   handoff?: WorkspaceHandoff | null;
-  onRequestHandoff?: (taskId: string) => void;
   onOpenHandoff?: (handoffId: string) => void;
   quotaStatus?: string | null;
   quotaUsagePercent?: number | null;
@@ -58,7 +57,6 @@ export default function TaskCard(props: TaskCardProps) {
     modelName,
     outputSnippet,
     handoff,
-    onRequestHandoff,
     onOpenHandoff,
     quotaStatus,
     quotaUsagePercent,
@@ -131,6 +129,7 @@ export default function TaskCard(props: TaskCardProps) {
         {handoff && (
           <button
             type="button"
+            aria-label={`View handoff: ${handoff.reason}`}
             onClick={(e) => {
               e.stopPropagation();
               onOpenHandoff?.(handoff.id);
@@ -141,7 +140,7 @@ export default function TaskCard(props: TaskCardProps) {
               <span className="font-medium">Handoff</span>
               <span>{handoff.reason}</span>
             </div>
-            {onRequestHandoff && (
+            {onOpenHandoff && (
               <div className="mt-0.5 text-violet-600">点击查看 →</div>
             )}
           </button>

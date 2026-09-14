@@ -195,7 +195,7 @@ export default function WorkspacePage() {
           {viewMode === 'card' ? (
             <CardFlowRenderer viewModel={viewModel} selectedTaskId={selectedTaskId} onSelectTask={setSelectedTaskId} onOpenHandoff={setSelectedHandoffId} />
           ) : viewMode === 'zones' ? (
-            <ThreeZoneCardFlow viewModel={viewModel} selectedTaskId={selectedTaskId} onSelectTask={setSelectedTaskId} />
+            <ThreeZoneCardFlow viewModel={viewModel} selectedTaskId={selectedTaskId} onSelectTask={setSelectedTaskId} onOpenHandoff={setSelectedHandoffId} />
           ) : (
             <Suspense fallback={
               <div className="flex items-center justify-center p-8 text-sm text-stone-500">

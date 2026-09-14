@@ -37,6 +37,13 @@ export type WorkspaceViewModel = {
 const COMPLETE_STATUSES = new Set(['completed', 'completed_verified', 'completed_unverified']);
 const ROLE_ORDER = ['planner', 'research', 'coder', 'summarizer', 'reviewer', 'supervisor'];
 
+/**
+ * Handoff statuses that keep a station in the "handoff" visual state.
+ * Must mirror the backend HandoffRecord enum (requested → generating_summary
+ * → ready → accepted → completed/failed).
+ */
+export const ACTIVE_HANDOFF_STATUSES = ['requested', 'generating_summary', 'ready', 'accepted'];
+
 export function buildWorkspaceViewModel(state: WorkspaceState, preset: TeamPreset): WorkspaceViewModel {
   const activeTaskIds = new Set(
     state.active_plan?.tasks.map((task) => task.runtime_task_id).filter(Boolean) || [],
@@ -123,7 +130,7 @@ function deriveStationStatus(
   tasks: WorkspaceTask[],
   handoffs: WorkspaceHandoff[],
 ): string {
-  if (handoffs.some((handoff) => ['requested', 'summary_ready', 'accepted', 'in_progress'].includes(handoff.status))) return 'handoff';
+  if (handoffs.some((handoff) => ACTIVE_HANDOFF_STATUSES.includes(handoff.status))) return 'handoff';
   if (worker?.status === 'running' || tasks.some((task) => task.status === 'running')) return 'running';
   if (worker?.status === 'failed' || tasks.some((task) => task.status === 'failed' || task.status === 'blocked')) return 'error';
   if (tasks.length > 0 && tasks.every((task) => COMPLETE_STATUSES.has(task.status))) return 'done';

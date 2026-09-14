@@ -53,6 +53,34 @@ describe('buildWorkspaceViewModel', () => {
     expect(result.stations.find((station) => station.agent.id === 'reviewer')?.status).toBe('handoff');
   });
 
+  it('keeps the station in handoff state while the summary waits for acceptance', () => {
+    // 'ready' (and generating_summary) are the states a handoff sits in while
+    // waiting for the user to accept — the station must still read as handoff.
+    for (const activeStatus of ['generating_summary', 'ready']) {
+      const handoffState: WorkspaceState = {
+        ...state,
+        handoffs: [{
+          id: 'h-1', task_id: 't-2', status: activeStatus, reason: 'quota_exceeded',
+          from_agent_id: 'coder', from_model_id: 'code-model', to_agent_id: 'reviewer', to_model_id: 'review-model',
+        }],
+      };
+      const result = buildWorkspaceViewModel(handoffState, getTeamPreset('code-delivery'));
+      expect(result.stations.find((station) => station.agent.id === 'coder')?.status, activeStatus).toBe('handoff');
+    }
+  });
+
+  it('releases the station handoff state once the handoff completed', () => {
+    const handoffState: WorkspaceState = {
+      ...state,
+      handoffs: [{
+        id: 'h-1', task_id: 't-2', status: 'completed', reason: 'quota_exceeded',
+        from_agent_id: 'coder', from_model_id: 'code-model', to_agent_id: 'reviewer', to_model_id: 'review-model',
+      }],
+    };
+    const result = buildWorkspaceViewModel(handoffState, getTeamPreset('code-delivery'));
+    expect(result.stations.find((station) => station.agent.id === 'coder')?.status).not.toBe('handoff');
+  });
+
   it('renders only agents activated by the current plan after a replan', () => {
     const replannedState: WorkspaceState = {
       ...state,
