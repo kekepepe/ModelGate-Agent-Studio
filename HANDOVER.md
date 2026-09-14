@@ -1,373 +1,104 @@
-# ModelGate Agent Studio — V1.0 项目交接文档
+# V1.2 执行计划 — 本地 Memory / RAG 检索 / Skill 沉淀
 
-> 写给"之后接手这个项目的人"。读完这份文档你应该能：
-> 1. 一句话说出项目现在能做什么
-> 2. 知道每一块代码在哪里、为什么是这样
-> 3. 知道下一步该做什么、按什么顺序
->
-> 写于 2026-09-15，V1.0 收尾、V1.0.1 尚未启动的时间点。
-> 当前 HEAD: `63868dc` (main)。所有 V1.0 进度已 push 到 `origin/main`。
+> 制定于 2026-09-15（V1.1 收尾后）。目标：把每一次项目执行的上下文、经验、错误、
+> 解决方案和工作流沉淀为**可复用知识**；无论接入哪个模型，Agent 都能读取本地
+> 知识库、继承项目经验与用户偏好，持续优化任务完成流程。
+> 架构权威仍是 `docs/design/2026-09-06-platform-redesign.md`；本文件负责本阶段
+> 的执行设计与进度 checkbox（约定同 `V1.0.1-V1.1-plan.md`：每子任务 1 commit + 1 push）。
 
 ---
 
-## 0. 一句话总结
+## 0. 参考（GitHub 高星项目调研）
 
-**ModelGate Agent Studio** 是一个本地可跑的多角色 Agent 协作平台。V1.0 已经完整跑通核心闭环：
-
-```
-用户输入 Goal → Planner 拆 Task → Router 选 Station/Model → Worker 执行 → Final Summary
-```
-
-一份 `docker compose up` 起来，一条 `bash scripts/e2e-demo.sh` 就能端到端验证。V1.0 不带 Handoff / Quota / 并行，这些都进了 V1.1 / V1.2。
-
----
-
-## 1. 仓库位置
-
-| 项 | 值 |
-|---|---|
-| 本地路径 | `/Users/kepeng/codex_project/ModelGate Agent Studio` |
-| 远程 | `https://github.com/kekepepe/ModelGate-Agent-Studio.git` |
-| 默认分支 | `main` |
-| 用户 Git 名 | `kekeppe` |
-| 凭证存储 | macOS Keychain (osxkeychain credential helper) — `git push` 不再弹密码 |
-
-⚠️ 路径里有空格，命令行引用时记得加引号：`cd "/Users/kepeng/codex_project/ModelGate Agent Studio"`。
-
----
-
-## 2. V1.0 已完成的 29 个提交
-
-按时间顺序（oldest → newest），到 HEAD `63868dc`：
-
-### 设计 & 归档
-
-| Commit | 内容 |
-|---|---|
-| `b93fb39` | `docs(design)`：2026-09-06 平台重设计（**单一权威文档**，11 章，33KB） |
-| `56dd1de` | `docs(v1.0-1)`：归档 99 份旧 P0-P7 规划文档到 `docs/_archive_2026/` |
-
-### 后端（V1.0-2 / V1.0-3 / V1.0-4）
-
-| Commit | 内容 |
-|---|---|
-| `1079a86` | LiteLLM provider + state machine runtime |
-| `5c5d083` | Settings 接入 provider_api_*（配置接通 LLM Provider） |
-| `59bf1b9` | Station 增 `slug` / `is_builtin` / `handoff_policy` 字段 + Alembic 0010 |
-| `440158d` | V1.0-3 清理 + 删除日志 |
-| `86d5081` | **删除全部 5 个 P0-P7 CI workflow**（无替代；CI 推迟到 V1.0.1） |
-| `8d3bc7d` | Runtime entry 层 + 8 个 V1.0-4 验收测试 |
-
-### 前端（V1.0-5 / V1.0-6）
-
-| Commit | 内容 |
-|---|---|
-| `d8ba8c5` | shadcn/ui 集成 + 10 个 agent 状态色 token + `AgentStatusBadge` |
-| `a08169a` | `ActiveStationsSidebar`（仿 Star-Office-UI 访客列表） |
-| `d545009` | TopBar 状态分布徽章（仿控制条） |
-| `04bf521` | `ThreeZoneCardFlow` 视图（仿 3 区布局） |
-| `64d6947` | `FinalSummaryPanel`（仿 Memo 模式） |
-
-### 集成 & 收尾（V1.0-7 / V1.0-8）
-
-| Commit | 内容 |
-|---|---|
-| `e3fc444` | docker compose 本地栈 + `scripts/e2e-demo.sh`（已 verified PASS） |
-| `36094e0` | 重写根级 `CHANGELOG.md`（V1.0 release notes） |
-| `023cb70` | 提交 V1.0-5 的 `package-lock.json` |
-
-### 前端 shadcn 化（P0 / P1 / P2 / P3 — V1.0.1 之前补的活）
-
-| Commit | 内容 |
-|---|---|
-| `437e5b9` | shadcn 重构 `TaskCard` + `AgentStationCard` + `WorkspacePage` |
-| `ac7d848` | SSE 接入 `BottomConsole` + 连接状态徽章 |
-| `37af35b` | `GET /api/v1/tasks` 列表接口 + `useTasks` hook + Sidebar current task 行 |
-| `7c500f7` | shadcn 重构 5 个 secondary 组件 |
-| `de74563` | `GoalInputPanel` 收尾 shadcn 化（剩余 P0-P7 classNames） |
-| `63868dc` | shadcn 重构 `PlanOverviewPanel` |
-
----
-
-## 3. 当前可运行状态（实测数字）
-
-> 2026-09-15 V1.0.1/V1.1 收尾后更新；逐项进度见 `V1.0.1-V1.1-plan.md`。
-
-| 项 | 数值 |
-|---|---:|
-| 后端 pytest | **428 passed, 1 skipped, 0 failures**（V1.0 末态 411） |
-| 前端测试 | **180 passed / 37 文件**（V1.0 末态实际有 16 个失败测试被 vitest 别名缺失掩盖，已修复） |
-| 前端 typecheck / build / lint | **0 errors** |
-| `scripts/e2e-demo.sh` | **PASS**（V1.0-7 验证；本阶段未改动其流程） |
-| `scripts/e2e-handoff.sh` | **PASS**（V1.1 验收：quota 耗尽 → auto-handoff → accept → 恢复 → completed，本地 mock 后端实测） |
-| CI（GitHub Actions） | **暂缓**（用户决定；恢复路径见 `docs/_archive_2026/v1.0_deletions_log.md` §6） |
-| Working tree | **干净** |
-| V1.0.1/V1.1 期间新增 commit | 10（`c4e8f91` → B14） |
-
----
-
-## 4. 技术栈（已定型，不要轻易换）
-
-### 后端
-- **Python 3.12** + FastAPI + SQLAlchemy 2 async + Pydantic v2
-- **LiteLLM** 统一 LLM Provider 抽象（业务代码不直接 import litellm）
-- **arq**（已加但 V1.0 未启用，留给 V1.3+ 多 Worker 并行）
-- **Alembic** 做迁移（V1.0 末态是 `0010_station_design_fields`）
-- **SQLite** 默认；docker compose 可切 Postgres
-
-### 前端
-- **React 19** + **Vite**
-- **react-router-dom v7**（声明式 `<Routes>`，定义在 `src/App.tsx`）+ **TanStack Query**
-- **shadcn/ui**（new-york preset，slate base，**copy-paste 模式不是 npm 依赖**）
-- **Tailwind v4** + 10 个 agent 状态色 CSS 变量
-- **Zustand**（shadcn 配套引入）
-- **Radix UI**（shadcn 底层）+ **lucide-react**（图标）
-
-### Agent 模型（产品决策）
-- **多角色 Station**（Planner / Coder / Reviewer / Researcher / Summarizer / Supervisor）+ 用户可扩展
-- ❌ **不是**单个动态 Agent
-- ❌ **不是**完全用户自定义
-
-### UI 设计参考
-- **Star-Office-UI**（`ringhyacinth/star-office-ui`，7K+ stars）作为**设计模式参考**
-- 借鉴了 4 个模式：访客列表 / 控制条 / 3 区布局 / Memo 面板
-- ❌ **没有**安装它的 Python+Phaser 代码
-- ❌ **没有**作为 skill 引入
-- 详细设计：见 `docs/design/2026-09-06-platform-redesign.md` §5
-
----
-
-## 5. 关键文件索引（接手者必看）
-
-### 文档（按重要性）
-
-| 文件 | 作用 |
-|---|---|
-| `docs/design/2026-09-06-platform-redesign.md` | **单一权威设计**，11 章，定义 V1.0–V1.4 phasing |
-| `HANDOVER.md`（本文档） | 交接 |
-| `CHANGELOG.md` | V1.0 release notes |
-| `V1.0-7-e2e.md` | docker compose + e2e 操作指南 |
-| `V1.0-frontend-plan.md` | P0/P1/P2/P3 实施计划（已完成） |
-| `docs/_archive_2026/v1.0_deletions_log.md` | **每个删除/保留决定都有记录**，删东西前必看 |
-| `docs/_archive_2026/` | 99 份旧规划文档，**不是源码依赖**，参考用 |
-| `docs/README.md` | 指向新设计文档 |
-
-### 后端核心模块
-
-| 路径 | 作用 |
-|---|---|
-| `backend/src/main.py` | FastAPI 入口 |
-| `backend/src/runtime/__init__.py` | **V1.0-4 entry 层**，对外 re-export `execute_goal_pipeline` / `get_runtime_status` 等 |
-| `backend/src/services/runtime_service.py` | Runtime 主实现（1550 行，**V1.0 没改这个文件**，走 re-export） |
-| `backend/src/services/orchestrator_service.py` | 编排（457 行） |
-| `backend/src/providers/{base,literal_moved,litellm_provider,mock_provider}.py` | LLM Provider 抽象 |
-| `backend/src/services/state_machine_service.py` | Goal / Task 状态机（原路径，被 `src.runtime` re-export） |
-| `backend/src/services/task_service.py::list_tasks` | V1.0-P1-2 列表筛选 helper |
-| `backend/src/routes/tasks.py::GET /api/v1/tasks` | V1.0-P1-2 endpoint（**必须在 `GET /tasks/{task_id}` 之前注册**避免路径遮蔽） |
-| `backend/alembic/versions/0010_station_design_fields.py` | Station.slug/is_builtin/handoff_policy 迁移 |
-| `backend/requirements.txt` | `httpx>=0.27,<0.29`（宽 pin，见 §7） |
-
-### 前端核心模块
-
-| 路径 | 作用 |
-|---|---|
-| `frontend/components.json` | shadcn new-york preset 配置 |
-| `frontend/src/index.css` | Tailwind v4 + shadcn 主题 + **10 个状态色 CSS 变量** |
-| `frontend/src/lib/utils.ts` | `cn()` 工具 |
-| `frontend/src/components/ui/agent-status-badge.tsx` | **共享状态徽章**，映射 30+ 状态枚举到 V1.0-5 颜色 |
-| `frontend/src/components/ui/{avatar,badge,button,card,input,scroll-area,separator,tabs,textarea,tooltip}.tsx` | 10 个 shadcn 基础组件（commit 进库） |
-| `frontend/src/components/ui/select.tsx` | Radix Select 封装；**已被 LogFilters / GoalInputPanel 引用，V1.0.1 已提交**（见 §7.1 修订） |
-| `frontend/src/hooks/useRuntimeEvents.ts` | SSE 事件流 hook（P1-1 修了 listener 泄漏） |
-| `frontend/src/hooks/useTasks.ts` | `/api/v1/tasks` 数据 hook（V1.0-P1-2） |
-| `frontend/src/api/tasks.ts` | `/api/v1/tasks` axios wrapper |
-| `frontend/src/components/app-shell/ActiveStationsSidebar.tsx` | Star-Office-UI 访客列表模式 |
-| `frontend/src/components/BottomConsole.tsx` | SSE 驱动，10s polling fallback |
-| `frontend/src/components/PlanOverviewPanel.tsx` | V1.0 末位完成 shadcn 化 |
-| `frontend/src/components/{WorkerBadge,LogListItem,LogFilters,GoalInputPanel,TaskTree}.tsx` | P2 shadcn 化 5 个 secondary 组件 |
-| `frontend/src/components/{TopStatusBar,WorkspaceModeSwitch,CardFlowRenderer,ThreeZoneCardFlow,PixelOfficeRenderer}.tsx` | **故意没 shadcn 化**（含自定义布局：flow connectors、pixel canvas、tinted zone headers） |
-
-### 操作脚本
-
-| 文件 | 作用 |
-|---|---|
-| `scripts/e2e-demo.sh` | 端到端 smoke test（mock 模式） |
-| `docker-compose.dev.yml` | 本地开发栈 |
-
----
-
-## 6. 接手者验证清单
-
-按顺序跑一遍，5 分钟确认接手的代码状态：
-
-```bash
-cd "/Users/kepeng/codex_project/ModelGate Agent Studio"
-
-# 1. git 状态
-git status -sb          # 应该只有 ?? frontend/src/components/ui/select.tsx 一项
-git log --oneline -5    # HEAD 应该是 63868dc
-
-# 2. 后端测试
-cd backend && pytest -q && cd ..     # 应该输出 411 passed, 1 skipped
-
-# 3. 前端构建
-cd frontend && npm run typecheck     # 0 errors
-npm run build                        # 197ms 通过
-cd ..
-
-# 4. 端到端（可选，需要 docker）
-EXECUTION_MODE=mock docker compose -f docker-compose.dev.yml up -d --build
-sleep 15
-bash scripts/e2e-demo.sh             # PASS
-docker compose -f docker-compose.dev.yml down
-```
-
-任何一步失败，**先看 §7 已知怪癖**。
-
----
-
-## 7. 已知怪癖 / 坑
-
-接手者大概率会踩，提前打预防针：
-
-### 7.1 shadcn CLI 的 alias bug
-`npx shadcn@latest add <component>` 会把文件写到字面意义的 `./@/components/ui/` 目录，**不解析 Vite 的 `@/` alias**。每次都得手动 `mv` 修复。建议脚本化：
-
-```bash
-npx shadcn@latest add select --yes
-mkdir -p src/components/ui
-mv -f ./@/components/ui/select.tsx src/components/ui/select.tsx 2>/dev/null
-rm -rf "./@"
-```
-
-**这就是 `select.tsx` 起初没 commit 的原因。** ⚠️ 修订（V1.0.1）：交接时"没被任何文件 import"的判断是**错的** —— P2/P3 提交的 `LogFilters.tsx` 和 `GoalInputPanel.tsx` 实际引用了它，新 clone 会构建失败。已在 V1.0.1 提交修复（`c4e8f91`）。shadcn CLI 的 alias bug 本身依然存在，脚本化绕过方式如上。
-
-### 7.2 `httpx==0.28.1` 被宽 pin 成 `httpx>=0.27,<0.29`
-Docker build 时与 `litellm 1.55.0` 的 `httpx<0.28.0` 冲突；本地 venv 之前静默用的是 0.27.2。**改 httpx 版本时记得检查 litellm 约束**，别简单 bump 到最新。
-
-### 7.3 `useRuntimeEvents` 的 listener 泄漏
-V1.0-2 初版 hook **没调用 `removeEventListener`**，P1-1 接入 BottomConsole 时修复。改这个 hook 时记得 unmount 路径。
-
-### 7.4 5 个组件**故意**不 shadcn 化
-`TopStatusBar` / `WorkspaceModeSwitch` / `CardFlowRenderer` / `ThreeZoneCardFlow` / `PixelOfficeRenderer` —— 这些有自定义布局（flow connectors / pixel canvas / tinted zone headers），不打算走 shadcn。**不要把"还没 shadcn 化"等同于"技术债"**。
-
-### 7.5 `paused` 不是合法的 `TaskStatus` enum
-前端类型里没这个值。P1-2 Sidebar 筛选时专门去掉了，避免 TS error。
-
-### 7.6 `AgentStatusBadge` 的 `label` prop 是 `label?: string`
-调用时 `null` 必须用 `?? undefined` 转，不能用 `||`（strict mode 下 React 会抱怨）。P2 修过 WorkerBadge。
-
-### 7.7 旧 P0-P7 classNames 残留在大部分 `frontend/src/components/*.tsx`
-V1.0-P0/P1/P2/P3 只重构了 11 个高频组件。其余 30+ 组件（`AgentDetailModal`、`HandoffList`、`TaskDetailPanel` 等）**仍是 P0-P7 风格**。这不是 bug，是计划内 —— 全面重构是 V1.0.1+ 的活。
-
-### 7.8 `.github/workflows/` 当前是空的
-V1.0-3.7 删除了全部 5 个 P0-P7 workflow。V1.0 故意"无 CI 推送"。**V1.0.1 的第一个 commit 应该补齐最小 CI**（backend pytest + frontend build）。
-
----
-
-## 8. 未来计划（按设计文档 V1.0 → V1.4）
-
-> ⚠️ 2026-09-15 起：V1.0.1 / V1.1 已完成（计划留档 [`V1.0.1-V1.1-plan.md`](./V1.0.1-V1.1-plan.md)）；**当前阶段为 V1.2 本地 Memory / RAG 检索 / Skill 沉淀**，计划与进度见 [`V1.2-Memory-RAG-Skill-plan.md`](./V1.2-Memory-RAG-Skill-plan.md)（参考 mem0 / Voyager / Claude Agent Skills 等高星项目调研）。下面保留原始路线图供总览。
-
-### V1.0.1 — 补齐 V1.0 短板（最近期，1-2 周）
-
-| # | 任务 | 说明 |
+| 项目 | 核心思想 | 对本设计的取舍 |
 |---|---|---|
-| 1 | **补 V1.0 CI**（最优先） | `.github/workflows/backend-ci.yml`（pytest）+ `frontend-ci.yml`（build + typecheck）。设计稿在 `docs/_archive_2026/v1.0_deletions_log.md` §6 |
-| 2 | **真实 Provider smoke** | `scripts/e2e-real-provider.sh`，需要 OpenAI-compatible key + 5-10 分钟预算。环境变量同 `docker-compose.dev.yml` 真实模式 |
-| 3 | **剩余 30+ 组件 shadcn 化** | 优先 `AgentDetailModal` / `TaskDetailPanel` / `HandoffList` / `QuotaAlertBanner` / `ModelUsagePieChart` 等高频页面相关组件 |
-| 4 | **清理孤儿 `select.tsx`** | 要么 commit 要么删（"uncertain AND simple/reproducible → 删"原则） |
+| [mem0](https://github.com/mem0ai/mem0)（~41k★，Apache 2.0） | 从对话/执行中抽取**结构化事实**入存储，检索时按相关度召回；ADD/UPDATE/DELETE 去重更新 | ✅ 采用"抽取→结构化→去重→检索"的被动沉淀模式；已有 human approval 门禁比它更严格，保留 |
+| [Letta / MemGPT](https://github.com/letta-ai/letta) | Agent 运行时自身编辑记忆（OS 式虚拟内存） | ❌ 不引入自编辑运行时——与 Station 化产品形态冲突，成本高 |
+| [Zep / Graphiti](https://github.com/getzep/graphiti) | 时序知识图谱 | ❌ 图谱对单机 SQLite 过重；用结构化 metadata + 混合检索替代 |
+| [Voyager](https://github.com/MineDojo/Voyager)（NeurIPS'23，技能库鼻祖） | 技能=可复用程序，按**任务嵌入**索引检索，成功/失败计数，可组合 | ✅ 直接对应 SkillDraft：嵌入索引检索 + success/failure 计数参与排序 |
+| [Claude Agent Skills](https://platform.claude.com/docs/en/agents-and-tools/agent-skills/overview) | **渐进披露**：元数据先入上下文，正文按需加载 | ✅ 上下文包只带技能摘要与关键步骤，完整记录走详情接口 |
+| [cognee](https://github.com/topoteretes/cognee) | 关系知识图谱 | ❌ 暂缓，同 Zep |
 
-### V1.1 — Handoff + Quota（+1-2 周）
+## 1. 现状盘点（探索结论）
 
-来自设计 §8 V1.1：
+已有且可用（不重建）：8 张知识表（memory_drafts / skill_drafts / knowledge_sources
+/ documents / chunks / retrieval_runs / retrieved_context_items /
+context_package_snapshots）；混合检索管线（keyword 0.55 + vector 0.35，token 预算，
+逐条 trace）；嵌入适配器三件套（默认本地 64 维 hash，OpenAI-compatible 真实后端，
+可见降级）；curator 的 project/agent/user memory + 技能蒸馏；人工审批回路；
+runtime 三处挂点（上下文构建 L567、技能结果回写 L1017、Phase 5 沉淀 L231）；
+前端 Evolution 页审批 UI。
 
-- Handoff 状态机 + Summary 生成（LLM 优先，fallback 模板）
-- Quota 记录 + 状态机 + 拦截（数据模型 V1.0 已经有了）
-- Workspace Task Card 上的 Handoff 状态条
-- **Quota Overview 页**（V1.0 已删掉 `/api/v1/dashboard`，这里需要重建）
+缺口（本阶段要补）：
+1. **经验沉淀缺失**：错误→解决方案没有结构化记录，"上次怎么修的"查不到。
+2. **用户偏好缺失**：没有偏好存储，上下文也不注入。
+3. **记忆/技能未向量化**：记忆选择是纯关键词 `_score`；记忆/技能/执行产物不在
+   RAG 管线里。
+4. **技能成功率未被使用**：success/failure 计数只在涨，不影响任何排序/选择。
+5. **规划期技能注入缺失**：build_planning_context 不带技能建议。
 
-**验收**：模拟 quota 耗尽，能看到 auto-handoff，Logs 能看到 Handoff 事件链。
+## 2. 设计决策
 
-### V1.2 — 实时 + 打磨（+1 周）
+- **D1 复用优先**：不新建 experience/preference 表——扩展 `memory_drafts.type`
+  枚举（`experience_memory` / `user_preference`），结构化信息放 `extra_metadata`
+  （error_signature / resolution / source 等），复用审批与过期机制。
+- **D2 向量化进表**：迁移 `0011` 给 `memory_drafts` / `skill_drafts` 增加
+  `embedding`（JSON Text）+ `embedding_fingerprint` 列，模式与
+  knowledge_chunks 一致；指纹不符惰性重嵌；**不改嵌入适配器层**（保持
+  any-provider 可移植：本地 hash 兜底 + 环境变量切真实 provider）。
+- **D3 混合排序**：context_service 的记忆/技能选择从纯关键词升级为
+  keyword + cosine 混合（对齐 retrieval_service 的权重思路），策略串升级为
+  `hybrid_memory_skill_v1`。
+- **D4 成功率参与排序**：技能得分乘 success_rate 权重（无数据时 0.5 中性，
+  区间 [0.8, 1.2]），并暴露到 planning 上下文（Voyager 式"检索相关技能"）。
+- **D5 经验抽取规则化**：V1.2 不用 LLM 抽取——从 ExecutionLog 错误、验证失败、
+  Handoff 链路用规则构造 error_signature（规范化错误文本哈希）与 resolution
+  （后续重试/交接/重Plan 的结果叙事）；同一 signature 只保留一条并合并计数。
+- **D6 渐进披露**：上下文包内技能只带 name/scenario/success_rate/关键步骤≤3，
+  完整记录走 `GET /knowledge/skills/{id}`（detail 端点本批补上）。
+- **D7 偏好直达**：用户显式偏好走 `POST /knowledge/preferences`（写入
+  type=user_preference、human_approved=True），上下文构建时**无条件**注入
+  （不受相关性门槛限制），单条 token 超限则截断。
 
-- ✅ SSE 已接入 BottomConsole（V1.0-P1-1）—— 这部分**提前完成了**
-- Workspace 状态恢复（URL 刷新继续看）
-- Task Detail 侧栏（Router 决策 / Token / Context / Logs tab）
-- Pixel Office 简化版（可选）
-- 全局错误处理 / Toast / 加载态
+## 3. 阶段任务
 
-### V1.3 — 自定义 Station + MCP（+2 周）
+### Phase P 计划与参考 [V1.2]
+- [x] P1 本文件 + docs/README 登记 + HANDOVER §8 指向（`772cecf`）
 
-- Agents 页（编辑 / 克隆 / 试运行）
-- Models 页（注册 / 测试连接 / 启禁用）
-- Tools 页（MCP tool 列表 / 权限）
-- Station 试运行（独立小窗口）
-- **启用 arq + Redis 做多 Worker 并行**（V1.0 已加依赖，未启用）
+### Phase M 后端 Memory/RAG/Skill [V1.2]
+- [x] M1 迁移 `0011_memory_skill_embeddings`（两表加 embedding/fingerprint 列）
+      + curator 生成/审批时落嵌入 + 惰性重嵌 helper + 测试（`0b3922d`）
+- [x] M2 经验沉淀：curator 抽取 error→solution 经验记忆（签名去重、合并计数、
+      resolution 叙事）+ `user_preference` 类型支持 + 测试（`fbefd4b`）
+- [x] M3 偏好 API + 检索面：`POST /knowledge/preferences`、
+      `GET /knowledge/memories/search`（混合检索）、`GET /knowledge/skills/{id}`、
+      `/context/retrieve` 支持 source_types 过滤 + 测试（`7b74032`）
+- [x] M4 上下文升级：context_service 混合排序（keyword+cosine）、技能成功率
+      加权、偏好无条件注入、重Plan 路径注入相似经验记忆、planning 上下文
+      带技能建议 + 测试（`8d30481`）
 
-### V1.4 — 进阶（按需）
+### Phase F 前端 [V1.2]
+- [x] F1 Evolution 页：经验/偏好类型标签、偏好创建入口、技能成功率展示
+      + api client 扩展 + 测试（`ce1f1d0`）
 
-- 有限并行 Task（V1.0 一个 Goal 同一时刻只能 1 个 active Task；V1.4 引入并行）
-- Goal 复制 / 模板
-- Export Final Summary
-- Nightly Provider Benchmark runner
-- Postgres + Redis 切换
+### Phase D 文档 [V1.2]
+- [x] D2 CHANGELOG / HANDOVER 收尾
 
-### V2.0+（设计中不做，备忘）
-- Memory / Skill / 自进化
+## 4. 验收标准
 
----
+1. 一次含错误的执行结束后，curator 产出 `experience_memory`（含 error_signature
+   与 resolution），同类错误再次出现时，重试/重Plan 上下文能召回该经验。
+2. 用户通过 API 创建偏好后，**所有**后续执行的上下文包都包含该偏好。
+3. 记忆/技能选择使用向量+关键词混合排序（策略串 `hybrid_memory_skill_v1:*`），
+   技能按成功率加权；换嵌入后端（指纹变化）惰性重嵌且检索行为可溯源。
+   ✅ 已实现并测试。
+4. 全程不锁定 LLM Provider：嵌入走 adapter（本地 hash 兜底），记忆/技能内容
+   生成不依赖具体模型（V1.2 规则抽取，LLM 抽取留作后续增强）。
+5. 后端 pytest / 前端 vitest / typecheck / build 全绿；每子任务独立 commit+push。
 
-## 9. 接手者的工作约定（必须遵守）
+## 5. 明确不做（本阶段）
 
-来自 `docs/design/2026-09-06-platform-redesign.md` §11 与用户约定：
-
-### 9.1 Commit hygiene
-- ✅ **每个子任务 = 1 个 commit + 1 个 push**，绝不攒批
-- ✅ Commit 信息包含阶段标签：`[V1.0]` / `[V1.0.1]` / `[V1.1]` 等
-- ✅ 格式：`<type>(<scope>): <subject>`（feat / fix / refactor / docs / test / chore）
-- ✅ 不创建 Release Tag（V1.0 之前不发版）
-
-### 9.2 删除原则（用户原话）
-- **保留**一切后续可能用到的东西（记录下来）
-- **删除**仅当 "uncertain AND simple/reproducible"（不确定且容易重新生成）
-- 每次删除/保留决定都更新 `docs/_archive_2026/v1.0_deletions_log.md`
-
-### 9.3 决策模式
-- 用户偏好："我定你执行" + "你推荐我拍板"
-- 默认推进，**只在用户必须决定时提问**（一次问完，不要反复确认）
-
-### 9.4 沟通风格
-- 中文为主
-- 简短状态报告，不要复述情绪
-- 一句话能说完的不写一段
-
-### 9.5 文件操作
-- 不要 `rm -rf` session workspace（沙箱会拦）
-- 删具体子路径可以；删整树不行
-
----
-
-## 10. 我现在没做、要立刻决定的事
-
-> ✅ V1.0.1 全部落定（2026-09-15），原始决策与理由保留如下：
-
-1. **`frontend/src/components/ui/select.tsx` 未 commit**
-   - ✅ **决定：提交**。交接时的"没被任何文件 import"判断有误（LogFilters / GoalInputPanel 引用了它），删除会弄坏新 clone。已提交（`c4e8f91`）。
-2. **`V1.0-frontend-plan.md` 没归档**
-   - ✅ **决定：归档**到 `docs/_archive_2026/`（已实施完毕的 P0-P3 历史记录，保留但移出根目录）。
-3. **`HANDOVER.md`（本文档）是否归档**
-   - ✅ **决定：留在根目录**，与 `CHANGELOG.md` / `CLAUDE.md` 同级作为长期参考。
-
----
-
-## 11. 联系方式 / 上下文
-
-- 用户：solo developer，工作模式"我定你执行"
-- 当前主语言：中文
-- 平台：macOS
-- AI 助手：Mavis（MiniMax Code 内的 coding agent）
-- 邮箱：3522651528@qq.com（不在 commit 历史里，仅供联系）
-
----
-
-> 文档结束。下一次变更请直接修改本文档；如果发生结构性变化（比如 V1.0.1 完成），把"未来计划"段重新组织，把已完成的从清单里挪到"已完成"。
+- Agent 自编辑记忆运行时（Letta 式）、时序/关系知识图谱（Zep/cognee 式）
+- LLM 驱动的经验抽取与技能合并（规则先行，接口留好）
+- 跨设备同步/多用户隔离（单机单用户产品形态）
+- ANN 向量索引（数据量级不需要，暴力 cosine 足够且可溯源）

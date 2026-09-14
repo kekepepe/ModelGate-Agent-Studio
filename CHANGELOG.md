@@ -6,6 +6,35 @@ V1.0 is the first release produced under the 2026-09-06 platform
 redesign. Older per-phase changelogs are archived in
 `docs/_archive_2026/CHANGELOG.md`.
 
+## V1.2 — 2026-09-15（本地 Memory / RAG 检索 / Skill 沉淀）
+
+计划与参考调研见 `V1.2-Memory-RAG-Skill-plan.md`（mem0 / Voyager /
+Claude Agent Skills 取舍）。目标：把每次执行的上下文、经验、错误、
+解决方案和工作流变成可复用知识，任何模型接入后都能继承。
+
+### Added
+- **经验沉淀**：curator 从执行错误证据抽取 `experience_memory`
+  （稳定 error_signature + resolution 叙事：handoff 恢复 / 重试成功 /
+  replan / 未解决），同类错误合并 occurrence 而非重复堆积。
+- **用户偏好**：`POST /knowledge/preferences` 创建 born-approved 偏好；
+  上下文构建时无条件注入（上限 3 条），与相关性门禁解耦。
+- **记忆/技能向量化**：迁移 0011 给 memory_drafts / skill_drafts 加
+  embedding + fingerprint 列；curator 生成/审批时落嵌入，后端切换
+  （指纹不符）惰性重嵌；`memory_vector_service` 提供混合检索
+  （`GET /knowledge/memories/search`）。
+- **上下文升级**：context_service 选择逻辑从纯关键词升级为
+  keyword+cosine 混合（policy `hybrid_memory_skill_v1`）；技能按
+  success_rate 加权（0.8 + 0.4×rate）；技能在上下文内渐进披露
+  （≤3 步，全量走 `GET /knowledge/skills/{id}`）；replan 上下文召回
+  相似经验；planning 上下文带技能建议。
+- **统一检索 API**：`/context/retrieve` 支持 `source_types`
+  （memory / skill / knowledge），默认保持旧契约不变。
+- **Evolution UI**：经验/偏好标签、偏好创建表单、技能成功率展示。
+
+### 数字
+- 后端 pytest：451 passed, 1 skipped
+- 前端 vitest：183 passed / 38 文件；typecheck / build / lint 全绿
+
 ## V1.0.1 / V1.1 — 2026-09-15（修复 + Handoff 完整业务流）
 
 计划与逐项进度见 `V1.0.1-V1.1-plan.md`；CI 工作流按用户决定暂缓。
