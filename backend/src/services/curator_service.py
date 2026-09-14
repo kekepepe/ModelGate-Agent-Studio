@@ -21,6 +21,7 @@ from src.models.knowledge import MemoryDraft, SkillDraft
 from src.models.supervisor import SupervisorReview
 from src.models.workspace import Goal, Task
 from src.models.tool import ToolCallRecord
+from src.services import memory_vector_service
 
 
 def generate_memories(db: Session, goal_id: str, run_id: Optional[str] = None) -> Dict[str, Any]:
@@ -120,6 +121,13 @@ def generate_memories(db: Session, goal_id: str, run_id: Optional[str] = None) -
             db.add(skill)
             skills.append(skill)
 
+    # V1.2: memories and skills enter the RAG pipeline with an embedding
+    # produced by the configured adapter (fingerprint stored for lazy re-embed).
+    for m in memories:
+        memory_vector_service.ensure_memory_embedding(db, m)
+    for s in skills:
+        memory_vector_service.ensure_skill_embedding(db, s)
+
     db.commit()
     for m in memories:
         db.refresh(m)
@@ -169,6 +177,9 @@ def approve_memory(db: Session, memory_id: str, approved: bool = True, approved_
     mem.human_approved = approved
     mem.approved_by = approved_by
     mem.approved_at = datetime.now(timezone.utc)
+    # Lazy backfill: rows created before V1.2 (or before approval) get their
+    # vector exactly when they become eligible for context selection.
+    memory_vector_service.ensure_memory_embedding(db, mem)
     db.commit()
     db.refresh(mem)
     return mem.to_dict()
@@ -183,6 +194,7 @@ def approve_skill(db: Session, skill_id: str, approved: bool = True, approved_by
     skill.approved_by = approved_by
     skill.approved_at = datetime.now(timezone.utc)
     skill.status = "approved" if approved else "rejected"
+    memory_vector_service.ensure_skill_embedding(db, skill)
     db.commit()
     db.refresh(skill)
     return skill.to_dict()

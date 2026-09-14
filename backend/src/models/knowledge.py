@@ -25,6 +25,10 @@ class MemoryDraft(Base):
     approved_at = Column(DateTime, nullable=True)
     extra_metadata = Column(Text, nullable=True)
     expires_at = Column(DateTime, nullable=True, index=True)
+    # V1.2: JSON-serialized embedding vector (same convention as
+    # knowledge_chunks.embedding) + the adapter fingerprint that produced it.
+    embedding = Column(Text, nullable=True)
+    embedding_fingerprint = Column(String(100), nullable=True)
     created_at = Column(DateTime, nullable=False, default=lambda: datetime.now(timezone.utc))
     updated_at = Column(DateTime, nullable=False, default=lambda: datetime.now(timezone.utc))
 
@@ -36,6 +40,11 @@ class MemoryDraft(Base):
         return json.loads(self.extra_metadata) if self.extra_metadata else {}
     def set_metadata(self, v: Dict[str, Any]) -> None:
         self.extra_metadata = json.dumps(v, ensure_ascii=False)
+    def get_embedding(self) -> List[float]:
+        return json.loads(self.embedding) if self.embedding else []
+    def set_embedding(self, vector: List[float], fingerprint: str) -> None:
+        self.embedding = json.dumps(vector)
+        self.embedding_fingerprint = fingerprint
 
     def to_dict(self) -> dict:
         return {
@@ -75,6 +84,9 @@ class SkillDraft(Base):
     success_count = Column(Integer, nullable=False, default=0)
     failure_count = Column(Integer, nullable=False, default=0)
     last_used_at = Column(DateTime, nullable=True)
+    # V1.2: embedding of name + scenario + steps (see memory_drafts note).
+    embedding = Column(Text, nullable=True)
+    embedding_fingerprint = Column(String(100), nullable=True)
     created_at = Column(DateTime, nullable=False, default=lambda: datetime.now(timezone.utc))
     updated_at = Column(DateTime, nullable=False, default=lambda: datetime.now(timezone.utc))
 
@@ -88,6 +100,15 @@ class SkillDraft(Base):
     def set_tools(self, v: List[str]) -> None: self.tools = json.dumps(v, ensure_ascii=False)
     def get_failures(self) -> List[str]: return json.loads(self.common_failures) if self.common_failures else []
     def set_failures(self, v: List[str]) -> None: self.common_failures = json.dumps(v, ensure_ascii=False)
+    def get_embedding(self) -> List[float]:
+        return json.loads(self.embedding) if self.embedding else []
+    def set_embedding(self, vector: List[float], fingerprint: str) -> None:
+        self.embedding = json.dumps(vector)
+        self.embedding_fingerprint = fingerprint
+    @property
+    def success_rate(self) -> float:
+        total = (self.success_count or 0) + (self.failure_count or 0)
+        return (self.success_count or 0) / total if total else 0.5
 
     def to_dict(self) -> dict:
         return {
