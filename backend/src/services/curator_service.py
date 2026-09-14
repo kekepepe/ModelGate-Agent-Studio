@@ -7,6 +7,7 @@ After Runtime executes and Supervisor approves, this service:
   4. Generates MemoryDraft and SkillDraft for human review
 """
 
+import hashlib
 import json
 
 import uuid
@@ -121,6 +122,12 @@ def generate_memories(db: Session, goal_id: str, run_id: Optional[str] = None) -
             db.add(skill)
             skills.append(skill)
 
+    # 5. Experience Memory (V1.2): structured error -> solution pairs so the
+    # next run can recall "how we fixed this last time".
+    for experience in _extract_experiences(db, goal, tasks, logs, handoffs, tool_calls, run_id):
+        db.add(experience)
+        memories.append(experience)
+
     # V1.2: memories and skills enter the RAG pipeline with an embedding
     # produced by the configured adapter (fingerprint stored for lazy re-embed).
     for m in memories:
@@ -200,6 +207,42 @@ def approve_skill(db: Session, skill_id: str, approved: bool = True, approved_by
     return skill.to_dict()
 
 
+def create_user_preference(
+    db: Session,
+    title: str,
+    content: str,
+    *,
+    created_by: str = "user",
+    tags: Optional[List[str]] = None,
+) -> MemoryDraft:
+    """Persist an explicit user preference (V1.2 D7).
+
+    Preferences are authored by the user, so they are born approved and
+    durable (no expiry); context building injects them unconditionally.
+    """
+    if not title.strip() or not content.strip():
+        raise ValueError("Preference title and content are required")
+    preference = MemoryDraft(
+        id=str(uuid.uuid4()),
+        type="user_preference",
+        title=title.strip(),
+        content=content.strip(),
+        confidence=1.0,
+        reason=f"Authored explicitly by {created_by}",
+        human_approved=True,
+        approved_by=created_by,
+        approved_at=datetime.now(timezone.utc),
+        expires_at=None,
+    )
+    preference.set_tags(["user_preference", "explicit"] + (tags or []))
+    preference.set_metadata({"authored_by": created_by})
+    db.add(preference)
+    memory_vector_service.ensure_memory_embedding(db, preference)
+    db.commit()
+    db.refresh(preference)
+    return preference
+
+
 def record_skill_outcome(db: Session, context_json: Optional[str], succeeded: bool) -> None:
     """Attribute a verified task result to the approved Skills it actually loaded."""
     if not context_json:
@@ -219,6 +262,135 @@ def record_skill_outcome(db: Session, context_json: Optional[str], succeeded: bo
             skill.failure_count = (skill.failure_count or 0) + 1
         skill.last_used_at = datetime.now(timezone.utc)
     db.flush()
+
+
+_TERMINAL_SUCCESS = {"completed", "completed_verified", "completed_unverified"}
+
+
+def _error_signature(message: str) -> str:
+    """Stable fingerprint for an error class: lowercase, numbers/ids stripped.
+
+    Keeps "Provider timeout after 3 attempts (req 8f2a...)" and
+    "Provider timeout after 5 attempts (req 11bc...)" in the same bucket.
+    """
+    import re
+
+    normalized = (message or "").lower()
+    normalized = re.sub(r"[0-9a-f]{8}-[0-9a-f-]{27,}", " <id> ", normalized)
+    normalized = re.sub(r"\b[0-9a-f]{8,}\b", " <hex> ", normalized)
+    normalized = re.sub(r"\d+", " <n> ", normalized)
+    normalized = re.sub(r"\s+", " ", normalized).strip()
+    return hashlib.sha256(normalized.encode("utf-8")).hexdigest()[:16]
+
+
+def _resolution_narrative(
+    goal: Goal,
+    task: Optional[Task],
+    tasks: List,
+    handoffs: List,
+    logs: List,
+    agent_names: Optional[Dict[str, str]] = None,
+) -> str:
+    """How the run recovered (or not) after this error — the 'solution' half."""
+    if task is not None:
+        for handoff in handoffs:
+            if handoff.task_id == task.id:
+                names = agent_names or {}
+                target = names.get(handoff.to_agent_id, handoff.to_agent_id)
+                if handoff.result_after_handoff == "success":
+                    return f"Recovered via handoff to {target}; result: success."
+                return "Recovered via handoff; the receiving agent resumed the task."
+        if task.status in _TERMINAL_SUCCESS:
+            return "Task eventually completed after the error (retry within the run)."
+    replanned = any(
+        getattr(log, "task_id", None) == (task.id if task else None)
+        and log.event_type == "runtime.decision"
+        and log.event_status == "replan_graph"
+        for log in logs
+    )
+    if replanned:
+        return "Resolved via automatic replan: the failed task was replaced."
+    return "Unresolved: the run ended without an automatic recovery; replan or manual fix required."
+
+
+def _extract_experiences(
+    db: Session,
+    goal: Goal,
+    tasks: List,
+    logs: List,
+    handoffs: List,
+    tool_calls: List,
+    run_id: Optional[str],
+) -> List[MemoryDraft]:
+    """Turn error evidence into deduplicated experience memories (V1.2 D5)."""
+    task_by_id = {task.id: task for task in tasks}
+    agent_names = {a.id: a.name for a in db.query(AgentStation).all()}
+    experiences: List[MemoryDraft] = []
+    seen_signatures = set()
+    for log in logs:
+        message = getattr(log, "error_message", None)
+        if not message:
+            continue
+        signature = _error_signature(message)
+        if signature in seen_signatures:
+            continue
+        seen_signatures.add(signature)
+
+        task = task_by_id.get(log.task_id) if log.task_id else None
+        title = f"Experience: {message[:90].strip()}"
+        existing = db.query(MemoryDraft).filter(
+            MemoryDraft.type == "experience_memory",
+            MemoryDraft.extra_metadata.like(f'%"{signature}"%'),
+        ).first()
+        narrative = _resolution_narrative(goal, task, tasks, handoffs, logs, agent_names)
+        if existing:
+            # Mem0-style UPDATE: merge occurrences instead of appending noise.
+            metadata = existing.get_metadata()
+            metadata["occurrence_count"] = metadata.get("occurrence_count", 1) + 1
+            if narrative.startswith(("Recovered", "Task eventually")):
+                metadata["resolution"] = narrative
+                existing.content = f"{existing.content.split(chr(10) + 'Resolution:')[0]}{chr(10)}Resolution: {narrative}{chr(10)}Occurrences: {metadata['occurrence_count']}"
+            existing.set_metadata(metadata)
+            db.flush()
+            continue
+
+        agent_name = None
+        if task is not None and task.assigned_agent_id:
+            agent = db.query(AgentStation).filter(AgentStation.id == task.assigned_agent_id).first()
+            agent_name = agent.name if agent else None
+        content = (
+            f"Error: {message[:300]}\n"
+            f"Task: {task.title if task else 'unknown'}\n"
+            f"Resolution: {narrative}\n"
+            "Occurrences: 1"
+        )
+        experience = MemoryDraft(
+            id=str(uuid.uuid4()),
+            source_run_id=run_id,
+            source_goal_id=goal.id,
+            type="experience_memory",
+            title=title,
+            content=content,
+            confidence=0.6 if narrative.startswith(("Recovered", "Task eventually")) else 0.4,
+            reason="Auto-extracted from execution error evidence",
+            expires_at=datetime.now(timezone.utc) + timedelta(days=180),
+        )
+        experience.set_tags(["experience", "error_solution", signature])
+        experience.set_metadata({
+            "error_signature": signature,
+            "resolution": narrative,
+            "occurrence_count": 1,
+            "agent_name": agent_name,
+            "task_type": task.task_type if task else None,
+            "source_references": {
+                "goal_id": goal.id,
+                "run_id": run_id,
+                "log_id": log.id,
+                "task_id": log.task_id,
+            },
+        })
+        experiences.append(experience)
+    return experiences
 
 
 def _build_project_memory_content(goal: Goal, tasks: List, logs: List) -> str:
