@@ -1,12 +1,10 @@
 import { useState, useMemo } from 'react';
 import { Search, RefreshCw, BarChart3 } from 'lucide-react';
 import { useOverview, useModelStatus, useUpdateQuotaConfig, useResetQuotaStatus } from '../hooks/useQuota';
-import { useDashboardTrends } from '../hooks/useDashboard';
 import type { QuotaOverviewItem, QuotaStatus } from '../types/quota';
 import { STATUS_COLORS, STATUS_BG_COLORS, STATUS_LABELS, PROVIDER_LABELS } from '../types/quota';
 import ModelUsageCard from '../components/ModelUsageCard';
 import QuotaAlertBanner from '../components/QuotaAlertBanner';
-import QuotaTrendChart from '../components/QuotaTrendChart';
 
 interface SummaryCard {
   key: string;
@@ -40,7 +38,6 @@ export default function QuotaOverviewPage() {
     sort_by: sortBy,
     order: sortOrder,
   });
-  const { data: trendData, error: trendError } = useDashboardTrends(7);
 
   const { data: detailData } = useModelStatus(expandedModelId || '');
   const updateQuota = useUpdateQuotaConfig();
@@ -297,16 +294,6 @@ export default function QuotaOverviewPage() {
           </div>
         )}
       </div>
-
-      <div className="mt-6">
-        {trendError ? (
-          <div className="bg-white border border-stone-200 rounded-xl p-4 text-sm text-stone-500">
-            Quota 趋势加载失败：{(trendError as Error).message}
-          </div>
-        ) : (
-          <QuotaTrendChart data={trendData?.daily || []} compact />
-        )}
-      </div>
     </div>
   );
 }
@@ -378,6 +365,15 @@ function ModelUsageRow({ item, isExpanded, onToggle, detail, onUpdateQuota, onRe
         <span className={`hidden md:inline-flex text-[11px] font-semibold uppercase tracking-wide px-2.5 py-0.5 rounded-full border ${statusClass}`}>
           {STATUS_LABELS[item.quota_status]}
         </span>
+
+        {item.handoff_triggered_count > 0 && (
+          <span
+            className="hidden lg:inline-flex text-[11px] font-medium px-2 py-0.5 rounded-full border border-violet-200 bg-violet-50 text-violet-700"
+            title="该模型额度耗尽触发的 Handoff 次数"
+          >
+            {item.handoff_triggered_count} 次 Handoff
+          </span>
+        )}
 
         <span className="hidden lg:block text-xs text-stone-500 w-24 text-right font-mono">
           {item.total_tokens.toLocaleString()}

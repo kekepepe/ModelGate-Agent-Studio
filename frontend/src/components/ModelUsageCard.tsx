@@ -119,6 +119,16 @@ export default function ModelUsageCard({ item, detail, onUpdateQuota, onResetSta
                 )}
               </div>
             </div>
+            <div>
+              <div className="text-xs text-stone-400 mb-0.5">触发 Handoff 次数</div>
+              <div className="text-sm font-medium text-stone-700">
+                {detail.handoff_triggered_count > 0 ? (
+                  <span className="text-violet-600">{detail.handoff_triggered_count}</span>
+                ) : (
+                  '0'
+                )}
+              </div>
+            </div>
           </div>
 
           {detail.last_used_at && (
