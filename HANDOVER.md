@@ -266,7 +266,7 @@ V1.0-3.7 删除了全部 5 个 P0-P7 workflow。V1.0 故意"无 CI 推送"。**V
 
 ## 8. 未来计划（按设计文档 V1.0 → V1.4）
 
-> ⚠️ 2026-09-15 起，V1.0.1 / V1.1 的**执行计划与进度跟踪已迁移到 [`V1.0.1-V1.1-plan.md`](./V1.0.1-V1.1-plan.md)**（根目录，含设计决策 D1-D7 与 checkbox）。下面保留原始路线图供总览。本节全部来自 `docs/design/2026-09-06-platform-redesign.md` §8。
+> ⚠️ 2026-09-15 起：V1.0.1 / V1.1 已完成（计划留档 [`V1.0.1-V1.1-plan.md`](./V1.0.1-V1.1-plan.md)）；**当前阶段为 V1.2 本地 Memory / RAG 检索 / Skill 沉淀**，计划与进度见 [`V1.2-Memory-RAG-Skill-plan.md`](./V1.2-Memory-RAG-Skill-plan.md)（参考 mem0 / Voyager / Claude Agent Skills 等高星项目调研）。下面保留原始路线图供总览。
 
 ### V1.0.1 — 补齐 V1.0 短板（最近期，1-2 周）
 
