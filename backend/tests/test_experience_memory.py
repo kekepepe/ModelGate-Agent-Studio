@@ -142,10 +142,11 @@ def test_create_user_preference_is_approved_and_embedded(db_session):
         content="User prefers pytest with fixtures over unittest classes.",
         created_by="mavis",
     )
-    assert preference.type == "user_preference"
-    assert preference.human_approved is True
-    assert preference.expires_at is None
-    assert preference.get_embedding(), "preferences must be embedded on creation"
+    assert preference["type"] == "user_preference"
+    assert preference["human_approved"] is True
+    assert preference["expires_at"] is None
+    row = db_session.get(MemoryDraft, preference["id"])
+    assert row.get_embedding(), "preferences must be embedded on creation"
 
     with raises(ValueError):
         create_user_preference(db_session, title=" ", content="missing title")

@@ -240,7 +240,7 @@ def create_user_preference(
     memory_vector_service.ensure_memory_embedding(db, preference)
     db.commit()
     db.refresh(preference)
-    return preference
+    return preference.to_dict()
 
 
 def record_skill_outcome(db: Session, context_json: Optional[str], succeeded: bool) -> None:

@@ -7,13 +7,13 @@ by the adapter fingerprint so a backend switch re-embeds lazily instead of
 silently mixing vector spaces.
 """
 
-from typing import List, Tuple
+from typing import Dict, List, Optional, Tuple
 
 from sqlalchemy.orm import Session
 
 from src.models.knowledge import MemoryDraft, SkillDraft
 from src.services.embedding_service import configured_embedding_adapter
-from src.services.retrieval_service import _cosine
+from src.services.retrieval_service import _cosine, _tokens
 
 
 def embed_text(text: str) -> Tuple[List[float], str]:
@@ -72,3 +72,65 @@ def similarity(query_vector: List[float], record) -> float:
     if not query_vector or not stored or len(stored) != len(query_vector):
         return 0.0
     return max(0.0, _cosine(query_vector, stored))
+
+
+def _keyword_score(query_tokens: List[str], text: str) -> float:
+    """Overlap of distinct query tokens in the record text, normalized."""
+    distinct = set(query_tokens)
+    if not distinct:
+        return 0.0
+    text_tokens = set(_tokens(text))
+    hits = sum(1 for token in distinct if token in text_tokens)
+    return hits / len(distinct)
+
+
+def _hybrid_search(rows, query, *, limit, require_approved, memory_type=None):
+    """Shared hybrid ranking: keyword 0.5 + vector 0.5.
+
+    Rows whose stored vector was produced by a different embedding backend
+    contribute keyword evidence only (vector 0.0) instead of mixing spaces.
+    """
+    query_tokens = _tokens(query)
+    query_vector, fingerprint = embed_text(query)
+    scored = []
+    for row in rows:
+        if require_approved is not None and row.human_approved is not require_approved:
+            continue
+        if memory_type is not None and getattr(row, "type", None) != memory_type:
+            continue
+        text = memory_embedding_text(row) if isinstance(row, MemoryDraft) else skill_embedding_text(row)
+        keyword = _keyword_score(query_tokens, text)
+        vector = similarity(query_vector, row) if row.embedding_fingerprint == fingerprint else 0.0
+        score = round(keyword * 0.5 + vector * 0.5, 4)
+        entry = row.to_dict()
+        entry.update({"search_score": score, "keyword_score": round(keyword, 4), "vector_score": round(vector, 4)})
+        if isinstance(row, SkillDraft):
+            entry["success_rate"] = row.success_rate
+        scored.append((score, entry))
+    scored.sort(key=lambda pair: pair[0], reverse=True)
+    return [entry for score, entry in scored if score > 0.0][:limit]
+
+
+def search_memories(
+    db: Session,
+    query: str,
+    *,
+    memory_type: Optional[str] = None,
+    require_approved: Optional[bool] = None,
+    limit: int = 10,
+) -> List[Dict]:
+    """Hybrid keyword + vector search over memory drafts (V1.2 M3)."""
+    rows = db.query(MemoryDraft).order_by(MemoryDraft.created_at.desc()).limit(500).all()
+    return _hybrid_search(rows, query, limit=limit, require_approved=require_approved, memory_type=memory_type)
+
+
+def search_skills(
+    db: Session,
+    query: str,
+    *,
+    require_approved: Optional[bool] = None,
+    limit: int = 10,
+) -> List[Dict]:
+    """Hybrid search over skill drafts; success_rate rides along (Voyager-style)."""
+    rows = db.query(SkillDraft).order_by(SkillDraft.created_at.desc()).limit(500).all()
+    return _hybrid_search(rows, query, limit=limit, require_approved=require_approved)

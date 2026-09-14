@@ -3,9 +3,10 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 
 from src.core.database import get_db
-from src.schemas.knowledge import ApprovalRequest, KnowledgeSourceCreate, RetrievalRequest, SourceStatusRequest
+from src.schemas.knowledge import ApprovalRequest, KnowledgeSourceCreate, PreferenceCreate, RetrievalRequest, SourceStatusRequest
+from src.models.knowledge import SkillDraft
 from src.models.workspace import Goal
-from src.services import curator_service, knowledge_source_service, retrieval_service
+from src.services import curator_service, knowledge_source_service, memory_vector_service, retrieval_service
 
 router = APIRouter(tags=["knowledge"])
 
@@ -109,10 +110,58 @@ def update_source_status(source_id: str, req: SourceStatusRequest, db: Session =
         raise _error("BAD_REQUEST", str(exc), 400)
 
 
+@router.post("/knowledge/preferences", status_code=201)
+def create_preference(req: PreferenceCreate, db: Session = Depends(get_db)):
+    try:
+        return _success(curator_service.create_user_preference(
+            db, req.title, req.content, created_by=req.created_by, tags=req.tags,
+        ), 201)
+    except ValueError as exc:
+        raise _error("BAD_REQUEST", str(exc), 400)
+
+
+@router.get("/knowledge/memories/search")
+def search_memories(
+    q: str = Query(..., min_length=1, max_length=4000),
+    type: Optional[str] = Query(None),
+    approved: Optional[bool] = Query(None),
+    limit: int = Query(10, ge=1, le=100),
+    db: Session = Depends(get_db),
+):
+    return _success(memory_vector_service.search_memories(
+        db, q, memory_type=type, require_approved=approved, limit=limit,
+    ))
+
+
+@router.get("/knowledge/skills/{skill_id}")
+def get_skill_detail(skill_id: str, db: Session = Depends(get_db)):
+    skill = db.query(SkillDraft).filter(SkillDraft.id == skill_id).first()
+    if not skill:
+        raise _error("NOT_FOUND", f"Skill '{skill_id}' not found", 404)
+    detail = skill.to_dict()
+    detail["success_rate"] = skill.success_rate
+    return _success(detail)
+
+
 @router.post("/context/retrieve")
 def retrieve_context(req: RetrievalRequest, db: Session = Depends(get_db)):
     try:
-        return _success(retrieval_service.retrieve(db, **req.model_dump()))
+        payload = req.model_dump()
+        source_types = payload.pop("source_types") or ["knowledge"]
+        unknown = set(source_types) - {"memory", "skill", "knowledge"}
+        if unknown:
+            raise _error("BAD_REQUEST", f"Unknown source_types: {sorted(unknown)}", 400)
+        if set(source_types) == {"knowledge"}:
+            # Legacy contract: chunks-only retrieval, unchanged response shape.
+            return _success(retrieval_service.retrieve(db, **payload))
+        result: dict = {"policy": "unified_memory_skill_knowledge_v1", "source_types": source_types, "query": req.query}
+        if "memory" in source_types:
+            result["memories"] = memory_vector_service.search_memories(db, req.query, limit=req.limit)
+        if "skill" in source_types:
+            result["skills"] = memory_vector_service.search_skills(db, req.query, limit=req.limit)
+        if "knowledge" in source_types:
+            result["knowledge"] = retrieval_service.retrieve(db, **payload)
+        return _success(result)
     except ValueError as exc:
         raise _error("BAD_REQUEST", str(exc), 400)
 

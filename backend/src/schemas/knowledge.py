@@ -81,3 +81,13 @@ class RetrievalRequest(BaseModel):
     source_ids: List[str] = Field(default_factory=list)
     workspace_scope: Optional[str] = None
     limit: int = Field(20, ge=1, le=100)
+    # V1.2: which stores to search. Default keeps the legacy chunks-only
+    # contract; memory/skill search rides the unified response.
+    source_types: List[str] = Field(default_factory=lambda: ["knowledge"])
+
+
+class PreferenceCreate(BaseModel):
+    title: str = Field(..., min_length=1, max_length=255)
+    content: str = Field(..., min_length=1, max_length=8000)
+    tags: List[str] = Field(default_factory=list)
+    created_by: str = Field("user", max_length=100)
