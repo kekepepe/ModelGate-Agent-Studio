@@ -27,6 +27,10 @@ redesign. Older per-phase changelogs are archived in
 - `.github/workflows/backend-ci.yml` + `frontend-ci.yml` 即将恢复（min pytest /
   lint+typecheck+test+build）
 
+- CI 工作流**当前禁用**（`on.push` 仅匹配空分支集 + `workflow_dispatch` 手动），
+  以免每次 push main 触发邮件；V1.3 启用更广 CI 集时恢复 `branches: [main]`。
+  PR 仍会触发，所以外部贡献者得到覆盖。
+
 ## V1.2 — 2026-09-15（本地 Memory / RAG 检索 / Skill 沉淀）
 
 计划与参考调研见 `docs/_archive_2026/V1.2-Memory-RAG-Skill-plan.md`（已归档；mem0 / Voyager /
