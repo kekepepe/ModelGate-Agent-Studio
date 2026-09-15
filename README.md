@@ -90,6 +90,7 @@ export EMBEDDING_MODEL_NAME=text-embedding-3-small
 # 后端（Python 3.12，venv 或 docker verify profile）
 cd backend
 ./.venv/bin/python -m pytest tests/ -q          # 451 passed, 1 skipped
+./.venv/bin/python -m ruff check .              # 0 errors (V1.2.1 P1)
 
 # 前端（Node 22，见 .nvmrc）
 cd frontend
@@ -99,6 +100,37 @@ npm run test                                     # vitest，183 tests
 npm run lint                                     # oxlint
 npm run build                                    # tsc + vite build
 ```
+
+### 端到端产品验收（mock 栈，三场景必过）
+
+[`scripts/e2e-product-acceptance.sh`](./scripts/e2e-product-acceptance.sh) 是 README
+每项「已完成」声明的自动证据：每次运行覆盖核心闭环 / Handoff 业务流 / Evolution
+沉淀→检索三个场景，并修复运行过程中暴露的 V1.2 回归。CI 工作流在 PR 时自动跑同一套
+命令（V1.2.1 P1 恢复）。
+
+```bash
+EXECUTION_MODE=mock docker compose -f docker-compose.dev.yml up -d --build
+bash scripts/e2e-product-acceptance.sh
+docker compose -f docker-compose.dev.yml down
+```
+
+## 能力声明 ↔ 证据映射（V1.2.1 P1 收口）
+
+| README 声明 | 自动证据 | 当前数字 |
+|---|---|---|
+| 核心执行闭环（Goal → 拆解 → 执行 → Final Summary） | `e2e-product-acceptance.sh` 场景 A | 451/183 测试；CI runs on PR |
+| 6 Station + 6 Model 种子 | `seed_demo_data.py`；`/api/v1/agents?is_enabled=true` | 12 stations registered |
+| Router 决策可追溯 | `e2e-product-acceptance.sh` 场景 A.3（`/goals/{id}/selection-decisions`） | 1+ decisions per run |
+| Supervisor 评审 | `e2e-product-acceptance.sh` 场景 A.4（`supervisor_review`/`supervisor.skipped`） | log 落库 |
+| Final Summary 7 字段 | `e2e-product-acceptance.sh` 场景 A.5 | 7/7 字段 |
+| Handoff 完整业务流 | `e2e-product-acceptance.sh` 场景 B + `e2e-handoff.sh` | `generated_by` 溯源；accept/resume 完成 |
+| Quota 拦截 | 场景 B.1 + B.2 | 实测拦截 → handoff |
+| Memory 沉淀 | `e2e-product-acceptance.sh` 场景 C.1（`/knowledge/generate/{goal_id}`） | memories=2, skills=0 |
+| Memory 检索 → 注入 | `e2e-product-acceptance.sh` 场景 C.2（`/context/retrieve` source_types=[memory,skill]） | 18+ items recalled |
+| 用户偏好 | `e2e-product-acceptance.sh` 场景 C.1（`/knowledge/preferences`）+ C.2 检索命中 | born-approved，无条件注入 |
+| Skill 成功率参与排序 | `tests/test_context_hybrid_v12.py` | pytest 451/1 |
+| LLM 摘要兜底 | `e2e-product-acceptance.sh` 场景 B.3 | `generated_by=fallback` 落库 |
+| 接入任意 OpenAI-compatible Provider | `docs/design/2026-09-06-platform-redesign.md` §6.5 | 真实 Provider 验收在 V1.3 P2 |
 
 后端也可以完全在容器里验证（宿主机无需 Python）：
 

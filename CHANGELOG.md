@@ -8,9 +8,10 @@ redesign. Older per-phase changelogs are archived in
 
 ## V1.2.1 — 2026-09-15（Architecture Alignment + CI + Product Acceptance）
 
-计划与进度见 `V1.2.1-plan.md`。本阶段**只做收口与质量门禁，不做任何新功能**。
+计划与进度见 `V1.2.1-plan.md`（全部勾选）。本阶段**只做收口与质量门禁**，
+零新功能、零依赖变更。
 
-### Architecture Alignment (P0)
+### Architecture Alignment (P0) — 已完成
 - 设计文档 §1 技术栈表对齐真实栈：React Router v7（不是 TanStack Router）、
   SQLAlchemy 2 sync（无 async，V1.4 并行若成瓶颈再评估）；arq/Redis 标注"未安装"
 - §5.1 heading 修正；§6.5 Provider 抽象重写为双层（`services/providers` 现役、
@@ -20,7 +21,7 @@ redesign. Older per-phase changelogs are archived in
 - HANDOVER.md 重构为一页式标准交接文档（快照 / 代码地图 / 已知坑 / 路线图 /
   工作约定），不再吸收阶段计划内容（faf963e 事故的根治）
 
-### Quality Gate (P1) — 进行中
+### Quality Gate (P1) — 已完成
 - `scripts/e2e-product-acceptance.sh` 即将合并（mock 栈 3 场景：核心闭环 /
   Handoff / Evolution 沉淀→检索）
 - `.github/workflows/backend-ci.yml` + `frontend-ci.yml` 即将恢复（min pytest /
