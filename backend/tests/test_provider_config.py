@@ -1,4 +1,3 @@
-import pytest
 
 from src.services.providers.provider_config import (
     execution_mode,

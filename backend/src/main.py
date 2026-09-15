@@ -14,8 +14,6 @@ from src.models import handoff as handoff_models  # noqa: F401 - registers mappe
 from src.models import selection as selection_models  # noqa: F401 - registers mapped tables
 from src.models import supervisor as supervisor_models  # noqa: F401 - registers mapped tables
 from src.models import tool as tool_models  # noqa: F401 - registers mapped tables
-from src.providers.litellm_provider import LiteLLMProvider as _LiteLLMProvider
-from src.providers.mock_provider import MockProvider as _MockProvider
 from src.schemas.model import MODEL_CONTEXT_TOKEN_OPTIONS
 from src.services.tool_service import seed_builtin_tools
 from src.services.state_machine_service import install_state_guards
@@ -28,17 +26,13 @@ def verify_provider_config() -> None:
     """Validate the provider configuration at startup and log the active mode.
 
     Per design §6.5: a real deployment without a configured key must fail
-    visibly instead of silently falling back to a mock. This only *verifies*
-    the import path and surfaces the mode in the startup log — the returned
-    instance is discarded. Runtime model calls go through
-    `src/services/providers/` (provider_factory: mock / openai_compatible);
-    the `src/providers/` LiteLLM layer is reserved for the V1.3 P2
-    real multi-provider adapter work.
+    visibly instead of silently falling back to a mock. Runtime model calls
+    go through `src/services/providers/` (provider_factory: mock /
+    openai_compatible / anthropic). The former src/providers/ LiteLLM layer
+    was removed in V1.3 (see deletions log).
     """
     if settings.execution_mode == "mock":
         logger.info("Provider: mock mode (MODEL_GATE_EXECUTION_MODE=mock)")
-        # Import-path check only: surfaces a broken litellm install at startup.
-        _ = (_LiteLLMProvider, _MockProvider)
         return
     if not settings.provider_api_key:
         logger.warning(

@@ -18,11 +18,11 @@ import json
 import os
 import re
 import time
-from typing import Any, AsyncIterator, Dict, List, Optional
+from typing import Any, Dict, List, Optional
 
 import httpx
 
-from src.services.providers.base import ModelRequest, ModelResponse, ModelStreamEvent, ProviderError
+from src.services.providers.base import ModelRequest, ModelResponse, ProviderError
 
 
 class AnthropicProviderError(ProviderError):
