@@ -15,6 +15,21 @@ if DATABASE_URL not in {"sqlite://", "sqlite:///:memory:"}:
     _engine_options.update(pool_size=DB_POOL_SIZE, max_overflow=DB_MAX_OVERFLOW)
 
 engine = create_engine(DATABASE_URL, **_engine_options)
+
+if DATABASE_URL.startswith("sqlite") and DATABASE_URL not in {"sqlite://", "sqlite:///:memory:"}:
+    from sqlalchemy import event as _sa_event
+
+    @_sa_event.listens_for(engine, "connect")
+    def _sqlite_pragmas(dbapi_connection, _connection_record):
+        # V1.4: WAL lets readers proceed during a write (parallel worker
+        # sessions no longer starve the API); busy_timeout turns write
+        # contention into a bounded retry instead of 'database is locked'.
+        cursor = dbapi_connection.cursor()
+        cursor.execute("PRAGMA journal_mode=WAL")
+        cursor.execute("PRAGMA busy_timeout=5000")
+        cursor.execute("PRAGMA synchronous=NORMAL")
+        cursor.close()
+
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
 Base = declarative_base()

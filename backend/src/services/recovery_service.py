@@ -69,3 +69,94 @@ def recover_interrupted_tasks(
     if recovered or approval_required:
         db.commit()
     return {"recovered": recovered, "approval_required": approval_required}
+
+
+# ---------------------------------------------------------------------------
+# V1.4: standing recovery daemon (T2)
+# ---------------------------------------------------------------------------
+
+DAEMON_INTERVAL_SECONDS = 60
+_daemon_thread = None
+_daemon_stop = None
+
+
+def recover_all_expired(db: Session) -> Dict[str, int]:
+    """Scan every goal with expired running-task leases and recover them.
+
+    Runs on the recovery daemon's cycle so a killed host process does not
+    leave tasks stuck until someone manually re-runs a pipeline.
+    """
+    from datetime import timedelta
+
+    cutoff = datetime.now(timezone.utc) - timedelta(seconds=5)
+    expired_goals = (
+        db.query(Goal.id)
+        .join(Task, Task.goal_id == Goal.id)
+        .filter(
+            Task.status == "running",
+            Task.lease_expires_at.isnot(None),
+            Task.lease_expires_at < cutoff,
+        )
+        .all()
+    )
+    totals = {"recovered": 0, "approval_required": 0}
+    for (goal_id,) in expired_goals:
+        try:
+            result = recover_interrupted_tasks(db, goal_id)
+            totals["recovered"] += result.get("recovered", 0)
+            totals["approval_required"] += result.get("approval_required", 0)
+        except Exception:
+            db.rollback()
+            continue
+    return totals
+
+
+def start_recovery_daemon(
+    app_logger=None,
+    interval: int = DAEMON_INTERVAL_SECONDS,
+    session_factory=None,
+) -> None:
+    """Start the in-process daemon thread (idempotent).
+
+    Cycle: heartbeat-refresh every in-flight lease so live tasks are never
+    mistaken for dead ones, then recover expired leases across all goals.
+    `session_factory` is injectable for tests; production binds the app engine.
+    """
+    global _daemon_thread, _daemon_stop
+    if _daemon_thread is not None and _daemon_thread.is_alive():
+        return
+
+    import threading
+
+    if session_factory is None:
+        from src.core.database import SessionLocal as session_factory
+
+    _daemon_stop = threading.Event()
+
+    def _cycle():
+        while not _daemon_stop.wait(interval):
+            session = session_factory()
+            try:
+                # Recovery only. Live tasks renew their own lease inside the
+                # runtime loop — a daemon heartbeat here would also revive
+                # genuinely dead leases, defeating the expiry signal.
+                result = recover_all_expired(session)
+                if result.get("recovered") or result.get("approval_required"):
+                    if app_logger:
+                        app_logger.info("recovery daemon cycle: %s", result)
+            except Exception as exc:
+                session.rollback()
+                if app_logger:
+                    app_logger.warning("recovery daemon cycle failed: %s", exc)
+            finally:
+                session.close()
+
+    _daemon_thread = threading.Thread(target=_cycle, name="recovery-daemon", daemon=True)
+    _daemon_thread.start()
+
+
+def stop_recovery_daemon() -> None:
+    global _daemon_thread, _daemon_stop
+    if _daemon_stop is not None:
+        _daemon_stop.set()
+    _daemon_thread = None

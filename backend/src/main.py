@@ -50,6 +50,12 @@ install_state_guards()
 upgrade_database()
 verify_provider_config()
 
+# V1.4: standing recovery daemon — heartbeats in-flight leases and recovers
+# expired ones across all goals so a killed host process cannot strand tasks.
+from src.services import recovery_service as _recovery_service
+
+_recovery_service.start_recovery_daemon(app_logger=logger)
+
 app = FastAPI(
     title=settings.app_name,
     debug=settings.debug,

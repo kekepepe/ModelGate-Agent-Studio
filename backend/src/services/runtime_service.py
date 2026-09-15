@@ -729,6 +729,9 @@ def _execute_single_task(db: Session, task: Task) -> Dict[str, Any]:
             limit_error = _resource_limit_error(agent, total_input_tokens + total_output_tokens, start_ts)
             if limit_error:
                 raise RuntimeError(limit_error)
+            # V1.4: live-task lease renewal — the recovery daemon treats an
+            # expired lease as a dead host, so every loop iteration renews it.
+            task.lease_expires_at = datetime.now(timezone.utc) + timedelta(seconds=settings.task_lease_seconds)
             provider = get_provider(model=model, execution_mode=goal_service.get_goal(db, task.goal_id).execution_mode)
             req = ModelRequest(
                 provider=model.provider if model else "unknown",
