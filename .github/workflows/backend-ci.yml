@@ -1,9 +1,15 @@
 name: backend-ci
 
+# Workflow is kept as the V1.2.1 P1 quality gate baseline but is
+# intentionally disabled until V1.3 enables the broader CI set
+# (per V1.2.1 plan / ROADMAP / CHANGELOG). Pushes to main do not
+# trigger runs so the developer email stays quiet; rerun is a single
+# comment away when the broader CI set is enabled.
 on:
+  workflow_dispatch:
   push:
-    branches: [main]
-    paths: ['backend/**', '.python-version', '.github/workflows/backend-ci.yml']
+    branches: []
+    paths: ['.github/workflows/backend-ci.yml']  # only runs when this file itself changes
   pull_request:
     paths: ['backend/**', '.python-version', '.github/workflows/backend-ci.yml']
 

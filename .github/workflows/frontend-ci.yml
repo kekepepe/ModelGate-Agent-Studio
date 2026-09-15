@@ -1,9 +1,13 @@
 name: frontend-ci
 
+# See backend-ci.yml — disabled until the broader CI set is enabled
+# in V1.3 to avoid main-push email noise. Manual rerun via
+# `workflow_dispatch` is always available.
 on:
+  workflow_dispatch:
   push:
-    branches: [main]
-    paths: ['frontend/**', '.nvmrc', '.github/workflows/frontend-ci.yml']
+    branches: []
+    paths: ['.github/workflows/frontend-ci.yml']
   pull_request:
     paths: ['frontend/**', '.nvmrc', '.github/workflows/frontend-ci.yml']
 
