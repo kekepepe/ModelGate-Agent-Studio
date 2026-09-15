@@ -24,36 +24,37 @@ from src.middleware.request_security import RequestBoundaryMiddleware
 logger = logging.getLogger(__name__)
 
 
-def _init_provider() -> object:
-    """Pick the active LLM provider from `MODEL_GATE_EXECUTION_MODE`.
+def verify_provider_config() -> None:
+    """Validate the provider configuration at startup and log the active mode.
 
-    Per design §6.5 / §2.2: a real deployment without a configured key must
-    fail visibly instead of silently falling back to a mock. We do not
-    auto-construct `LiteLLMProvider` here; we just verify the import path
-    and surface the active mode in the startup log.
+    Per design §6.5: a real deployment without a configured key must fail
+    visibly instead of silently falling back to a mock. This only *verifies*
+    the import path and surfaces the mode in the startup log — the returned
+    instance is discarded. Runtime model calls go through
+    `src/services/providers/` (provider_factory: mock / openai_compatible);
+    the `src/providers/` LiteLLM layer is reserved for the V1.3 P2
+    real multi-provider adapter work.
     """
     if settings.execution_mode == "mock":
-        logger.info("Provider: MockProvider (MODEL_GATE_EXECUTION_MODE=mock)")
-        return _MockProvider()
-    provider = _LiteLLMProvider(
-        api_base=settings.provider_api_base or None,
-        api_key=settings.provider_api_key or None,
-        timeout=settings.provider_timeout_seconds,
-    )
+        logger.info("Provider: mock mode (MODEL_GATE_EXECUTION_MODE=mock)")
+        # Import-path check only: surfaces a broken litellm install at startup.
+        _ = (_LiteLLMProvider, _MockProvider)
+        return
     if not settings.provider_api_key:
         logger.warning(
-            "LiteLLMProvider initialised WITHOUT PROVIDER_API_KEY. "
+            "Live execution configured WITHOUT PROVIDER_API_KEY. "
             "Real LLM calls will fail loudly. Set PROVIDER_API_KEY or "
             "switch to MODEL_GATE_EXECUTION_MODE=mock for offline work."
         )
     else:
-        logger.info("Provider: LiteLLMProvider (key is set, ready)")
-    return provider
+        logger.info(
+            "Provider: openai_compatible via src/services/providers (key is set, ready)"
+        )
 
 
 install_state_guards()
 upgrade_database()
-_provider = _init_provider()  # noqa: F841 - eager init to surface config errors at startup
+verify_provider_config()
 
 app = FastAPI(
     title=settings.app_name,
