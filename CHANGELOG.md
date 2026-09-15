@@ -6,6 +6,37 @@ V1.0 is the first release produced under the 2026-09-06 platform
 redesign. Older per-phase changelogs are archived in
 `docs/_archive_2026/CHANGELOG.md`.
 
+## V1.3 — 2026-09-16（Real Multi-Provider + MCP）
+
+### P2 Real Multi-Provider
+- per-model 凭证：`provider_api_key/base_url` 改为 Model 行优先、env 兜底——
+  Model Manager 每个模型可配独立 key/endpoint（本地 DB 即信任边界，全链路 redact）
+- 定价与成本：migration 0012/0013 加 `models.price_input/price_output`、
+  `quota_records.total_cost_usd`、`execution_logs.cost_usd`；record_usage 计算
+  每次调用 USD；FinalSummary `cost.available=True`（未配价保持诚实未知）
+- `AnthropicProvider`：手写 native messages-API adapter（httpx ~330 行，
+  tool_use↔tool_calls 双向映射，健康检查走免费 /v1/models），factory 按
+  `Model.provider` 路由
+- **删除 litellm 依赖与 src/providers/ 预留层**（运行时死重，卸载后全测试不变，
+  litellm 的 pydantic 警告同步消失）；httpx 上限解除
+- 故障决策矩阵测试：429/5xx/529/timeout/auth → backup→handoff 或 failed
+- `e2e-live-provider.sh` 双 Provider 真实验收：脚本就绪，**待用户两家 key**
+
+### P3 MCP Runtime
+- migration 0014：`mcp_servers` 注册表 + `tool_definitions.server_id`
+- 手写 MCP stdio 客户端（JSON-RPC 2.0 行协议，零依赖，3.9 兼容——官方 SDK 需
+  Python≥3.10）：initialize / tools/list / tools/call + 超时契约
+- 发现同步：tools/list → ToolDefinition（`mcp__<server>__<tool>`，默认
+  risk=high 且 disabled，人工启用）；远端消失工具 soft-disable
+- ToolExecutor MCP 接线：allowlist/enabled 门与本地工具一致，结果落
+  ToolCallRecord；调试器调用端点（server active + tool enabled 双门）
+- **e2e-mcp.sh 对真实官方 filesystem server 7 步 PASS**（发现 14 工具 →
+  启用 → 经 MCP 读取 fixture → 健康 → 禁用降级）
+
+### 数字
+- 后端 pytest：**505 passed, 1 skipped**（V1.2.1 末态 465）
+- ruff：0 errors
+
 ## 规划 — 2026-09-16（V1.3–V1.5 计划定稿）
 
 三份任务级计划入库并登记（用户拍板：Provider = OpenAI-compatible + Anthropic native；

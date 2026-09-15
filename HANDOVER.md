@@ -14,9 +14,9 @@
 
 | 项 | 值 |
 |---|---|
-| 当前版本 | V1.2.1 ✅ 完成；**下一版本 V1.3**（Real Multi-Provider + MCP，待立项） |
+| 当前版本 | V1.3 ✅ 完成（Real Multi-Provider + MCP）；下一版本 V1.4（Parallel 强化，见计划） |
 | 已完成 | V1.0 核心闭环 / V1.1 Handoff+Quota / V1.2 Memory+RAG+Skill |
-| 后端 pytest | **451 passed, 1 skipped** |
+| 后端 pytest | **505 passed, 1 skipped** |
 | 前端 vitest | **183 passed / 38 文件**（typecheck / build / lint 全绿） |
 | e2e 验收 | `scripts/e2e-demo.sh` PASS · `scripts/e2e-handoff.sh` PASS |
 | CI | workflow 已就位但**默认静音**（push 不触发；Actions 页手动 `workflow_dispatch` 或 PR 触发） |
