@@ -38,7 +38,11 @@ def build_planning_context(db: Session, goal: Goal, limit: int = 3) -> Dict[str,
     memories = _approved_memories(db)
     query_vector, _ = memory_vector_service.embed_text(query)
     ranked_memories = _hybrid_rank(memories, query, tokens, query_vector)
-    selected_memories = [item for _, _, _, item in ranked_memories if item[0] > 0 or item[1] >= VECTOR_MATCH_FLOOR][:limit]
+    selected_memories = [
+        item
+        for combined, keyword, vector, item in ranked_memories
+        if keyword > 0 or vector >= VECTOR_MATCH_FLOOR
+    ][:limit]
     skills = _approved_skills(db)
     ranked_skills = _hybrid_rank_skills(skills, query, tokens, query_vector)
     # Planning wants suggestions even without a keyword hit: a high success
