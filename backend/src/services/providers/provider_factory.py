@@ -47,7 +47,14 @@ def get_provider(model=None, execution_mode: Optional[str] = None) -> ModelProvi
             f"Live execution requires an API key for enabled model '{getattr(model, 'display_name', model.id)}'. "
             "Configure it in Model Manager or explicitly select Mock mode."
         )
-    return create_provider("openai", api_key=api_key, base_url=provider_api_base(getattr(model, "api_base_url", None)))
+    base_url = provider_api_base(getattr(model, "api_base_url", None))
+    # V1.3: route by the Model row's provider field. OpenAI-compatible
+    # families (openai/deepseek/kimi/glm/minimax/...) share one adapter;
+    # anthropic gets the native messages-API adapter.
+    provider_kind = (getattr(model, "provider", "") or "").lower()
+    if provider_kind == "anthropic":
+        return create_provider("anthropic", api_key=api_key, base_url=base_url)
+    return create_provider("openai", api_key=api_key, base_url=base_url)
 
 
 def set_provider(provider: ModelProvider) -> None:
@@ -72,7 +79,13 @@ def create_provider(provider_type: str, *, api_key: Optional[str] = None, base_u
         provider = MockModelProvider()
         _configure_mock_defaults(provider)
         return provider
-    elif provider_type in {"openai", "openai_compatible", "anthropic", "deepseek", "kimi", "glm", "minimax"}:
+    elif provider_type == "anthropic":
+        try:
+            from src.services.providers.anthropic_provider import AnthropicProvider
+            return AnthropicProvider(api_key=api_key, base_url=base_url)
+        except ImportError:
+            raise ValueError("Anthropic provider requires the httpx package")
+    elif provider_type in {"openai", "openai_compatible", "deepseek", "kimi", "glm", "minimax"}:
         try:
             from src.services.providers.openai_compatible_provider import OpenAICompatibleProvider
             return OpenAICompatibleProvider(api_key=api_key, base_url=base_url)
