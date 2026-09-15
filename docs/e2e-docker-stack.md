@@ -1,6 +1,11 @@
-# V1.0-7 — Docker Compose + E2E Demo
+# Docker Compose + E2E 运维指南
 
-This file documents how to bring the V1.0 stack up locally and prove
+> 原名 `V1.0-7-e2e.md`（V1.0-7 阶段产物，2026-09-15 随仓库结构整理移入 docs/ 并更名）。
+> 除本指南描述的核心流程外，另有两条验收脚本：
+> `scripts/e2e-handoff.sh`（V1.1 Handoff）与 `scripts/e2e-product-acceptance.sh`
+> （V1.2.1 三场景产品验收，README 能力声明的自动证据）。
+
+This file documents how to bring the stack up locally and prove
 the full Goal → Task → Worker → Model → Final Summary pipeline works.
 
 ## 1. One-time prerequisites
