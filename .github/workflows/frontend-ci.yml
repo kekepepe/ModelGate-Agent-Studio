@@ -1,0 +1,42 @@
+name: frontend-ci
+
+on:
+  push:
+    branches: [main]
+    paths: ['frontend/**', '.nvmrc', '.github/workflows/frontend-ci.yml']
+  pull_request:
+    paths: ['frontend/**', '.nvmrc', '.github/workflows/frontend-ci.yml']
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          # npm ci requires a package-lock.json to be present in the repo.
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install
+        working-directory: frontend
+        run: npm ci
+
+      - name: Lint
+        working-directory: frontend
+        run: npm run lint
+
+      - name: Typecheck
+        working-directory: frontend
+        run: npm run typecheck
+
+      - name: Test
+        working-directory: frontend
+        run: npm run test
+
+      - name: Build
+        working-directory: frontend
+        run: npm run build
