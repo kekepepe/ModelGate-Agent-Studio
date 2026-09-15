@@ -13,7 +13,8 @@
 | `_archive_2026/V1.0.1-V1.1-plan.md` | V1.0.1/V1.1 执行计划（已完成，留档） |
 | `_archive_2026/V1.2-Memory-RAG-Skill-plan.md` | V1.2 Memory / RAG / Skill 执行计划（已完成，留档，含高星项目调研） |
 | `../ROADMAP.md` | **版本路线 SSOT**（V1.2.1 → V2.0，P0–P6 阶段定义与边界） |
-| `../V1.2.1-plan.md` | **当前阶段执行计划**（Architecture Alignment + CI + Product Acceptance） |
+| `../V1.2.1-plan.md` | V1.2.1 执行计划（已完成，留档） |
+| `../V1.3-plan.md` / `../V1.4-plan.md` / `../V1.5-plan.md` | 后续三阶段执行计划（V1.3 计划就绪可开工） |
 | `_archive_2026/` | 重设计前的所有旧文档（V0 / MVP / P0-P7 时期），仅供考古 |
 
 ## 使用规则
@@ -31,7 +32,7 @@
 - ⏳ V1.0.1 补短板（CI / 文档修正 / 测试修复）→ 见 `../V1.0.1-V1.1-plan.md` Phase F/C
 - ✅ V1.1 Handoff + Quota（`_archive_2026/V1.0.1-V1.1-plan.md`，全部勾选）
 - ✅ V1.2 Memory / RAG / Skill 沉淀（`_archive_2026/V1.2-Memory-RAG-Skill-plan.md`，全部勾选）
-- ⏳ V1.2.1 Architecture Alignment + CI + Acceptance → 见 `../V1.2.1-plan.md`
-- ⏳ V1.3+：Real Multi-Provider / MCP / Parallel / Evolution 2.0 → 见 `../ROADMAP.md`
+- ✅ V1.2.1 Architecture Alignment + CI + Acceptance（`../V1.2.1-plan.md`，全部勾选）
+- 📋 V1.3 / V1.4 / V1.5 计划就绪 → 各自计划文档；顺序与边界见 `../ROADMAP.md`
 
 > 最后更新：2026-09-15

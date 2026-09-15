@@ -6,6 +6,21 @@ V1.0 is the first release produced under the 2026-09-06 platform
 redesign. Older per-phase changelogs are archived in
 `docs/_archive_2026/CHANGELOG.md`.
 
+## 规划 — 2026-09-16（V1.3–V1.5 计划定稿）
+
+三份任务级计划入库并登记（用户拍板：Provider = OpenAI-compatible + Anthropic native；
+并行 = 单机 ThreadPool 强化，不引入 arq/Redis）：
+
+- `V1.3-plan.md` — Real Multi-Provider（per-model 凭证 + 定价、AnthropicProvider、
+  成本入账、故障切换验收、e2e-live-provider.sh）+ MCP Runtime（mcp_servers 注册、
+  官方 SDK client、发现同步、权限审批、e2e-mcp.sh）
+- `V1.4-plan.md` — 并行单机强化（WAL、恢复 daemon、checkpoint 增量 resume、
+  确定性 merge、e2e-parallel.sh）；arq/Redis 修订移至 V2.0
+- `V1.5-plan.md` — Evolution Quality Loop（used/ignored→effectiveness 闭环、
+  LLM 优先提炼、冲突治理 + 衰减 + 自动禁用、记忆引用可见性、e2e-evolution.sh）
+
+主线：更智能、更方便、反复学习沉淀知识。V1.3 真实执行是 V1.5 知识质量的原料前提。
+
 ## V1.2.1 — 2026-09-15（Architecture Alignment + CI + Product Acceptance）
 
 计划与进度见 `V1.2.1-plan.md`（全部勾选）。本阶段**只做收口与质量门禁**，
