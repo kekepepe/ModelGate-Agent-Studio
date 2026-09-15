@@ -143,9 +143,11 @@ docker compose --profile verify run --rm backend-verify
 | V1.0.1 | 修复批（构建 / 测试 / 文档） | ✅ 完成 |
 | V1.1 | Handoff 完整业务流 + 配额可视化 | ✅ 完成 |
 | V1.2 | 本地 Memory / RAG / Skill 沉淀 | ✅ 完成 |
-| — | CI 工作流（pytest / build 两条 workflow） | 暂缓（恢复路径已记录） |
-| — | 真实 Provider smoke（需 API key） | 待密钥 |
-| V1.3 | 自定义 Station / MCP 工具页 / arq 多 Worker 并行 | 待立项 |
+| V1.2.1 | Architecture Alignment + CI + Product Acceptance | ⏳ 进行中 |
+| V1.3 | Real Multi-Provider + MCP | 待立项 |
+| V1.4 / V1.5 / V2.0 | Parallel Runtime / Evolution 2.0 / Developer Agent OS | 待立项 |
+
+完整阶段定义（P0–P6）与版本边界见 [ROADMAP.md](./ROADMAP.md)；当前阶段执行计划见 [V1.2.1-plan.md](./V1.2.1-plan.md)。真实 Provider smoke 并入 V1.3 Real Multi-Provider。
 
 ## License
 

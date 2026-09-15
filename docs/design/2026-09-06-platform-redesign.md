@@ -690,6 +690,11 @@ CREATE TABLE quota_records (
 ## 8. 阶段化交付
 
 > 全部阶段由我（Mavis）实现 + 推送到 GitHub。每阶段结束有可运行 demo + 测试通过 + 文档更新。
+>
+> ⚠️ **2026-09-15 修订**：本节旧编号（V1.0–V1.4）已被 [`ROADMAP.md`](../../ROADMAP.md) 取代——
+> 新路线为 V1.2.1（Architecture Alignment + CI + Acceptance）→ V1.3（Real Multi-Provider + MCP）
+> → V1.4（Parallel Runtime）→ V1.5（Evolution Quality Loop）→ V2.0。本节按旧编号保留作历史参考，
+> 按新编号改写是 V1.2.1 P0 的任务。
 
 ### V1.0 — 核心闭环（目标：2-3 周）
 

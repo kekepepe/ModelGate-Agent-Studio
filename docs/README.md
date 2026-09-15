@@ -12,6 +12,8 @@
 | `design/2026-09-06-platform-redesign.md` | **唯一权威设计文档**（架构 / 前后端 / Agent / 数据 / 阶段） |
 | `_archive_2026/V1.0.1-V1.1-plan.md` | V1.0.1/V1.1 执行计划（已完成，留档） |
 | `_archive_2026/V1.2-Memory-RAG-Skill-plan.md` | V1.2 Memory / RAG / Skill 执行计划（已完成，留档，含高星项目调研） |
+| `../ROADMAP.md` | **版本路线 SSOT**（V1.2.1 → V2.0，P0–P6 阶段定义与边界） |
+| `../V1.2.1-plan.md` | **当前阶段执行计划**（Architecture Alignment + CI + Product Acceptance） |
 | `_archive_2026/` | 重设计前的所有旧文档（V0 / MVP / P0-P7 时期），仅供考古 |
 
 ## 使用规则
@@ -29,6 +31,7 @@
 - ⏳ V1.0.1 补短板（CI / 文档修正 / 测试修复）→ 见 `../V1.0.1-V1.1-plan.md` Phase F/C
 - ✅ V1.1 Handoff + Quota（`_archive_2026/V1.0.1-V1.1-plan.md`，全部勾选）
 - ✅ V1.2 Memory / RAG / Skill 沉淀（`_archive_2026/V1.2-Memory-RAG-Skill-plan.md`，全部勾选）
-- ⏳ V1.3+：自定义 Station / MCP 工具页 / arq 多 Worker 并行（待立项）
+- ⏳ V1.2.1 Architecture Alignment + CI + Acceptance → 见 `../V1.2.1-plan.md`
+- ⏳ V1.3+：Real Multi-Provider / MCP / Parallel / Evolution 2.0 → 见 `../ROADMAP.md`
 
 > 最后更新：2026-09-15

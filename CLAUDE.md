@@ -151,7 +151,8 @@ The authoritative schema reference is the design doc §7 (`docs/design/2026-09-0
 
 | File | Purpose |
 |------|---------|
-| `docs/design/2026-09-06-platform-redesign.md` | Single authoritative design doc (11 chapters, V1.0–V1.4 phasing) |
+| `docs/design/2026-09-06-platform-redesign.md` | Single authoritative design doc (11 chapters; §8 numbering superseded by ROADMAP) |
+| `ROADMAP.md` | Version roadmap SSOT (V1.2.1 → V2.0, phase P0–P6 definitions) |
 | `HANDOVER.md` | V1.0 handover notes: progress, quirks, future plan pointers |
 | `docs/_archive_2026/V1.0.1-V1.1-plan.md`, `docs/_archive_2026/V1.2-Memory-RAG-Skill-plan.md` | Completed phase plans (fixes+Handoff; Memory/RAG/Skill) |
 | `docs/e2e-docker-stack.md` | Docker compose + e2e operator guide |
