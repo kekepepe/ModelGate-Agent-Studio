@@ -30,11 +30,6 @@ class TestRuntimeEntryLayer:
         from src.runtime import (
             GOAL_TRANSITIONS,
             TASK_TRANSITIONS,
-            InvalidStateTransition,
-            install_state_guards,
-            transition_goal,
-            transition_task,
-            validate_transition,
         )
         # All 15 goal states + 15 task states from V1.0-2 design §3.2
         assert "draft" in GOAL_TRANSITIONS

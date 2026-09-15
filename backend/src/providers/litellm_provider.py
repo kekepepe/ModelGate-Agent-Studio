@@ -13,7 +13,6 @@ Design rules respected:
 
 from __future__ import annotations
 
-import asyncio
 import logging
 import os
 from typing import Any, AsyncIterator, Iterable
@@ -21,7 +20,6 @@ from typing import Any, AsyncIterator, Iterable
 import litellm
 
 from .base import (
-    LLMProvider,
     ProviderAuthError,
     ProviderContextOverflow,
     ProviderError,

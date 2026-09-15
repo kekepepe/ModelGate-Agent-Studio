@@ -9,7 +9,6 @@ Per 2026-09-06-platform-redesign.md §4.1:
     response payload.
 """
 
-import json
 
 import pytest
 

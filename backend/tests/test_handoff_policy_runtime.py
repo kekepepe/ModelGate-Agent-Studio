@@ -8,7 +8,6 @@ on_provider_error supports retry_once/fail/handoff, on_quota_exhausted
 supports handoff/fail/fallback_backup, and on_quality_issue=handoff
 transfers the task after the verification retry budget is exhausted.
 """
-import json
 import uuid
 
 import pytest
@@ -17,9 +16,8 @@ from fastapi.testclient import TestClient
 from src.models.handoff import HandoffRecord
 from src.models.model import Model
 from src.models.quota import QuotaRecord
-from src.services import handoff_service
 from src.services.providers.mock_provider import MockModelProvider
-from src.services.providers.provider_factory import create_provider, set_provider
+from src.services.providers.provider_factory import set_provider
 
 
 @pytest.fixture

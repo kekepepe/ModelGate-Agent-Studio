@@ -12,7 +12,6 @@ from src.models.agent import AgentStation
 from src.models.handoff import ExecutionLog, HandoffRecord
 from src.models.knowledge import MemoryDraft
 from src.models.workspace import Goal, Task
-from src.services import memory_vector_service
 from src.services.curator_service import (
     _error_signature,
     create_user_preference,

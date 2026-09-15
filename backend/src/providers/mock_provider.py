@@ -10,7 +10,6 @@ API key; an empty key is the loudest possible failure mode (per design).
 from __future__ import annotations
 
 import asyncio
-import time
 import uuid
 from typing import Any, AsyncIterator, Iterable
 
