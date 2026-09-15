@@ -541,6 +541,14 @@ class ToolExecutor:
         if not tool_def:
             return _deny_tool_call(db, call_record, f"Tool '{tool_name}' not found or disabled")
 
+        # V1.3 P3: MCP-originated tools route through the MCP client instead
+        # of the local executor registry. The Station allowlist above and the
+        # enabled check apply equally to both paths.
+        if tool_def.server_id:
+            return await _execute_mcp_tool(
+                db, call_record, tool_def, tool_name, arguments, agent,
+            )
+
         executor_fn = TOOL_EXECUTORS.get(tool_name)
         if not executor_fn:
             return _deny_tool_call(db, call_record, f"No executor registered for tool '{tool_name}'")
@@ -637,6 +645,69 @@ class ToolExecutor:
                 "metadata": {"artifact_id": artifact_id, "tool_call_id": call_record.id},
             })
         return call_record
+
+
+async def _execute_mcp_tool(
+    db,
+    call_record: ToolCallRecord,
+    tool_def: ToolDefinition,
+    tool_name: str,
+    arguments: Dict[str, Any],
+    agent: Optional[AgentStation],
+) -> ToolCallRecord:
+    """Run an MCP-originated tool through the MCP stdio client (V1.3 P3)."""
+    import asyncio as _asyncio
+    from datetime import datetime as _datetime, timezone as _timezone
+
+    from src.models.tool import MCPToolServer
+    from src.services.mcp_client import MCPClientError, MCPStdioClient
+
+    server = db.query(MCPToolServer).filter(MCPToolServer.id == tool_def.server_id).first()
+    if not server or server.status != "active":
+        call_record.status = "denied"
+        call_record.error_message = f"MCP server for tool '{tool_name}' is missing or disabled"
+        call_record.set_result(_normalized_tool_result(call_record, {}, error=call_record.error_message))
+        db.commit()
+        _emit_tool_event(db, call_record)
+        return call_record
+
+    qualified = tool_name
+    remote_name = tool_name.split("__", 2)[-1] if tool_name.startswith("mcp__") else tool_name
+
+    def _run() -> Dict[str, Any]:
+        client = MCPStdioClient(
+            server.command_or_url,
+            server.get_args(),
+            env=server.get_env_secrets() or None,
+            timeout=30.0,
+        )
+        with client:
+            return client.call_tool(remote_name, arguments)
+
+    started = time.time()
+    try:
+        result = await _asyncio.to_thread(_run)
+    except MCPClientError as exc:
+        call_record.status = "failed"
+        call_record.error_message = exc.message
+        call_record.latency_ms = int((time.time() - started) * 1000)
+        call_record.set_result(_normalized_tool_result(call_record, {}, error=exc.message))
+        db.commit()
+        _emit_tool_event(db, call_record)
+        return call_record
+
+    call_record.status = "failed" if result.get("is_error") else "completed"
+    call_record.tool_output = result.get("content", "")[:8000]
+    call_record.latency_ms = int((time.time() - started) * 1000)
+    call_record.set_result({
+        **_normalized_tool_result(call_record, {}),
+        "mcp_content": result.get("content", ""),
+        "mcp_is_error": result.get("is_error", False),
+    })
+    call_record.updated_at = _datetime.now(_timezone.utc)
+    db.commit()
+    _emit_tool_event(db, call_record)
+    return call_record
 
 
 def _normalized_tool_result(call_record: ToolCallRecord, result: Dict[str, Any], error: Optional[str] = None) -> Dict[str, Any]:

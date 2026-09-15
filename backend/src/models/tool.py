@@ -1,7 +1,7 @@
 import json
 import uuid
 from datetime import datetime, timezone
-from typing import Any, Dict
+from typing import Any, Dict, List
 
 from sqlalchemy import Column, String, Text, Integer, Boolean, DateTime, event
 
@@ -18,6 +18,9 @@ class ToolDefinition(Base):
     category = Column(String(50), nullable=False, default="其他")
     risk_level = Column(String(10), nullable=False, default="low")
     parameters = Column(Text, nullable=False, default="{}")
+    # V1.3 P3: for MCP-originated tools, the registry server that owns this
+    # tool (mcp_servers.id). NULL = built-in local tool.
+    server_id = Column(String(36), nullable=True, index=True)
     is_enabled = Column(Boolean, nullable=False, default=True)
     created_at = Column(DateTime, nullable=False, default=lambda: datetime.now(timezone.utc))
     updated_at = Column(DateTime, nullable=False, default=lambda: datetime.now(timezone.utc))
@@ -38,6 +41,7 @@ class ToolDefinition(Base):
             "risk_level": self.risk_level,
             "parameters": self.get_parameters(),
             "is_enabled": self.is_enabled,
+            "server_id": self.server_id,
             "created_at": self.created_at.isoformat() if self.created_at else None,
             "updated_at": self.updated_at.isoformat() if self.updated_at else None,
         }
@@ -107,3 +111,61 @@ class ToolCallRecord(Base):
                 "truncated": bool(self.tool_output and self.tool_output.endswith("[output truncated]")),
             },
         }
+
+
+class MCPToolServer(Base):
+    """Registry of external MCP tool servers (V1.3 P3).
+
+    stdio transport first: the MCP stdio framing is newline-delimited
+    JSON-RPC and stable across protocol revisions. env_secrets is stored
+    redacted (never logged / never serialized back to the API).
+    """
+
+    __tablename__ = "mcp_servers"
+
+    id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    name = Column(String(100), nullable=False, unique=True)
+    transport = Column(String(30), nullable=False, default="stdio")
+    command_or_url = Column(String(2000), nullable=False)
+    args = Column(Text, nullable=False, default="[]")
+    env_secrets = Column(Text, nullable=True)
+    status = Column(String(20), nullable=False, default="active")
+    last_health = Column(String(30), nullable=True)
+    last_health_at = Column(DateTime, nullable=True)
+    created_at = Column(DateTime, nullable=False, default=lambda: datetime.now(timezone.utc))
+    updated_at = Column(DateTime, nullable=False, default=lambda: datetime.now(timezone.utc))
+
+    def get_args(self) -> List[str]:
+        return json.loads(self.args) if self.args else []
+
+    def set_args(self, v: List[str]) -> None:
+        self.args = json.dumps(v, ensure_ascii=False)
+
+    def get_env_secrets(self) -> Dict[str, str]:
+        return json.loads(self.env_secrets) if self.env_secrets else {}
+
+    def set_env_secrets(self, v: Dict[str, str]) -> None:
+        # Stored plaintext in the local SQLite file (same trust boundary as
+        # Model.api_key — single-machine product); NEVER serialized back to
+        # the API (to_dict omits it) and never logged. Handed to the spawned
+        # server process as env vars at connect time.
+        self.env_secrets = json.dumps(v, ensure_ascii=False)
+
+    def to_dict(self) -> dict:
+        return {
+            "id": self.id,
+            "name": self.name,
+            "transport": self.transport,
+            "command_or_url": self.command_or_url,
+            "args": self.get_args(),
+            "status": self.status,
+            "last_health": self.last_health,
+            "last_health_at": self.last_health_at.isoformat() if self.last_health_at else None,
+            "created_at": self.created_at.isoformat() if self.created_at else None,
+            "updated_at": self.updated_at.isoformat() if self.updated_at else None,
+        }
+
+
+@event.listens_for(MCPToolServer, "before_update")
+def receive_mcp_server_before_update(mapper, connection, target):
+    target.updated_at = datetime.now(timezone.utc)
