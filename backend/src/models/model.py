@@ -1,9 +1,9 @@
 import uuid
 import json
 from datetime import datetime, timezone
-from typing import List
+from typing import List, Optional
 
-from sqlalchemy import Column, String, Text, Integer, Boolean, DateTime, event
+from sqlalchemy import Column, String, Text, Integer, Float, Boolean, DateTime, event
 
 from src.core.database import Base
 
@@ -23,6 +23,10 @@ class Model(Base):
     is_default = Column(Boolean, nullable=False, default=False)
     api_key = Column(Text, nullable=True, default=None)
     api_base_url = Column(String(500), nullable=True, default=None)
+    # V1.3: USD per 1M tokens. Nullable — an unpriced model keeps FinalSummary
+    # cost.available=False instead of inventing numbers.
+    price_input = Column(Float, nullable=True, default=None)
+    price_output = Column(Float, nullable=True, default=None)
     created_at = Column(DateTime, nullable=False, default=lambda: datetime.now(timezone.utc))
     updated_at = Column(DateTime, nullable=False, default=lambda: datetime.now(timezone.utc))
 
@@ -31,6 +35,19 @@ class Model(Base):
 
     def set_capability_tags(self, tags: List[str]) -> None:
         self.capability_tags = json.dumps(tags)
+
+    def compute_cost(self, input_tokens: int, output_tokens: int) -> Optional[float]:
+        """USD cost for a call, or None when either price is unconfigured.
+
+        Prices are USD per 1M tokens; None means 'honest unknown', never 0.
+        """
+        if self.price_input is None or self.price_output is None:
+            return None
+        return round(
+            (input_tokens / 1_000_000) * self.price_input
+            + (output_tokens / 1_000_000) * self.price_output,
+            6,
+        )
 
     def to_dict(self) -> dict:
         return {

@@ -23,6 +23,8 @@ class QuotaRecord(Base):
     token_limit = Column(Integer, nullable=True)
     request_limit = Column(Integer, nullable=True)
     cost_limit = Column(Float, nullable=True)
+    # V1.3: running USD cost computed from Model pricing (None when unpriced).
+    total_cost_usd = Column(Float, nullable=True, default=0.0)
     reset_period = Column(String(20), nullable=True)
     reset_date = Column(Integer, nullable=True)
     usage_percent = Column(Float, nullable=True)
@@ -43,6 +45,7 @@ class QuotaRecord(Base):
             "input_tokens": self.input_tokens,
             "output_tokens": self.output_tokens,
             "total_tokens": self.total_tokens,
+            "total_cost_usd": self.total_cost_usd,
             "limit_error_count": self.limit_error_count,
             "handoff_triggered_count": self.handoff_triggered_count,
             "quota_mode": self.quota_mode,
