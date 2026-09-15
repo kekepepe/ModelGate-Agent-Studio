@@ -3,13 +3,51 @@
 Creates: 6 agents (Planner, Coder, Reviewer, Research, Summarizer, Supervisor),
 6 models, 1 sample Goal with 4 Tasks. Ready for Workspace demo.
 
-Usage: docker compose exec backend python seed_demo_data.py
+Usage:
+  python seed_demo_data.py           # idempotent: only inserts what is missing
+  python seed_demo_data.py --reset   # wipe the dev DB (goals, tasks, plans,
+                                    # memories, etc.) and re-seed deterministically
 """
 
+import sys
 import uuid
+
 from src.core.database import SessionLocal
 from src.models.agent import AgentStation
 from src.models.workspace import Goal, Task
+
+
+RESET = "--reset" in sys.argv[1:]
+
+
+def _wipe(db) -> None:
+    """Empty the dev DB so the seed run is deterministic.
+
+    The runtime tables cascade-delete the rest (handoffs, verification, logs,
+    memories) thanks to FK relationships, so we only delete the top-level rows
+    explicitly.
+    """
+    from src.models.knowledge import KnowledgeSource, MemoryDraft, SkillDraft
+    from src.models.handoff import HandoffRecord, WorkerSession, ExecutionLog
+    from src.models.supervisor import SupervisorReview
+    from src.models.workspace import (
+        RuntimeRun, PlanTask, ExecutionPlan, PlanChange, Artifact,
+        VerificationResult, WorkspaceCheckpoint,
+    )
+    from src.models.quota import QuotaRecord
+    from src.models.tool import ToolCallRecord
+    from src.models.selection import AgentSelectionDecision
+
+    # Order matters: leaf tables first to avoid FK ordering surprises; the FK
+    # constraints are enforced by SQLAlchemy but the cascade behaviour for a
+    # bulk delete depends on the relationship definitions.
+    for cls in (ExecutionLog, SupervisorReview, HandoffRecord, PlanChange,
+                VerificationResult, WorkspaceCheckpoint, Artifact,
+                ToolCallRecord, AgentSelectionDecision, MemoryDraft, SkillDraft,
+                QuotaRecord, WorkerSession, Task, PlanTask, ExecutionPlan,
+                KnowledgeSource, RuntimeRun, Goal, AgentStation):
+        db.query(cls).delete()
+    db.commit()
 
 DEMO_AGENTS = [
     {"name": "Planner Agent", "role": "planner", "default_model_id": "model-gpt-4-turbo"},
