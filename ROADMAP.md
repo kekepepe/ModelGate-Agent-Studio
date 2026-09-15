@@ -12,8 +12,8 @@
 | V1.0 | Core Agent Runtime（Goal → 拆解 → 执行 → Final Summary） | ✅ 完成 | CHANGELOG |
 | V1.1 | Handoff 完整业务流 + Quota 可视化 | ✅ 完成 | `_archive_2026/V1.0.1-V1.1-plan.md` |
 | V1.2 | Memory + RAG + Skill 沉淀 | ✅ 完成 | `_archive_2026/V1.2-Memory-RAG-Skill-plan.md` |
-| **V1.2.1** | **Architecture Alignment + CI + Product Acceptance** | ⏳ **下一步** | [V1.2.1-plan.md](./V1.2.1-plan.md) |
-| V1.3 | Real Multi-Provider + MCP | 待立项 | — |
+| **V1.2.1** | **Architecture Alignment + CI + Product Acceptance** | ✅ 完成 | [V1.2.1-plan.md](./V1.2.1-plan.md) |
+| V1.3 | Real Multi-Provider + MCP | ⏳ 下一步 | 待立项（含 e2e-live-provider.sh，需 API key） |
 | V1.4 | Parallel Multi-Agent Runtime | 待立项 | — |
 | V1.5 | Evolution Quality Loop | 待立项 | — |
 | V2.0 | Developer Agent Operating System | 愿景 | — |

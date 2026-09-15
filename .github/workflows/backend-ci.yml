@@ -1,17 +1,16 @@
 name: backend-ci
 
-# Workflow is kept as the V1.2.1 P1 quality gate baseline but is
-# intentionally disabled until V1.3 enables the broader CI set
-# (per V1.2.1 plan / ROADMAP / CHANGELOG). Pushes to main do not
-# trigger runs so the developer email stays quiet; rerun is a single
-# comment away when the broader CI set is enabled.
+# V1.2.1 P1 quality-gate baseline. Intentionally NOT wired to push so the
+# solo-developer mailbox stays quiet; run it manually from the Actions tab
+# (workflow_dispatch) when needed. V1.3 restores on: push after the broader
+# CI set lands (see ROADMAP.md + CHANGELOG).
 on:
   workflow_dispatch:
-  push:
-    branches: []
-    paths: ['.github/workflows/backend-ci.yml']  # only runs when this file itself changes
   pull_request:
-    paths: ['backend/**', '.python-version', '.github/workflows/backend-ci.yml']
+    paths:
+      - 'backend/**'
+      - '.python-version'
+      - '.github/workflows/backend-ci.yml'
 
 jobs:
   test:
@@ -46,7 +45,7 @@ jobs:
       - name: Pytest
         working-directory: backend
         env:
-          # CI runs without the agent runtime's litellm/modal SDK; mock mode is
-          # the safe default. Real-provider gates belong in V1.3 P2.
+          # CI runs without real provider keys; mock mode is the safe default.
+          # Real-provider gates belong in V1.3 P2.
           MODEL_GATE_EXECUTION_MODE: mock
         run: python -m pytest tests/ -q

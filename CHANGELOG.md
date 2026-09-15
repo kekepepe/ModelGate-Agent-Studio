@@ -22,14 +22,13 @@ redesign. Older per-phase changelogs are archived in
   工作约定），不再吸收阶段计划内容（faf963e 事故的根治）
 
 ### Quality Gate (P1) — 已完成
-- `scripts/e2e-product-acceptance.sh` 即将合并（mock 栈 3 场景：核心闭环 /
+- `scripts/e2e-product-acceptance.sh` 已合并并实测 PASS（mock 栈 3 场景：核心闭环 /
   Handoff / Evolution 沉淀→检索）
-- `.github/workflows/backend-ci.yml` + `frontend-ci.yml` 即将恢复（min pytest /
+- `.github/workflows/backend-ci.yml` + `frontend-ci.yml` 已恢复（pytest+ruff /
   lint+typecheck+test+build）
 
-- CI 工作流**当前禁用**（`on.push` 仅匹配空分支集 + `workflow_dispatch` 手动），
-  以免每次 push main 触发邮件；V1.3 启用更广 CI 集时恢复 `branches: [main]`。
-  PR 仍会触发，所以外部贡献者得到覆盖。
+- CI 工作流**不随 push 触发**（无 `on.push`，保留 `workflow_dispatch` 手动 +
+  PR 触发），以免每次 push main 触发邮件；V1.3 启用更广 CI 集时再加回 push 触发。
 
 ## V1.2 — 2026-09-15（本地 Memory / RAG 检索 / Skill 沉淀）
 

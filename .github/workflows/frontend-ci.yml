@@ -1,15 +1,14 @@
 name: frontend-ci
 
-# See backend-ci.yml — disabled until the broader CI set is enabled
-# in V1.3 to avoid main-push email noise. Manual rerun via
-# `workflow_dispatch` is always available.
+# Same policy as backend-ci: no push trigger (quiet mailbox), manual run
+# via the Actions tab, PRs still covered. V1.3 restores on: push.
 on:
   workflow_dispatch:
-  push:
-    branches: []
-    paths: ['.github/workflows/frontend-ci.yml']
   pull_request:
-    paths: ['frontend/**', '.nvmrc', '.github/workflows/frontend-ci.yml']
+    paths:
+      - 'frontend/**'
+      - '.nvmrc'
+      - '.github/workflows/frontend-ci.yml'
 
 jobs:
   test:
