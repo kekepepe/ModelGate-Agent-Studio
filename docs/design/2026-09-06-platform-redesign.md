@@ -15,8 +15,15 @@
 |---|---|
 | 产品定位 | **面向独立开发者的多模型 Agent 协作控制台**。不是 SaaS，不是企业平台。 |
 | 核心差异化 | **多角色 Station + 结构化 Handoff + 真实 LLM 全链路**。 |
-| 技术栈（前端） | Vite · React 19 · TypeScript · **TanStack Router** · **shadcn/ui** · Tailwind v4 · **Zustand** · RHF + Zod |
-| 技术栈（后端） | Python 3.12 · **FastAPI** · **SQLAlchemy 2 异步** · Alembic · Pydantic v2 · **LiteLLM** · **arq**（Redis 队列） |
+| 技术栈（前端） | Vite · React 19 · TypeScript · **React Router v7**（声明式） · **shadcn/ui** · Tailwind v4 · **TanStack Query** |
+| 技术栈（后端） | Python 3.12 · **FastAPI** · **SQLAlchemy 2（sync）** · Alembic · Pydantic v2 · httpx |
+
+> **栈决策（V1.2.1 P0 落锤，证据见 `V1.2.1-plan.md` §1.1）**：① React Router v7 正式保留
+> （全库声明式 `<Routes>`，测试覆盖）；② SQLAlchemy **sync** 正式保留（全库无 AsyncSession；
+> 单机 SQLite + 串行执行，async 重写无用户价值，V1.4 并行若成瓶颈再评估）；③ **LiteLLM 依赖保留
+> 但当前运行时未使用**——真实调用走 `src/services/providers/`（provider_factory：mock /
+> openai_compatible）；`src/providers/` 为 V1.3 P2 预留的多 Provider Adapter 层；④ arq/Redis
+> **尚未引入**，V1.4 Parallel Runtime 时才安装。
 | 数据库 | 本地 SQLite / 生产 PostgreSQL（同一套 ORM） |
 | Agent 编排 | **保留多角色 Station**（Planner / Coder / Reviewer / Researcher / Summarizer / Supervisor），但每个 Station 都是「可编辑数据」，不是写死代码；用户可克隆/编辑/新建 |
 | 实时通信 | **SSE**（run 状态流） + 2s 轮询兜底 |
@@ -299,7 +306,10 @@ Worker 触发 Handoff
 
 ## 5. 前端设计
 
-### 5.1 路由（TanStack Router）
+### 5.1 路由（React Router v7）
+
+> 2026-09-15 修订：正式选型为 **react-router-dom v7 声明式路由**（`src/App.tsx` 的 `<Routes>`）。
+> 原规划的 TanStack Router（file-based）未采用；TanStack **Query**（服务端状态）正常使用。
 
 ```text
 /                              → /studio 重定向
@@ -500,24 +510,27 @@ RunOrchestrator.execute(goal_id)
 - **V1.0**：直接 `asyncio.create_task` 跑 Worker，不用外部队列（单机够用）
 - **V1.3+**：引入 arq + Redis，多 Worker 并行 + 跨进程恢复
 
-### 6.5 Provider 抽象（LiteLLM）
+### 6.5 Provider 抽象（双层，V1.2.1 P0 澄清）
+
+**现役层：`src/services/providers/`**（runtime 实际调用）
 
 ```python
-class LLMProvider(Protocol):
-    async def chat(
-        self,
-        messages: list[dict],
-        model: str,
-        tools: list[dict] | None = None,
-        stream: bool = False,
-        **kwargs,
-    ) -> ChatResponse: ...
-    async def stream_chat(self, ...) -> AsyncIterator[Chunk]: ...
-    def token_count(self, messages) -> int: ...
+class ModelProvider(Protocol):
+    async def generate(self, request: ModelRequest) -> ModelResponse: ...
+    async def health_check(self, model: str) -> Dict[str, Any]: ...
+    def stream(self, request: ModelRequest) -> AsyncIterator[ModelStreamEvent]: ...
 ```
 
-`litellm_provider.py` 调 LiteLLM；`mock_provider.py` 离线 dev 用。
-**禁止**业务代码直接 import litellm。
+- `provider_factory.get_provider(model, execution_mode)`：mock / openai_compatible 两实现；
+  无 API key 的 live 模式**显式失败**，不静默回退 mock
+- 业务代码（runtime / handoff / review）只 import 这一层
+
+**预留层：`src/providers/`（LiteLLM）**——`litellm==1.55.0` 依赖保留，当前仅由
+`main.py` 的启动期配置校验引用（见 §6.x verify_provider_config）。V1.3 P2 Real
+Multi-Provider 时恢复为非 OpenAI-compatible Provider 的适配实现；届时与此层合并决策
+再定。`_init_provider` 时代的描述（async chat/stream_chat Protocol）已被本节取代。
+
+**arq/Redis**：V1.4 Parallel Runtime 才引入，当前不安装。
 
 ### 6.6 错误分类
 
@@ -689,72 +702,59 @@ CREATE TABLE quota_records (
 
 ## 8. 阶段化交付
 
-> 全部阶段由我（Mavis）实现 + 推送到 GitHub。每阶段结束有可运行 demo + 测试通过 + 文档更新。
->
-> ⚠️ **2026-09-15 修订**：本节旧编号（V1.0–V1.4）已被 [`ROADMAP.md`](../../ROADMAP.md) 取代——
-> 新路线为 V1.2.1（Architecture Alignment + CI + Acceptance）→ V1.3（Real Multi-Provider + MCP）
-> → V1.4（Parallel Runtime）→ V1.5（Evolution Quality Loop）→ V2.0。本节按旧编号保留作历史参考，
-> 按新编号改写是 V1.2.1 P0 的任务。
+> **2026-09-15 重写**：本节编号已按 [`ROADMAP.md`](../../ROADMAP.md) 对齐（旧 V1.0–V1.4 编号作废）。
+> 每阶段立项时在根目录产出独立计划文档；已完成阶段的计划归档至 `docs/_archive_2026/`。
+> 完成记录以 `CHANGELOG.md` 为准。
 
-### V1.0 — 核心闭环（目标：2-3 周）
+### ✅ V1.0 — Core Agent Runtime（已完成）
 
-**目标**：本地能跑 `Goal → Task → Worker → Model → Final Summary`，不接 Handoff / 不接 Quota / 不接并行。
+`Goal → 拆解 → 执行 → Final Summary` 核心闭环；FastAPI + SQLAlchemy(sync) + Alembic；
+6 Station seed + 6 Model seed；Router 6 维评分；状态机；Docker Compose。
+验收：docker compose up 可跑通 + e2e-demo.sh PASS + pytest 411。
 
-**包含**：
-- 后端：FastAPI + SQLAlchemy 异步 + Alembic + LiteLLM + 状态机
-- 6 个预制 Station seed
-- 6 个预制 Model seed（包含 mock）
-- Goal/Task/Worker CRUD + 同步执行
-- Router（基础 6 维评分）
-- Final Summary
-- 前端：Studio + Workspace + 简单 Logs
-- 基础设计系统（shadcn/ui + tailwind）
-- Docker Compose 起后端 + 前端 + 可选 PG
+### ✅ V1.1 — Handoff + Quota（已完成）
 
-**验收**：
-- `docker compose up` 后浏览器能创建 Run 并看到执行完成
-- 后端 pytest 通过
-- 前端 build + typecheck 通过
+Handoff 完整业务流（LLM 摘要 + handoff_policy 三触发点 + accept/resume）；
+Quota 拦截与可视化。验收：e2e-handoff.sh PASS。详见 `docs/_archive_2026/V1.0.1-V1.1-plan.md`。
 
-### V1.1 — Handoff + Quota（目标：+1-2 周）
+### ✅ V1.2 — Memory + RAG + Skill（已完成）
 
-**包含**：
-- Handoff 状态机 + Summary 生成（LLM 优先，fallback 模板）
-- Quota 记录 + 状态机 + 拦截
-- Workspace Task Card 的 Handoff 状态条
-- Quota Overview 页
+经验沉淀（error→solution）、用户偏好、记忆/技能向量化混合检索、技能成功率加权、
+渐进披露。验收：pytest 451 + 前端 183 + 专项测试。详见 `docs/_archive_2026/V1.2-Memory-RAG-Skill-plan.md`。
 
-**验收**：
-- 模拟 quota 耗尽，能看到 auto-handoff
-- Logs 能看到 Handoff 事件链
+### ⏳ V1.2.1 — Architecture Alignment + CI + Product Acceptance（当前阶段）
 
-### V1.2 — 实时 + 打磨（目标：+1 周）
+- P0 架构收口：技术栈决策落锤（§1 技术栈表）；HANDOVER 重构为标准交接文档；失实声明清扫；本节重写
+- P1 质量门禁：最小 GitHub Actions（backend pytest+lint / frontend lint+typecheck+test+build）；
+  `e2e-product-acceptance.sh` 三场景（核心闭环 / Handoff / Evolution 沉淀→检索）证明 README 每项声明
 
-**包含**：
-- SSE 实时事件流
-- Workspace 状态恢复（URL 刷新继续看）
-- Task Detail 侧栏（Router 决策 / Token / Context / Logs tab）
-- Pixel Office 简化版（一张静态图，可选）
-- 全局错误处理 / Toast / 加载态
+**边界：零新功能、零依赖变更。**
 
-### V1.3 — 自定义 Station + MCP（目标：+2 周）
+### V1.3 — Real Multi-Provider + MCP（下一主版本）
 
-**包含**：
-- Agents 页（编辑 / 克隆 / 试运行）
-- Models 页（注册 / 测试连接 / 启禁用）
-- Tools 页（MCP tool 列表 / 权限）
-- Station 试运行（独立小窗口）
+- P2 Real Multi-Provider：≥2 家真实 Provider 跨模型执行（LiteLLM 预留层在此恢复或改写为
+  native adapters）；Provider failure → backup/handoff 实测；真实 token/latency/cost 记录；
+  `e2e-live-provider.sh`
+- P3 MCP Runtime：`tool_service.py` 保留为 Local Tool Runtime，其上加 MCPServer/MCPClient、
+  server 发现、tools/list 同步、schema 映射、Station 工具权限、风险审批、call log、健康检查；
+  首批 filesystem + GitHub（或 filesystem + browser）
 
-### V1.4 — 进阶（按需）
+### V1.4 — Parallel Multi-Agent Runtime
 
-- 有限并行 Task
-- Goal 复制 / 模板
-- Export Final Summary
-- Nightly Provider Benchmark runner
-- Postgres + Redis 切换
-- (V2.0 再考虑) Memory / Skill / 自进化
+DAG Scheduler：无依赖 Task 并行、依赖等待、Station max_concurrency、Run pause/resume、
+Worker crash 恢复。**Redis/arq 在本版本才引入。**
 
----
+### V1.5 — Evolution Quality Loop
+
+从"能记忆"到"记忆真的改善下一次任务"：Memory usefulness 闭环（retrieval hit→accepted→used）、
+Skill versioning、过期/冲突记忆、失败 Skill 降权 disable、同类 experience merge、
+"本次执行调用了哪条历史经验及其影响"的可见性。
+
+### V2.0 — Developer Agent Operating System
+
+产品化收口：Station Test Run、Model connection diagnostics、Context Inspector、Run Export、
+Goal Template、最终报告导出、Demo Dataset。不做：多人协作、Marketplace、知识图谱、
+Pixel Office 复杂动画。
 
 ## 9. 仓库结构
 
