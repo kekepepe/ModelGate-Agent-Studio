@@ -23,8 +23,9 @@ class QuotaRecord(Base):
     token_limit = Column(Integer, nullable=True)
     request_limit = Column(Integer, nullable=True)
     cost_limit = Column(Float, nullable=True)
-    # V1.3: running USD cost computed from Model pricing (None when unpriced).
-    total_cost_usd = Column(Float, nullable=True, default=0.0)
+    # V1.3: running USD cost computed from Model pricing. None means 'no
+    # priced call has happened yet' — honest unknown, not zero.
+    total_cost_usd = Column(Float, nullable=True, default=None)
     reset_period = Column(String(20), nullable=True)
     reset_date = Column(Integer, nullable=True)
     usage_percent = Column(Float, nullable=True)

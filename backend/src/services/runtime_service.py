@@ -768,6 +768,7 @@ def _execute_single_task(db: Session, task: Task) -> Dict[str, Any]:
                     "output_tokens": response.output_tokens,
                     "total_tokens": response.total_tokens,
                 },
+                "cost_usd": model.compute_cost(response.input_tokens, response.output_tokens) if model else None,
                 "latency_ms": response.latency_ms,
                 # Keep the full decision beside the model call so Workspace can explain
                 # the selected model without issuing a second routing request.
@@ -1661,9 +1662,9 @@ def _build_final_summary(
 ) -> Dict[str, Any]:
     """Build an honest, inspectable completion report for the Workspace.
 
-    Model records currently expose a relative ``cost_level`` but not provider
-    currency pricing. The report therefore explicitly marks a currency
-    estimate unavailable instead of inventing a monetary value.
+    Currency cost is aggregated from the per-call cost_usd written onto
+    model_call logs (models.price_input/price_output). Unpriced models keep
+    the report honest: their cost is None and excluded from the total.
     """
     from src.services import review_service
 
@@ -1690,11 +1691,29 @@ def _build_final_summary(
             for model in db.query(Model).filter(Model.id.in_(model_ids)).all()
         }
 
+    # V1.3: real per-goal cost — SUM of the cost_usd written onto model_call
+    # logs (None when none of the used models carried pricing).
+    cost_rows = (
+        db.query(ExecutionLog.model_id, ExecutionLog.cost_usd)
+        .filter(
+            ExecutionLog.goal_id == goal.id,
+            ExecutionLog.event_type == "model_call",
+            ExecutionLog.cost_usd.isnot(None),
+        )
+        .all()
+    )
+    cost_by_model: Dict[str, float] = {}
+    for cost_model_id, cost_value in cost_rows:
+        if cost_model_id and cost_value is not None:
+            cost_by_model[cost_model_id] = cost_by_model.get(cost_model_id, 0.0) + cost_value
+    total_cost = round(sum(cost_by_model.values()), 6) if cost_by_model else None
+
     model_usage = [
         {
             "id": model_id,
             "name": models_by_id[model_id].display_name if model_id in models_by_id else model_id,
             "cost_level": models_by_id[model_id].cost_level if model_id in models_by_id else None,
+            "cost_usd": round(cost_by_model[model_id], 6) if model_id in cost_by_model else None,
         }
         for model_id in model_ids
     ]
@@ -1719,8 +1738,12 @@ def _build_final_summary(
         "handoff_count": handoff_count,
         "multi_agent": multi_agent_metrics,
         "cost": {
-            "currency_estimate": None,
-            "available": False,
-            "note": "尚未配置 Provider 单价表；当前只展示模型相对 cost_level，不虚构货币成本。",
+            "currency_estimate": total_cost,
+            "available": total_cost is not None,
+            "note": (
+                "按 Provider 单价表实时计算的 USD 估算；未配价的调用不计入。"
+                if total_cost is not None
+                else "所用模型未配置单价（models.price_input/price_output），无法估算货币成本。"
+            ),
         },
     }

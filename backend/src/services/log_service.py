@@ -41,6 +41,7 @@ def create_log(db: Session, data: Dict[str, Any], *, commit: bool = True) -> Exe
         tool_name=data.get("tool_name"),
         quota_status=data.get("quota_status"),
         handoff_status=data.get("handoff_status"),
+        cost_usd=data.get("cost_usd"),
     )
     if data.get("token_usage"):
         log.set_token_usage(data["token_usage"])

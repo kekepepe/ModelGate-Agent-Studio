@@ -176,6 +176,14 @@ def record_usage(
         else:
             record.total_tokens = record.input_tokens + record.output_tokens
 
+    # V1.3: real USD cost from Model pricing. None stays None — honest unknown.
+    from src.models.model import Model
+
+    model_row = db.query(Model).filter(Model.id == model_id).first()
+    call_cost = model_row.compute_cost(request_tokens, response_tokens) if model_row else None
+    if call_cost is not None:
+        record.total_cost_usd = (record.total_cost_usd or 0.0) + call_cost
+
     # Recalculate derived fields
     record.usage_percent = _calculate_usage_percent(record)
     record.estimated_remaining = _calculate_estimated_remaining(record)
@@ -190,6 +198,8 @@ def record_usage(
         "updated_status": record.quota_status,
         "usage_percent": record.usage_percent,
         "estimated_remaining": record.estimated_remaining,
+        "cost_usd": call_cost,
+        "total_cost_usd": record.total_cost_usd,
         "risk_flags": _build_risk_flags(record),
     }
 
@@ -341,7 +351,6 @@ def update_quota_config(
     elif record.request_limit and record.request_limit > 0:
         record.quota_mode = QUOTA_MODE_KNOWN
 
-    # Recalculate derived fields
     record.usage_percent = _calculate_usage_percent(record)
     record.estimated_remaining = _calculate_estimated_remaining(record)
     record.quota_status = _determine_quota_status(record)

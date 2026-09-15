@@ -3,7 +3,7 @@ import uuid
 from datetime import datetime, timezone
 from typing import Any, Dict
 
-from sqlalchemy import Column, DateTime, Integer, String, Text, event
+from sqlalchemy import Column, DateTime, Integer, String, Text, event, Float
 
 from src.core.database import Base
 
@@ -167,6 +167,8 @@ class ExecutionLog(Base):
     output_summary = Column(Text, nullable=True)
     token_usage = Column(Text, nullable=True)
     latency_ms = Column(Integer, nullable=True)
+    # V1.3: USD cost of this model call (None when the model is unpriced).
+    cost_usd = Column(Float, nullable=True)
 
     error_type = Column(String(50), nullable=True)
     error_code = Column(String(50), nullable=True)
