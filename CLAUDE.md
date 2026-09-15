@@ -153,7 +153,8 @@ The authoritative schema reference is the design doc §7 (`docs/design/2026-09-0
 |------|---------|
 | `docs/design/2026-09-06-platform-redesign.md` | Single authoritative design doc (11 chapters, V1.0–V1.4 phasing) |
 | `HANDOVER.md` | V1.0 handover notes: progress, quirks, future plan pointers |
-| `V1.0.1-V1.1-plan.md` | Current phase plan (fixes, CI, Handoff business flow) |
+| `docs/_archive_2026/V1.0.1-V1.1-plan.md`, `docs/_archive_2026/V1.2-Memory-RAG-Skill-plan.md` | Completed phase plans (fixes+Handoff; Memory/RAG/Skill) |
+| `docs/e2e-docker-stack.md` | Docker compose + e2e operator guide |
 | `frontend/src/index.css` | Tailwind theme config (custom colors) |
 | `backend/tests/conftest.py` | Test fixtures and DB cleanup strategy |
 | `docs/_archive_2026/v1.0_deletions_log.md` | Record of what was deleted/kept in V1.0 and why |

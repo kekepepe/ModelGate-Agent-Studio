@@ -10,8 +10,8 @@
 | 路径 | 说明 |
 |---|---|
 | `design/2026-09-06-platform-redesign.md` | **唯一权威设计文档**（架构 / 前后端 / Agent / 数据 / 阶段） |
-| `../V1.0.1-V1.1-plan.md` | V1.0.1/V1.1 执行计划（已完成，留档） |
-| `../V1.2-Memory-RAG-Skill-plan.md` | **当前阶段执行计划**（本地 Memory / RAG 检索 / Skill 沉淀），进度 checkbox 在此维护 |
+| `_archive_2026/V1.0.1-V1.1-plan.md` | V1.0.1/V1.1 执行计划（已完成，留档） |
+| `_archive_2026/V1.2-Memory-RAG-Skill-plan.md` | V1.2 Memory / RAG / Skill 执行计划（已完成，留档，含高星项目调研） |
 | `_archive_2026/` | 重设计前的所有旧文档（V0 / MVP / P0-P7 时期），仅供考古 |
 
 ## 使用规则
@@ -27,7 +27,8 @@
 - ✅ V1.0 核心闭环（29 个提交，`e3fc444` docker compose + `36094e0` release notes 收尾）
 - ✅ V1.0 末位补活：P0-P3 shadcn 化 + SSE + tasks 列表接口
 - ⏳ V1.0.1 补短板（CI / 文档修正 / 测试修复）→ 见 `../V1.0.1-V1.1-plan.md` Phase F/C
-- ✅ V1.1 Handoff + Quota（见 `../V1.0.1-V1.1-plan.md`，全部勾选）
-- ⏳ V1.2 Memory / RAG / Skill 沉淀 → 见 `../V1.2-Memory-RAG-Skill-plan.md`
+- ✅ V1.1 Handoff + Quota（`_archive_2026/V1.0.1-V1.1-plan.md`，全部勾选）
+- ✅ V1.2 Memory / RAG / Skill 沉淀（`_archive_2026/V1.2-Memory-RAG-Skill-plan.md`，全部勾选）
+- ⏳ V1.3+：自定义 Station / MCP 工具页 / arq 多 Worker 并行（待立项）
 
 > 最后更新：2026-09-15

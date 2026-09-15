@@ -8,7 +8,7 @@ redesign. Older per-phase changelogs are archived in
 
 ## V1.2 — 2026-09-15（本地 Memory / RAG 检索 / Skill 沉淀）
 
-计划与参考调研见 `V1.2-Memory-RAG-Skill-plan.md`（mem0 / Voyager /
+计划与参考调研见 `docs/_archive_2026/V1.2-Memory-RAG-Skill-plan.md`（已归档；mem0 / Voyager /
 Claude Agent Skills 取舍）。目标：把每次执行的上下文、经验、错误、
 解决方案和工作流变成可复用知识，任何模型接入后都能继承。
 
@@ -37,7 +37,7 @@ Claude Agent Skills 取舍）。目标：把每次执行的上下文、经验、
 
 ## V1.0.1 / V1.1 — 2026-09-15（修复 + Handoff 完整业务流）
 
-计划与逐项进度见 `V1.0.1-V1.1-plan.md`；CI 工作流按用户决定暂缓。
+计划与逐项进度见 `docs/_archive_2026/V1.0.1-V1.1-plan.md`（已归档）；CI 工作流按用户决定暂缓。
 
 ### Fixed（V1.0.1 修复批）
 - `frontend/src/components/ui/select.tsx` 入库 —— 它已被 LogFilters /
@@ -156,7 +156,7 @@ parallelism, custom Stations, and a CI gate.
 - `scripts/e2e-demo.sh` — full end-to-end smoke test against a
   running stack. Verifies all 7 Final Summary contract fields
   are present.
-- `V1.0-7-e2e.md` — operator doc for bringing the stack up.
+- `docs/e2e-docker-stack.md` — operator doc for bringing the stack up.
 
 ### Changed
 
