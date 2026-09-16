@@ -8,7 +8,7 @@ real OpenAI-compatible provider via the ModelProvider Protocol).
 import json
 import time
 import uuid
-from concurrent.futures import ThreadPoolExecutor, as_completed
+from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, List, Optional
 
@@ -386,13 +386,18 @@ def _execute_parallel_tasks(db: Session, task_ids: List[str]) -> List[tuple[str,
 
     with ThreadPoolExecutor(max_workers=len(task_ids), thread_name_prefix="modelgate-worker") as pool:
         futures = [pool.submit(run, task_id) for task_id in task_ids]
-        return [future.result() for future in as_completed(futures)]
+        # Collect in the caller's task order (scheduler priority order), not
+        # as_completed order — downstream merge and accounting must be
+        # deterministic across runs.
+        return [future.result() for future in futures]
 
 
 def _merge_parallel_worktrees(db: Session, task_ids: List[str]) -> set[str]:
     """Merge worker diffs serially; materialize conflicts as resolution work."""
     from src.models.workspace import WorkspaceWorktree
     from src.services.worktree_service import merge_worktree
+    # Merges follow the scheduler's task order (priority + dependencies),
+    # not thread completion order, so repeated runs merge identically.
     conflicted = set()
     for task_id in task_ids:
         record = db.query(WorkspaceWorktree).filter(WorkspaceWorktree.task_id == task_id).first()
@@ -596,6 +601,21 @@ def _execute_single_task(db: Session, task: Task) -> Dict[str, Any]:
                     "is_handoff": False,
                 }
             workspace_scope = worktree.path
+        # V1.4 T3: incremental resume — a task re-entering execution with
+        # checkpoints continues from its last stable state instead of
+        # replaying from scratch. Worktree tasks are excluded: their
+        # checkpoints reference primary-workspace paths, and the fresh
+        # worktree already carries the merged mainline state.
+        if not workspace_scope and not getattr(task, "_handoff_resumed", False):
+            restored_paths = _restore_task_checkpoints(db, task)
+            if restored_paths:
+                log_service.create_log(db, {
+                    "goal_id": task.goal_id, "task_id": task.id, "agent_id": agent.id,
+                    "event_type": "task.checkpoint_resumed", "event_status": "completed",
+                    "output_summary": f"Incremental resume: {len(restored_paths)} checkpointed path(s) restored",
+                    "metadata": {"paths": restored_paths},
+                }, commit=False)
+
         worker = WorkerSession(
             id=str(uuid.uuid4()),
             agent_id=agent.id,
