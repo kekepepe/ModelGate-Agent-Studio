@@ -34,6 +34,15 @@ def create_worktree(db: Session, goal: Goal, task: Task, base_ref: str = "HEAD")
     os.makedirs(os.path.dirname(target), exist_ok=True)
     base_commit_sha = _run_git(root, ["rev-parse", base_ref]).stdout.strip()
     branch_name = f"modelgate/{_branch_part(goal.id)}/{_branch_part(task.id)}"
+    # Idempotent retry: a previous attempt may have created the branch (and
+    # even the worktree) before failing later in the pipeline. Reuse the
+    # branch if it exists; prune a stale worktree registration first.
+    _run_git(root, ["worktree", "prune"])
+    branches = _run_git(root, ["branch", "--list", branch_name]).stdout.strip()
+    if branches:
+        if os.path.isdir(target):
+            _run_git(root, ["worktree", "remove", "--force", target])
+        _run_git(root, ["branch", "-D", branch_name])
     _run_git(root, ["worktree", "add", "-b", branch_name, target, base_commit_sha])
     record = existing or WorkspaceWorktree(goal_id=goal.id, task_id=task.id, path=target, base_ref=base_ref)
     record.path, record.base_ref = target, base_ref
