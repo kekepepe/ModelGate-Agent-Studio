@@ -14,8 +14,8 @@
 | V1.2 | Memory + RAG + Skill 沉淀 | ✅ 完成 | `_archive_2026/V1.2-Memory-RAG-Skill-plan.md` |
 | **V1.2.1** | **Architecture Alignment + CI + Product Acceptance** | ✅ 完成 | [V1.2.1-plan.md](./V1.2.1-plan.md) |
 | V1.3 | Real Multi-Provider + MCP | 📋 计划就绪（OpenAI-compatible + Anthropic native；MCP 首批 filesystem+GitHub） | [V1.3-plan.md](./V1.3-plan.md) |
-| V1.4 | Parallel Multi-Agent Runtime（单机强化，**不引入 arq/Redis**） | 📋 计划就绪 | [V1.4-plan.md](./V1.4-plan.md) |
-| V1.5 | Evolution Quality Loop（知识主线重心） | 📋 计划就绪 | [V1.5-plan.md](./V1.5-plan.md) |
+| V1.4 | Parallel Multi-Agent Runtime（单机强化） | ✅ 完成 | [V1.4-plan.md](./V1.4-plan.md) |
+| **V1.5** | **Evolution Quality Loop（知识主线重心）** | ⏳ **下一步** | [V1.5-plan.md](./V1.5-plan.md) |
 | V2.0 | Developer Agent Operating System | 愿景 | — |
 
 ## 阶段总览（P0–P6 → 版本映射）

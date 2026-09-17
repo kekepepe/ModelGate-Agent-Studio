@@ -6,6 +6,29 @@ V1.0 is the first release produced under the 2026-09-06 platform
 redesign. Older per-phase changelogs are archived in
 `docs/_archive_2026/CHANGELOG.md`.
 
+## V1.4 — 2026-09-17（Parallel Multi-Agent Runtime · 单机强化）
+
+按用户决策不引入 Redis/arq；探索证实的真实 gap 全部补齐：
+
+- **SQLite WAL**：connect 时 PRAGMA journal_mode=WAL + busy_timeout=5000 +
+  synchronous=NORMAL；8 线程 ×10 commit 压力测试零 'database is locked'
+- **恢复常态化**：进程内 recovery daemon（60s 周期，app 启动挂载，session
+  factory 可注入）；杀掉宿主进程后过期任务在下一周期自动恢复（幂等工具
+  重跑 / 非幂等 → waiting_approval）。设计修正：daemon **只做恢复**——
+  live 任务在 runtime 循环内自续租，daemon 心跳会救活死租约、破坏过期信号
+- **checkpoint 增量 resume**：pending 重入执行时恢复最近 WorkspaceCheckpoint
+  （task.checkpoint_resumed 事件）；worktree 任务排除（checkpoint 指向
+  主工作区路径）
+- **确定性并行**：结果收集按调度序（去 as_completed 乱序），merge 同序
+- **e2e-parallel.sh 6 步 PASS**：真实并行规划（前端和后端触发词）→
+  parallel_group_started + 双 worktree 创建/合并 → completion gate +
+  auto-replan（mock 契约：coding 任务无真实验证证据，gate 转 replan）
+- 顺带修复：worktree 创建幂等化（失败残留分支永久阻塞重试的真 bug）
+
+### 数字
+- 后端 pytest：**493 passed, 1 skipped**（V1.3 末态 505，净变化来自
+  litellm 移除后的测试清理与新增测试）
+
 ## V1.3 — 2026-09-16（Real Multi-Provider + MCP）
 
 ### P2 Real Multi-Provider

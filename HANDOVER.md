@@ -14,11 +14,11 @@
 
 | 项 | 值 |
 |---|---|
-| 当前版本 | V1.3 ✅ 完成（Real Multi-Provider + MCP）；下一版本 V1.4（Parallel 强化，见计划） |
+| 当前版本 | V1.4 ✅ 完成（Parallel 强化）；下一版本 V1.5（Evolution Quality Loop，知识主线重心） |
 | 已完成 | V1.0 核心闭环 / V1.1 Handoff+Quota / V1.2 Memory+RAG+Skill |
-| 后端 pytest | **505 passed, 1 skipped** |
+| 后端 pytest | **493 passed, 1 skipped** |
 | 前端 vitest | **183 passed / 38 文件**（typecheck / build / lint 全绿） |
-| e2e 验收 | `scripts/e2e-demo.sh` PASS · `scripts/e2e-handoff.sh` PASS |
+| e2e 验收 | e2e-demo / e2e-handoff / e2e-product-acceptance / **e2e-mcp** / **e2e-parallel** 全 PASS |
 | CI | workflow 已就位但**默认静音**（push 不触发；Actions 页手动 `workflow_dispatch` 或 PR 触发） |
 | 远程 | `https://github.com/kekepepe/ModelGate-Agent-Studio.git`（main，Keychain 免密） |
 | 本地路径 | `/Users/kepeng/codex_project/ModelGate Agent Studio`（**路径含空格，命令行记得加引号**） |
