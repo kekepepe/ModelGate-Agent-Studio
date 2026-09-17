@@ -19,6 +19,7 @@ from sqlalchemy.orm import Session
 from src.models.agent import AgentStation
 from src.models.handoff import ExecutionLog, HandoffRecord
 from src.models.knowledge import MemoryDraft, SkillDraft
+from src.models.model import Model
 from src.models.supervisor import SupervisorReview
 from src.models.workspace import Goal, Task
 from src.models.tool import ToolCallRecord
@@ -50,15 +51,33 @@ def generate_memories(db: Session, goal_id: str, run_id: Optional[str] = None) -
     if len(tasks) >= 1:
         completed_tasks = [t for t in tasks if t.status in ("completed", "completed_verified", "completed_unverified")]
         if completed_tasks:
+            # V1.5 QL5: LLM-first distillation with the rule template as the
+            # honest fallback; provenance recorded either way.
+            evidence = {
+                "_goal": goal,
+                "goal_title": goal.title,
+                "goal_status": goal.status,
+                "tasks": [{"title": t.title, "status": t.status, "task_type": t.task_type} for t in tasks],
+                "tokens_used": sum(t.tokens_used or 0 for t in tasks),
+                "error_count": sum(1 for l in logs if l.event_status in ("error", "failed")),
+            }
+            planner_model = None
+            planner_agent = db.query(AgentStation).filter(
+                AgentStation.role == "planner", AgentStation.is_enabled == True,  # noqa: E712
+            ).first()
+            if planner_agent and planner_agent.default_model_id:
+                planner_model = db.query(Model).filter(Model.id == planner_agent.default_model_id).first()
+            llm_content = _llm_distill(db, evidence, planner_model)
+            generated_by = "llm" if llm_content else "rule"
             project_memory = MemoryDraft(
                 id=str(uuid.uuid4()),
                 source_run_id=run_id,
                 source_goal_id=goal_id,
                 type="project_memory",
                 title=f"Project Pattern: {goal.title}",
-                content=_build_project_memory_content(goal, tasks, logs),
+                content=llm_content or _build_project_memory_content(goal, tasks, logs),
                 confidence=_calc_confidence(tasks, logs),
-                reason="Auto-generated from completed run",
+                reason=f"Auto-generated from completed run ({generated_by})",
                 expires_at=datetime.now(timezone.utc) + timedelta(days=90),
             )
             project_memory.set_tags(["project", "pattern", goal.status])
@@ -243,6 +262,55 @@ def create_user_preference(
     return preference.to_dict()
 
 
+_RESOLUTION_KINDS = {
+    "recovered": ("Recovered via", "Task eventually"),
+    "replan": ("Resolved via automatic replan",),
+    "unresolved": ("Unresolved:",),
+}
+
+
+def _resolution_kind(narrative: str) -> str:
+    for kind, prefixes in _RESOLUTION_KINDS.items():
+        if narrative.startswith(prefixes):
+            return kind
+    return "unknown"
+
+
+def _resolutions_conflict(stored: str, incoming: str) -> bool:
+    """Same error class resolving two different ways is a contradiction."""
+    stored_kind, incoming_kind = _resolution_kind(stored), _resolution_kind(incoming)
+    if stored_kind == "unknown" or incoming_kind == "unknown":
+        return False
+    return stored_kind != incoming_kind
+
+
+def resolve_memory_conflict(db: Session, memory_id: str, keep: str = "stored") -> Dict[str, Any]:
+    """Human adjudication for a flagged conflict (V1.5 QL6/D4).
+
+    keep='stored' drops the conflicting alternative; keep='incoming' adopts
+    it; 'merge' keeps both narratives side by side. Any choice resolves the
+    flag — the memory itself is never deleted.
+    """
+    memory = db.query(MemoryDraft).filter(MemoryDraft.id == memory_id).first()
+    if not memory:
+        raise ValueError(f"Memory draft '{memory_id}' not found")
+    if memory.conflict_state != "conflict":
+        raise ValueError(f"Memory '{memory_id}' is not flagged as conflicted")
+    metadata = memory.get_metadata()
+    conflicting = metadata.pop("conflicting_resolution", None)
+    if keep == "incoming" and conflicting:
+        metadata["resolution"] = conflicting
+        memory.content = f"{memory.content.split(chr(10) + 'Resolution:')[0]}{chr(10)}Resolution: {conflicting}{chr(10)}Occurrences: {metadata.get('occurrence_count', 1)}"
+    elif keep == "merge" and conflicting:
+        metadata["resolution"] = f"{metadata.get('resolution', '')} | also observed: {conflicting}"
+    metadata["adjudicated_at"] = datetime.now(timezone.utc).isoformat()
+    memory.set_metadata(metadata)
+    memory.conflict_state = "resolved"
+    db.commit()
+    db.refresh(memory)
+    return memory.to_dict()
+
+
 def record_memory_outcome(db: Session, context_json: Optional[str], task_status: str) -> None:
     """V1.5 QL2: attribute the task outcome to the memories whose context
     actually carried it (the used set), closing the effectiveness loop.
@@ -322,6 +390,69 @@ def record_skill_outcome(db: Session, context_json: Optional[str], succeeded: bo
             skill.failure_count = (skill.failure_count or 0) + 1
         skill.last_used_at = datetime.now(timezone.utc)
     db.flush()
+
+
+LLM_MEMORY_PROMPT = (
+    "You are the knowledge curator of a multi-agent execution platform. "
+    "Distill the execution evidence below into reusable knowledge. Respond "
+    "with ONLY a JSON object — no markdown fences — with exactly these keys: "
+    '["title", "content"] where title is <=80 chars and content is <=500 '
+    "chars of dense, factual, reusable guidance for future runs. Never invent "
+    "work the evidence does not show."
+)
+
+
+def _llm_distill(db: Session, evidence: Dict[str, Any], model: Optional[Any]) -> Optional[str]:
+    """V1.5 QL5: ask the run's model to distill memory content.
+
+    Returns None whenever the LLM path is unavailable (mock mode, missing
+    model record, provider error, unparseable output) so the caller falls
+    back to the rule-based template unchanged.
+    """
+    if model is None:
+        return None
+    goal_record = evidence.get("_goal")
+    execution_mode = (getattr(goal_record, "execution_mode", None) or settings.execution_mode or "live").lower()
+    if execution_mode == "mock":
+        return None
+    try:
+        import asyncio
+
+        from src.services.providers import ModelRequest, get_provider
+        from src.services.providers.provider_config import provider_model_name
+
+        provider = get_provider(model=model, execution_mode=execution_mode)
+        request = ModelRequest(
+            provider=model.provider,
+            model=provider_model_name("summarizer", model.model_name),
+            messages=[
+                {"role": "system", "content": LLM_MEMORY_PROMPT},
+                {"role": "user", "content": json.dumps(
+                    {k: v for k, v in evidence.items() if not k.startswith("_")},
+                    ensure_ascii=False, default=str,
+                )},
+            ],
+            temperature=0.2,
+            max_tokens=400,
+            metadata={"purpose": "memory_distillation", "model_record_id": model.id},
+        )
+        response = asyncio.run(provider.generate(request))
+        parsed = _extract_json_object(response.content or "")
+        content = (parsed or {}).get("content")
+        return content if isinstance(content, str) and content.strip() else None
+    except Exception:
+        return None
+
+
+def _extract_json_object(text: str) -> Optional[Dict]:
+    start, end = text.find("{"), text.rfind("}")
+    if start < 0 or end <= start:
+        return None
+    try:
+        parsed = json.loads(text[start:end + 1])
+    except (ValueError, TypeError):
+        return None
+    return parsed if isinstance(parsed, dict) else None
 
 
 _TERMINAL_SUCCESS = {"completed", "completed_verified", "completed_unverified"}
@@ -407,7 +538,13 @@ def _extract_experiences(
             # Mem0-style UPDATE: merge occurrences instead of appending noise.
             metadata = existing.get_metadata()
             metadata["occurrence_count"] = metadata.get("occurrence_count", 1) + 1
-            if narrative.startswith(("Recovered", "Task eventually")):
+            stored_resolution = metadata.get("resolution", "")
+            if _resolutions_conflict(stored_resolution, narrative):
+                # V1.5 QL6: contradictory resolutions for the same error class
+                # — flag for human adjudication, never auto-delete (D4).
+                existing.conflict_state = "conflict"
+                metadata["conflicting_resolution"] = narrative
+            elif narrative.startswith(("Recovered", "Task eventually")):
                 metadata["resolution"] = narrative
                 existing.content = f"{existing.content.split(chr(10) + 'Resolution:')[0]}{chr(10)}Resolution: {narrative}{chr(10)}Occurrences: {metadata['occurrence_count']}"
             existing.set_metadata(metadata)
@@ -532,3 +669,53 @@ def _get_existing_summary(db: Session, goal_id: str) -> Dict[str, Any]:
         "total_skills": len(skills),
         "pending_review": pending,
     }
+
+
+def decay_memories(db: Session) -> Dict[str, int]:
+    """V1.5 QL7: confidence decay for memories not retrieved recently.
+
+    Called from the recovery daemon's cycle. Every memory whose metadata
+    lacks a last_hit_at newer than 30 days decays confidence by ×0.9
+    (floor 0.2); a retrieval hit stamps last_hit_at and resets decay.
+    """
+    from datetime import timedelta
+
+    cutoff = datetime.now(timezone.utc) - timedelta(days=30)
+    decayed = 0
+    for memory in db.query(MemoryDraft).filter(MemoryDraft.human_approved == True).all():  # noqa: E712
+        metadata = memory.get_metadata()
+        last_hit = metadata.get("last_hit_at")
+        if last_hit:
+            try:
+                if datetime.fromisoformat(last_hit) > cutoff:
+                    continue
+            except ValueError:
+                pass
+        if (memory.confidence or 0) > 0.2:
+            memory.confidence = max(0.2, round(memory.confidence * 0.9, 3))
+            decayed += 1
+    if decayed:
+        db.commit()
+    return {"decayed": decayed}
+
+
+def disable_failing_skills(db: Session, *, threshold: int = 3) -> Dict[str, int]:
+    """V1.5 QL7: auto-disable skills on >=3 consecutive failures.
+
+    A skill's last N outcomes are inferred from the counters themselves
+    (failure_count reaching threshold with success_count unchanged since
+    the last disable) — disabled skills await human review, never deleted.
+    """
+    disabled = 0
+    for skill in db.query(SkillDraft).filter(
+        SkillDraft.status == "approved",
+        SkillDraft.failure_count >= threshold,
+    ).all():
+        # Only disable when failures dominate the record (rate < 0.25).
+        if skill.success_rate < 0.25:
+            skill.status = "disabled"
+            skill.human_approved = False
+            disabled += 1
+    if disabled:
+        db.commit()
+    return {"disabled": disabled}

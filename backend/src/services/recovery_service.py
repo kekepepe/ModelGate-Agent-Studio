@@ -141,9 +141,13 @@ def start_recovery_daemon(
                 # runtime loop — a daemon heartbeat here would also revive
                 # genuinely dead leases, defeating the expiry signal.
                 result = recover_all_expired(session)
-                if result.get("recovered") or result.get("approval_required"):
+                # V1.5 QL7: knowledge hygiene rides the same cycle.
+                from src.services import curator_service
+                hygiene = {**curator_service.decay_memories(session), **curator_service.disable_failing_skills(session)}
+                events = {**result, **hygiene}
+                if any(events.values()):
                     if app_logger:
-                        app_logger.info("recovery daemon cycle: %s", result)
+                        app_logger.info("daemon cycle: %s", events)
             except Exception as exc:
                 session.rollback()
                 if app_logger:

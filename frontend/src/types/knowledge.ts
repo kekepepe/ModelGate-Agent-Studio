@@ -12,6 +12,11 @@ export interface MemoryDraft {
   approved_by?: string | null;
   approved_at?: string | null;
   metadata?: Record<string, unknown>;
+  effectiveness_success?: number;
+  effectiveness_failure?: number;
+  effectiveness_rate?: number;
+  conflict_state?: string | null;
+  expires_at?: string | null;
   created_at?: string | null;
   updated_at?: string | null;
 }

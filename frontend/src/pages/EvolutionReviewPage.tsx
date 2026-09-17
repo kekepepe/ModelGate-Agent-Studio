@@ -104,11 +104,29 @@ function MemoryCard({ memory, onApprove, isApproving }: { memory: MemoryDraft; o
     <div className={`bg-white rounded-xl border p-4 ${isPending ? 'border-lavender-300 bg-lavender-50' : isApproved ? 'border-green-200' : 'border-stone-200'}`}>
       <div className="flex items-start justify-between gap-4">
         <div className="flex-1 min-w-0">
-          <div className="flex items-center gap-2 mb-1">
+          <div className="flex items-center gap-2 mb-1 flex-wrap">
             <span className="text-xs px-1.5 py-0.5 rounded bg-stone-100 text-stone-600 font-medium">
               {MEMORY_TYPE_LABELS[memory.type] || memory.type}
             </span>
             <span className="text-xs text-stone-400">Confidence: {(memory.confidence * 100).toFixed(0)}%</span>
+            {(memory.effectiveness_success || memory.effectiveness_failure) ? (
+              <span
+                className={`text-xs px-1.5 py-0.5 rounded border font-medium ${
+                  (memory.effectiveness_rate ?? 0.5) >= 0.5
+                    ? 'bg-green-50 text-green-700 border-green-200'
+                    : 'bg-red-50 text-red-700 border-red-200'
+                }`}
+                title="被后续任务实际使用后的效果投票（V1.5 effectiveness）"
+              >
+                效果 {memory.effectiveness_success}✓ / {memory.effectiveness_failure}✗
+                （{(memory.effectiveness_rate ?? 0.5) * 100 >= 0 ? ((memory.effectiveness_rate ?? 0.5) * 100).toFixed(0) : 0}%）
+              </span>
+            ) : null}
+            {memory.conflict_state === 'conflict' && (
+              <span className="text-xs px-1.5 py-0.5 rounded bg-red-100 text-red-700 border border-red-300 font-medium">
+                ⚠ 记忆冲突待裁决
+              </span>
+            )}
           </div>
           <h3 className="text-sm font-semibold text-stone-800">{memory.title}</h3>
           <p className="text-sm text-stone-600 mt-1 whitespace-pre-wrap line-clamp-3">{memory.content}</p>

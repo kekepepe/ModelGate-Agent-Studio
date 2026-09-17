@@ -332,6 +332,7 @@ export interface ContextRun {
     rank: number;
     score: number;
     used: boolean;
+    outcome?: 'used' | 'ignored' | null;
     citation?: string | null;
     token_count: number;
     source_id: string;

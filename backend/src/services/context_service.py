@@ -125,6 +125,15 @@ def build_context_package(db: Session, goal: Goal, task: Task, limit: int = 5) -
         for item in knowledge["items"]
     ])
     matched = bool(memory_payload or skill_payload or knowledge["items"])
+    # V1.5 QL7: a retrieval hit resets the decay clock for used memories.
+    if memory_payload:
+        from datetime import datetime as _dt, timezone as _tz
+
+        for item in project_memories:
+            if item.id in {m["id"] for m in memory_payload}:
+                metadata = item.get_metadata()
+                metadata["last_hit_at"] = _dt.now(_tz.utc).isoformat()
+                item.set_metadata(metadata)
     payload = {
         "goal": {"id": goal.id, "title": goal.title, "description": goal.description},
         "task": {"id": task.id, "title": task.title, "dependencies": task._get_json("dependencies"), "completion_contract": task._get_json("acceptance_criteria")},

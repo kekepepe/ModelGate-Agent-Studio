@@ -284,7 +284,9 @@ export default function TaskDetailPanel({ task, isLoading, onClose, handoffs = [
                           <article key={item.id} className={`rounded border p-2 ${item.used ? 'border-green-200 bg-green-50' : 'border-stone-200 bg-stone-50 opacity-70'}`}>
                             <div className="flex items-center justify-between gap-2">
                               <span className="truncate font-medium text-stone-700">#{item.rank} {item.source_name || item.path || item.source_id}</span>
-                              <span className={item.used ? 'text-green-700' : 'text-stone-500'}>{item.used ? 'Injected' : 'Dropped'} · {item.score.toFixed(3)}</span>
+                              <span className={item.used ? 'text-green-700' : 'text-stone-500'}>
+                                {item.outcome === 'used' ? 'Used ✓' : item.outcome === 'ignored' ? 'Ignored' : item.used ? 'Injected' : 'Dropped'} · {item.score.toFixed(3)}
+                              </span>
                             </div>
                             {item.citation ? <p className="mt-1 break-all font-mono text-[10px] text-blue-700">{item.citation}</p> : null}
                             {item.content ? <p className="mt-1 line-clamp-3 text-stone-600">{item.content}</p> : null}

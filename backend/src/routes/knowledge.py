@@ -1,10 +1,14 @@
 from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException, Query
+from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
 from src.core.database import get_db
 from src.schemas.knowledge import ApprovalRequest, KnowledgeSourceCreate, PreferenceCreate, RetrievalRequest, SourceStatusRequest
+import json
+
 from src.models.knowledge import SkillDraft
+from src.models.handoff import WorkerSession
 from src.models.workspace import Goal
 from src.services import curator_service, knowledge_source_service, memory_vector_service, retrieval_service
 
@@ -143,6 +147,18 @@ def get_skill_detail(skill_id: str, db: Session = Depends(get_db)):
     return _success(detail)
 
 
+class ConflictResolveRequest(BaseModel):
+    keep: str = Field("stored", pattern="^(stored|incoming|merge)$")
+
+
+@router.post("/knowledge/memories/{memory_id}/resolve")
+def resolve_memory_conflict(memory_id: str, req: ConflictResolveRequest, db: Session = Depends(get_db)):
+    try:
+        return _success(curator_service.resolve_memory_conflict(db, memory_id, req.keep))
+    except ValueError as exc:
+        raise _error("BAD_REQUEST", str(exc), 400)
+
+
 @router.post("/context/retrieve")
 def retrieve_context(req: RetrievalRequest, db: Session = Depends(get_db)):
     try:
@@ -169,3 +185,48 @@ def retrieve_context(req: RetrievalRequest, db: Session = Depends(get_db)):
 @router.get("/goals/{goal_id}/context-runs")
 def list_context_runs(goal_id: str, db: Session = Depends(get_db)):
     return _success(retrieval_service.get_runs(db, goal_id))
+
+
+@router.get("/tasks/{task_id}/context-snapshots")
+def list_task_context_snapshots(task_id: str, db: Session = Depends(get_db)):
+    """V1.5 QL8: 'which past knowledge did this task use' — redacted snapshot
+    payloads with memory/preference/skill citation summaries."""
+    from src.models.knowledge import ContextPackageSnapshot
+
+    snapshots = (
+        db.query(ContextPackageSnapshot)
+        .filter(ContextPackageSnapshot.worker_id.in_(
+            db.query(WorkerSession.id).filter(WorkerSession.task_id == task_id)
+        ))
+        .order_by(ContextPackageSnapshot.created_at.desc())
+        .limit(10)
+        .all()
+    )
+    items = []
+    for snapshot in snapshots:
+        try:
+            payload = json.loads(snapshot.payload)
+        except (json.JSONDecodeError, TypeError):
+            continue
+        items.append({
+            "id": snapshot.id,
+            "worker_id": snapshot.worker_id,
+            "token_count": snapshot.token_count,
+            "checksum": snapshot.checksum,
+            "created_at": snapshot.created_at.isoformat() if snapshot.created_at else None,
+            "project_memories": [
+                {"id": m.get("id"), "title": m.get("title"), "confidence": m.get("confidence")}
+                for m in payload.get("project_memories") or []
+            ],
+            "user_preferences": [
+                {"id": m.get("id"), "title": m.get("title")}
+                for m in payload.get("user_preferences") or []
+            ],
+            "skills": [
+                {"id": s.get("id"), "name": s.get("name"), "success_rate": s.get("success_rate")}
+                for s in payload.get("skills") or []
+            ],
+            "citations": payload.get("citations") or [],
+            "policy": payload.get("policy"),
+        })
+    return _success({"items": items, "total": len(items)})
