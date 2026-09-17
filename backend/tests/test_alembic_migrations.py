@@ -34,7 +34,7 @@ def test_empty_database_and_repeat_upgrade(tmp_path):
     with engine.connect() as connection:
         assert (
             connection.execute(text("SELECT version_num FROM alembic_version")).scalar_one()
-            == "0014_mcp_servers"
+            == "0015_evolution_quality"
         )
 
 

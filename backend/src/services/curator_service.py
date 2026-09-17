@@ -243,6 +243,66 @@ def create_user_preference(
     return preference.to_dict()
 
 
+def record_memory_outcome(db: Session, context_json: Optional[str], task_status: str) -> None:
+    """V1.5 QL2: attribute the task outcome to the memories whose context
+    actually carried it (the used set), closing the effectiveness loop.
+
+    completed_verified -> +1 success; failed/revision_required/blocked ->
+    +1 failure; other terminal states carry no vote.
+    """
+    if not context_json:
+        return
+    try:
+        context = json.loads(context_json)
+    except (json.JSONDecodeError, AttributeError):
+        return
+    memory_ids = [
+        item.get("id")
+        for key in ("project_memories", "user_preferences")
+        for item in (context.get(key) or [])
+        if isinstance(item, dict) and item.get("id")
+    ]
+    if not memory_ids:
+        return
+    if task_status == "completed_verified":
+        vote = "effectiveness_success"
+    elif task_status in {"failed", "revision_required", "blocked"}:
+        vote = "effectiveness_failure"
+    else:
+        return
+    memories = db.query(MemoryDraft).filter(MemoryDraft.id.in_(memory_ids)).all()
+    for memory in memories:
+        setattr(memory, vote, (getattr(memory, vote) or 0) + 1)
+    db.flush()
+
+
+def mark_retrieval_outcomes(db: Session, context_json: Optional[str]) -> None:
+    """V1.5 QL2: persist per-item retrieval outcomes for this task's run.
+
+    Items included in the context package (the legacy `used` boolean) become
+    outcome='used'; budget-excluded candidates become outcome='ignored'.
+    """
+    if not context_json:
+        return
+    try:
+        context = json.loads(context_json)
+    except (json.JSONDecodeError, AttributeError):
+        return
+    retrieval_run_id = context.get("retrieval_run_id")
+    if not retrieval_run_id:
+        return
+    from src.models.knowledge import RetrievedContextItem
+
+    db.query(RetrievedContextItem).filter(
+        RetrievedContextItem.retrieval_run_id == retrieval_run_id,
+    ).update({RetrievedContextItem.outcome: "ignored"}, synchronize_session=False)
+    db.query(RetrievedContextItem).filter(
+        RetrievedContextItem.retrieval_run_id == retrieval_run_id,
+        RetrievedContextItem.used == True,  # noqa: E712 - legacy budget flag
+    ).update({RetrievedContextItem.outcome: "used"}, synchronize_session=False)
+    db.flush()
+
+
 def record_skill_outcome(db: Session, context_json: Optional[str], succeeded: bool) -> None:
     """Attribute a verified task result to the approved Skills it actually loaded."""
     if not context_json:

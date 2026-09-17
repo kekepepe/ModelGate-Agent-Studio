@@ -172,7 +172,10 @@ def _hybrid_rank(
         text = f"{item.title} {item.content} {' '.join(item.get_tags())}"
         keyword = min(1.0, _score(query, tokens, text) / 3)
         vector = memory_vector_service.similarity(query_vector, item)
-        scored.append((keyword * 0.5 + vector * 0.5, keyword, vector, item))
+        # V1.5 QL3: outcome votes weigh memories like skills — proven memories
+        # rank higher, repeatedly-harmful ones lower (neutral at no votes).
+        weight = 0.8 + 0.4 * item.effectiveness_rate
+        scored.append(((keyword * 0.5 + vector * 0.5) * weight, keyword, vector, item))
     scored.sort(key=lambda entry: (entry[0], entry[1]), reverse=True)
     return scored
 

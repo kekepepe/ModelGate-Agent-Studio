@@ -1040,6 +1040,9 @@ def _execute_single_task(db: Session, task: Task) -> Dict[str, Any]:
     worker.next_action = "retry" if task.status == "pending" else "completed" if task.status.startswith("completed") else "blocked"
     from src.services import curator_service
     curator_service.record_skill_outcome(db, worker.current_context, task.status == "completed_verified")
+    # V1.5: effectiveness votes on memories + per-item retrieval outcomes.
+    curator_service.record_memory_outcome(db, worker.current_context, task.status)
+    curator_service.mark_retrieval_outcomes(db, worker.current_context)
     worker.updated_at = datetime.now(timezone.utc)
 
     # 13. Update agent

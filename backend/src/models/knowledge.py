@@ -29,6 +29,11 @@ class MemoryDraft(Base):
     # knowledge_chunks.embedding) + the adapter fingerprint that produced it.
     embedding = Column(Text, nullable=True)
     embedding_fingerprint = Column(String(100), nullable=True)
+    # V1.5: outcome votes from tasks whose context carried this memory, and
+    # the conflict-adjudication state (never auto-deleted — D4).
+    effectiveness_success = Column(Integer, nullable=False, default=0)
+    effectiveness_failure = Column(Integer, nullable=False, default=0)
+    conflict_state = Column(String(20), nullable=True)
     created_at = Column(DateTime, nullable=False, default=lambda: datetime.now(timezone.utc))
     updated_at = Column(DateTime, nullable=False, default=lambda: datetime.now(timezone.utc))
 
@@ -45,6 +50,10 @@ class MemoryDraft(Base):
     def set_embedding(self, vector: List[float], fingerprint: str) -> None:
         self.embedding = json.dumps(vector)
         self.embedding_fingerprint = fingerprint
+    @property
+    def effectiveness_rate(self) -> float:
+        total = (self.effectiveness_success or 0) + (self.effectiveness_failure or 0)
+        return (self.effectiveness_success or 0) / total if total else 0.5
 
     def to_dict(self) -> dict:
         return {
@@ -55,6 +64,10 @@ class MemoryDraft(Base):
             "human_approved": self.human_approved, "approved_by": self.approved_by,
             "approved_at": self.approved_at.isoformat() if self.approved_at else None,
             "metadata": self.get_metadata(),
+            "effectiveness_success": self.effectiveness_success,
+            "effectiveness_failure": self.effectiveness_failure,
+            "effectiveness_rate": self.effectiveness_rate,
+            "conflict_state": self.conflict_state,
             "expires_at": self.expires_at.isoformat() if self.expires_at else None,
             "created_at": self.created_at.isoformat() if self.created_at else None,
             "updated_at": self.updated_at.isoformat() if self.updated_at else None,
@@ -227,6 +240,9 @@ class RetrievedContextItem(Base):
     score = Column(Float, nullable=False)
     rank = Column(Integer, nullable=False)
     used = Column(Boolean, nullable=False, default=False, index=True)
+    # V1.5: used | ignored — written back at task end; the boolean `used`
+    # column keeps its retrieval-time (token-budget) meaning for compat.
+    outcome = Column(String(20), nullable=True)
     citation = Column(Text, nullable=True)
     token_count = Column(Integer, nullable=False, default=0)
     created_at = Column(DateTime, nullable=False, default=lambda: datetime.now(timezone.utc))
