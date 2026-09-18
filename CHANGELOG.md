@@ -60,6 +60,39 @@ redesign. Older per-phase changelogs are archived in
 - 后端 pytest：**505 passed, 1 skipped**（V1.2.1 末态 465）
 - ruff：0 errors
 
+## V1.5 — 2026-09-18（Evolution Quality Loop）
+
+主题：从"能记忆"升级为"记忆真的改善下一次任务"。V1.2 遗留的三个开环口子全部闭上。
+
+### 效果闭环（QL1-QL3）
+- migration 0015：`memory_drafts.effectiveness_success/_failure`（任务效果投票）
+  + `conflict_state`（冲突裁决标记，永不自动删除）+ `retrieved_context_items.outcome`
+  （used | ignored 三态，旧布尔列保留兼容）
+- runtime 任务收尾回写：completed_verified → 被注入的记忆/偏好各 +1 成功票；
+  failed/revision/blocked → +1 失败票；中性态不投票；检索条目标注 outcome
+- 混合排序按 effectiveness_rate 加权（0.8+0.4×rate，无票中性）——被验证有效的
+  记忆排名上升，反复有害的下降
+
+### LLM 优先提炼（QL5）
+- project memory 提炼改为 LLM 优先（planner 模型蒸馏执行痕迹为密集可复用知识，
+  `generated_by=llm`），mock 模式与任何 LLM 失败回落规则模板（`generated_by=rule`）
+
+### 治理（QL6/QL7）
+- 同类错误矛盾 resolution → conflict 标记 + `/resolve` 人工裁决（stored/incoming/merge）
+- confidence 时间衰减（30 天未命中 ×0.9，下限 0.2；命中即重置）+ 连续失败技能
+  自动 disable 待审——都挂在 recovery daemon 周期上
+- 永不自动删除用户记忆（D4）
+
+### 可见性（QL4/QL8）
+- Evolution 页记忆卡：效果徽章（N✓/M✗ + rate）与红色冲突标记
+- TaskDetailPanel：检索条目三态（Used ✓ / Ignored / legacy Injected/Dropped）
+- `GET /tasks/{id}/context-snapshots`：本次执行用了哪些历史知识（含引用摘要）
+
+### 验收
+- **e2e-evolution.sh 5 幕 PASS**：错误→经验沉淀→审批→新 Goal 检索召回
+  （11 条含经验+偏好）→ 任务完成 → 溯源断言
+- 后端 pytest：**509 passed, 1 skipped**；前端 183 passed
+
 ## 规划 — 2026-09-16（V1.3–V1.5 计划定稿）
 
 三份任务级计划入库并登记（用户拍板：Provider = OpenAI-compatible + Anthropic native；

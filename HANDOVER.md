@@ -14,9 +14,9 @@
 
 | 项 | 值 |
 |---|---|
-| 当前版本 | V1.4 ✅ 完成（Parallel 强化）；下一版本 V1.5（Evolution Quality Loop，知识主线重心） |
+| 当前版本 | V1.5 ✅ 完成（Evolution Quality Loop）；下一版本 V2.0（Developer Agent OS，按 ROADMAP） |
 | 已完成 | V1.0 核心闭环 / V1.1 Handoff+Quota / V1.2 Memory+RAG+Skill |
-| 后端 pytest | **493 passed, 1 skipped** |
+| 后端 pytest | **509 passed, 1 skipped** |
 | 前端 vitest | **183 passed / 38 文件**（typecheck / build / lint 全绿） |
 | e2e 验收 | e2e-demo / e2e-handoff / e2e-product-acceptance / **e2e-mcp** / **e2e-parallel** 全 PASS |
 | CI | workflow 已就位但**默认静音**（push 不触发；Actions 页手动 `workflow_dispatch` 或 PR 触发） |
